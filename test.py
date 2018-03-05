@@ -3,13 +3,17 @@ import time
 import pybullet_data
 import argparse
 import numpy as np
+from motion_planners.rrt_connect import birrt, direct_path
+
 
 REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 
 LEFT_ARM_LINK = 'l_gripper_palm_link'
 
-LEFT_JOINT_NAMES = ['l_shoulder_pan_joint', 'l_shoulder_lift_joint', 'l_upper_arm_roll_joint', 'l_elbow_flex_joint', 'l_forearm_roll_joint', 'l_wrist_flex_joint', 'l_wrist_roll_joint']
-RIGHT_JOINT_NAMES = ['r_shoulder_pan_joint', 'r_shoulder_lift_joint', 'r_upper_arm_roll_joint', 'r_elbow_flex_joint', 'r_forearm_roll_joint', 'r_wrist_flex_joint', 'r_wrist_roll_joint']
+LEFT_JOINT_NAMES = ['l_shoulder_pan_joint', 'l_shoulder_lift_joint', 'l_upper_arm_roll_joint',
+                    'l_elbow_flex_joint', 'l_forearm_roll_joint', 'l_wrist_flex_joint', 'l_wrist_roll_joint']
+RIGHT_JOINT_NAMES = ['r_shoulder_pan_joint', 'r_shoulder_lift_joint', 'r_upper_arm_roll_joint',
+                     'r_elbow_flex_joint', 'r_forearm_roll_joint', 'r_wrist_flex_joint', 'r_wrist_roll_joint']
 HEAD_JOINT_NAMES = ['head_pan_joint', 'head_tilt_joint']
 
 LEFT_GRIPPER_NAME = 'l_gripper_l_finger_joint'
@@ -20,15 +24,15 @@ def rightarm_from_leftarm(config):
 
 REST_RIGHT_ARM = rightarm_from_leftarm(REST_LEFT_ARM)
 
-LEFT_ARM_JOINTS = [15,16,17,18,19,20,21]
-RIGHT_ARM_JOINTS = [27,28,29,30,31,32,33]
-HEAD_JOINTS = [13,14]
+#LEFT_ARM_JOINTS = [15,16,17,18,19,20,21]
+#RIGHT_ARM_JOINTS = [27,28,29,30,31,32,33]
+#HEAD_JOINTS = [13,14]
 # openrave-robot.py robots/pr2-beta-static.zae --info manipulators
 
 TORSO_JOINT = 'torso_lift_joint'
 
-#REVOLUTE_LIMITS = -np.pi, np.pi
-REVOLUTE_LIMITS = -10000, 10000
+REVOLUTE_LIMITS = -np.pi, np.pi
+#REVOLUTE_LIMITS = -10000, 10000
 
 BASE_LIMITS = ([-2.5, -2.5, 0], [2.5, 2.5, 0])
 
@@ -45,6 +49,11 @@ class Conf(object):
 
 def get_joint_type(body, joint):
     return p.getJointInfo(body, joint)[2]
+
+def is_circular(body, joint):
+    lower = p.getJointInfo(body, joint)[8]
+    upper = p.getJointInfo(body, joint)[9]
+    return upper < lower
 
 def get_joint_limits(body, joint):
     lower = p.getJointInfo(body, joint)[8]
@@ -72,12 +81,33 @@ def get_pose(body):
     point, quat = p.getBasePositionAndOrientation(body) # [x,y,z,w]
     return np.concatenate([point, quat])
 
+def get_point(body):
+    return p.getBasePositionAndOrientation(body)[0]
+
+def get_quat(body):
+    return p.getBasePositionAndOrientation(body)[1]
+
+def get_base_values(body):
+    x, y, _ = get_point(body)
+    roll, pitch, yaw = euler_from_quat(get_quat(body))
+    assert (abs(roll) < 1e-3) and (abs(pitch) < 1e-3)
+    return (x, y, yaw)
+
+def set_base_values(body, values):
+    _, _, z = get_point(body)
+    x, y, theta = values
+    set_point(body, (x, y, z))
+    set_quat(body, z_rotation(theta))
+
 def set_pose(body, point, quat):
     p.resetBasePositionAndOrientation(body, point, quat)
 
 def set_point(body, point):
     _, quat = p.getBasePositionAndOrientation(body)
     p.resetBasePositionAndOrientation(body, point, quat)
+
+def set_quat(body, quat):
+    p.resetBasePositionAndOrientation(body, get_point(body), quat)
 
 def get_link_pose(body, link):
     point, quat = p.getLinkState(body, link)
@@ -148,6 +178,84 @@ def env_collision(body1):
             return True
     return False
 
+def wrap_angle(theta):
+    return (theta + np.pi) % (2 * np.pi) - np.pi
+
+def circular_difference(theta2, theta1):
+    return wrap_angle(theta2 - theta1)
+
+def plan_base_motion(body, end_conf, **kwargs):
+    def sample_fn():
+        x, y, _ = np.random.uniform(*BASE_LIMITS)
+        theta = np.random.uniform(*REVOLUTE_LIMITS)
+        return (x, y, theta)
+
+    def difference_fn(q2, q1):
+        #return np.array(q2) - np.array(q1)
+        dx, dy = np.array(q2[:2]) - np.array(q1[:2])
+        dtheta = circular_difference(q2[2], q1[2])
+        return (dx, dy, dtheta)
+
+    weights = 1*np.ones(3)
+    def distance_fn(q1, q2):
+        diff = np.array(difference_fn(q2, q1))
+        print diff
+        return np.sqrt(np.dot(weights, diff * diff))
+        #return np.linalg.norm(np.array(q2) - np.array(q1))
+
+    resolutions = 0.05*np.ones(3)
+    def extend_fn(q1, q2):
+        steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
+        n = int(np.max(steps)) + 1
+        q = q1
+        for i in xrange(n):
+            q = tuple((1. / (n - i)) * np.array(difference_fn(q2, q)) + q)
+            yield q
+
+    def collision_fn(q):
+        set_base_values(body, q)
+        return env_collision(body)
+
+    start_conf = get_base_values(body)
+    return birrt(start_conf, end_conf, distance_fn,
+                 sample_fn, extend_fn, collision_fn, **kwargs)
+
+def plan_joint_motion(body, joints, end_conf, **kwargs):
+    def sample_fn():
+        x, y, _ = np.random.uniform(*BASE_LIMITS)
+        theta = np.random.uniform(*REVOLUTE_LIMITS)
+        return (x, y, theta)
+
+    def difference_fn(q2, q1):
+        #return np.array(q2) - np.array(q1)
+        dx, dy = np.array(q2[:2]) - np.array(q1[:2])
+        dtheta = circular_difference(q2[2], q1[2])
+        return (dx, dy, dtheta)
+
+    weights = 1*np.ones(3)
+    def distance_fn(q1, q2):
+        diff = np.array(difference_fn(q2, q1))
+        print diff
+        return np.sqrt(np.dot(weights, diff * diff))
+        #return np.linalg.norm(np.array(q2) - np.array(q1))
+
+    resolutions = 0.05*np.ones(3)
+    def extend_fn(q1, q2):
+        steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
+        n = int(np.max(steps)) + 1
+        q = q1
+        for i in xrange(n):
+            q = tuple((1. / (n - i)) * np.array(difference_fn(q2, q)) + q)
+            yield q
+
+    def collision_fn(q):
+        set_base_values(body, q)
+        return env_collision(body)
+
+    start_conf = get_base_values(body)
+    return birrt(start_conf, end_conf, distance_fn,
+                 sample_fn, extend_fn, collision_fn, **kwargs)
+
 def main():
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
@@ -157,12 +265,11 @@ def main():
 
     p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
     print pybullet_data.getDataPath()
-    p.setGravity(0, 0, -10)
-    planeId = p.loadURDF("plane.urdf")
-    table = p.loadURDF("table/table.urdf", 1.000000, -0.200000, 0.000000, 0.000000, 0.000000, 0.707107, 0.707107)
 
-    cubeStartPos = [0, 0, 1]
-    cubeStartOrientation = p.getQuaternionFromEuler([0, 0, 0])
+    #p.setGravity(0, 0, -10)
+    #planeId = p.loadURDF("plane.urdf")
+    table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
+
     # boxId = p.loadURDF("r2d2.urdf",cubeStartPos, cubeStartOrientation)
     # boxId = p.loadURDF("pr2.urdf")
     pr2 = p.loadURDF("/Users/caelan/Programs/Installation/pr2_description/pr2_local.urdf", useFixedBase=False)
@@ -180,8 +287,6 @@ def main():
     raw_input('Continue?')
 
     print set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT), 0.2)  # Updates automatically
-
-    cubePos, cubeOrn = p.getBasePositionAndOrientation(pr2)
 
     print get_name(pr2)
     print get_body_names()
@@ -204,8 +309,6 @@ def main():
     print p.getJointInfo(pr2, jointId)
     print p.getJointState(pr2, jointId)
 
-    print(cubePos, cubeOrn)
-
     # for i in xrange(10):
     #     #lower, upper = BASE_LIMITS
     #     #q = np.random.rand(len(lower))*(np.array(upper) - np.array(lower)) + lower
@@ -218,13 +321,35 @@ def main():
     #     #p.getMouseEvents()
     #     #p.getKeyboardEvents()
     #     raw_input('Continue?') # Stalls because waiting for input
+    #
+    # # TODO: self collisions
+    # for i in xrange(10):
+    #     for name in LEFT_JOINT_NAMES:
+    #         joint = joint_from_name(pr2, name)
+    #         value = np.random.uniform(*get_joint_limits(pr2, joint))
+    #         set_joint_position(pr2, joint, value)
+    #     raw_input('Continue?')
 
-    # TODO: self collisions
-    for i in xrange(10):
-        for name in LEFT_JOINT_NAMES:
-            joint = joint_from_name(pr2, name)
-            value = np.random.uniform(*get_joint_limits(pr2, joint))
-            set_joint_position(pr2, joint, value)
+
+
+    start = (-2, -2, 0)
+    set_base_values(pr2, start)
+    #start = get_base_values(pr2)
+    goal = (2, 2, 0)
+
+    p.addUserDebugLine(start, goal, lineColorRGB=(1, 1, 0)) # addUserDebugText
+    print start, goal
+    raw_input('Plan?')
+
+
+
+    path = plan_base_motion(pr2, goal)
+    print path
+    if path is None:
+        return
+    print len(path)
+    for bq in path:
+        set_base_values(pr2, bq)
         raw_input('Continue?')
 
 
