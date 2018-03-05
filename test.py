@@ -174,12 +174,17 @@ def pairwise_collision(body1, body2, max_distance=0.001): # 10000
 def env_collision(body1):
     for body2 in get_bodies():
         if (body1 != body2) and pairwise_collision(body1, body2):
-            print body1, body2
+        #if pairwise_collision(body1, body2):
             return True
     return False
 
 def wrap_angle(theta):
     return (theta + np.pi) % (2 * np.pi) - np.pi
+
+def wrap_joint(body, joint, value):
+    if is_circular(body, joint):
+        return wrap_angle(value)
+    return value
 
 def circular_difference(theta2, theta1):
     return wrap_angle(theta2 - theta1)
@@ -198,9 +203,8 @@ def plan_base_motion(body, end_conf, **kwargs):
 
     weights = 1*np.ones(3)
     def distance_fn(q1, q2):
-        diff = np.array(difference_fn(q2, q1))
-        print diff
-        return np.sqrt(np.dot(weights, diff * diff))
+        difference = np.array(difference_fn(q2, q1))
+        return np.sqrt(np.dot(weights, difference * difference))
         #return np.linalg.norm(np.array(q2) - np.array(q1))
 
     resolutions = 0.05*np.ones(3)
@@ -211,6 +215,7 @@ def plan_base_motion(body, end_conf, **kwargs):
         for i in xrange(n):
             q = tuple((1. / (n - i)) * np.array(difference_fn(q2, q)) + q)
             yield q
+            # TODO: should wrap these joints
 
     def collision_fn(q):
         set_base_values(body, q)
@@ -220,39 +225,63 @@ def plan_base_motion(body, end_conf, **kwargs):
     return birrt(start_conf, end_conf, distance_fn,
                  sample_fn, extend_fn, collision_fn, **kwargs)
 
+def set_joint_positions(body, joints, values):
+    assert len(joints) == len(values)
+    for joint, value in zip(joints, values):
+        set_joint_position(body, joint, value)
+
+def get_joint_positions(body, joints):
+    return tuple(get_joint_position(body, joint) for joint in joints)
+
+def violates_limits(body, joints, values):
+    for joint, value in zip(joints, values):
+        if not is_circular(body, joint):
+            lower, upper = get_joint_limits(body, joint)
+            if (value < lower) or (upper < value):
+                return True
+    return False
+
 def plan_joint_motion(body, joints, end_conf, **kwargs):
+    assert len(joints) == len(end_conf)
+
     def sample_fn():
-        x, y, _ = np.random.uniform(*BASE_LIMITS)
-        theta = np.random.uniform(*REVOLUTE_LIMITS)
-        return (x, y, theta)
+        values = []
+        for joint in joints:
+            limits = REVOLUTE_LIMITS if is_circular(body, joint) \
+                else get_joint_limits(body, joint)
+            values.append(np.random.uniform(*limits))
+        return tuple(values)
 
     def difference_fn(q2, q1):
-        #return np.array(q2) - np.array(q1)
-        dx, dy = np.array(q2[:2]) - np.array(q1[:2])
-        dtheta = circular_difference(q2[2], q1[2])
-        return (dx, dy, dtheta)
+        difference = []
+        for joint, value2, value1 in zip(joints, q2, q1):
+            difference.append((value2 - value1) if is_circular(body, joint)
+                              else circular_difference(value2, value1))
+        return tuple(difference)
 
-    weights = 1*np.ones(3)
+    # TODO: custom weights and step sizes
+    weights = 1*np.ones(len(joints))
     def distance_fn(q1, q2):
         diff = np.array(difference_fn(q2, q1))
-        print diff
         return np.sqrt(np.dot(weights, diff * diff))
-        #return np.linalg.norm(np.array(q2) - np.array(q1))
 
-    resolutions = 0.05*np.ones(3)
+    resolutions = 0.05*np.ones(len(joints))
     def extend_fn(q1, q2):
         steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
-        n = int(np.max(steps)) + 1
+        num_steps = int(np.max(steps)) + 1
         q = q1
-        for i in xrange(n):
-            q = tuple((1. / (n - i)) * np.array(difference_fn(q2, q)) + q)
+        for i in xrange(num_steps):
+            q = tuple((1. / (num_steps - i)) * np.array(difference_fn(q2, q)) + q)
             yield q
+            # TODO: should wrap these joints
 
     def collision_fn(q):
-        set_base_values(body, q)
+        if violates_limits(body, joints, q):
+            return True
+        set_joint_positions(body, joints, q)
         return env_collision(body)
 
-    start_conf = get_base_values(body)
+    start_conf = get_joint_positions(body, joints)
     return birrt(start_conf, end_conf, distance_fn,
                  sample_fn, extend_fn, collision_fn, **kwargs)
 
@@ -272,7 +301,8 @@ def main():
 
     # boxId = p.loadURDF("r2d2.urdf",cubeStartPos, cubeStartOrientation)
     # boxId = p.loadURDF("pr2.urdf")
-    pr2 = p.loadURDF("/Users/caelan/Programs/Installation/pr2_description/pr2_local.urdf", useFixedBase=False)
+    pr2 = p.loadURDF("/Users/caelan/Programs/Installation/pr2_description/pr2_local.urdf",
+                     useFixedBase=False) # flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
     #pr2 = p.loadURDF("pr2_description/urdf/pr2_simplified.urdf", useFixedBase=False)
 
     print pr2
@@ -295,14 +325,14 @@ def main():
 
     #for joint, value in zip(LEFT_ARM_JOINTS, REST_LEFT_ARM):
     #    set_joint_position(pr2, joint, value)
-    for name, value in zip(LEFT_JOINT_NAMES, REST_LEFT_ARM):
-        joint = joint_from_name(pr2, name)
-        #print name, joint, get_joint_position(pr2, joint), value
-        print name, get_joint_limits(pr2, joint), get_joint_type(pr2, joint), get_link_name(pr2, joint)
-        set_joint_position(pr2, joint, value)
-        #print name, joint, get_joint_position(pr2, joint), value
-    for name, value in zip(RIGHT_JOINT_NAMES, REST_RIGHT_ARM):
-        set_joint_position(pr2, joint_from_name(pr2, name), value)
+    # for name, value in zip(LEFT_JOINT_NAMES, REST_LEFT_ARM):
+    #     joint = joint_from_name(pr2, name)
+    #     #print name, joint, get_joint_position(pr2, joint), value
+    #     print name, get_joint_limits(pr2, joint), get_joint_type(pr2, joint), get_link_name(pr2, joint)
+    #     set_joint_position(pr2, joint, value)
+    #     #print name, joint, get_joint_position(pr2, joint), value
+    # for name, value in zip(RIGHT_JOINT_NAMES, REST_RIGHT_ARM):
+    #     set_joint_position(pr2, joint_from_name(pr2, name), value)
 
     print p.getNumJoints(pr2)
     jointId = 0
@@ -334,22 +364,36 @@ def main():
 
     start = (-2, -2, 0)
     set_base_values(pr2, start)
-    #start = get_base_values(pr2)
-    goal = (2, 2, 0)
 
-    p.addUserDebugLine(start, goal, lineColorRGB=(1, 1, 0)) # addUserDebugText
-    print start, goal
-    raw_input('Plan?')
+    # #start = get_base_values(pr2)
+    # goal = (2, 2, 0)
+    # p.addUserDebugLine(start, goal, lineColorRGB=(1, 1, 0)) # addUserDebugText
+    # print start, goal
+    # raw_input('Plan?')
+    # path = plan_base_motion(pr2, goal)
+    # print path
+    # if path is None:
+    #     return
+    # print len(path)
+    # for bq in path:
+    #     set_base_values(pr2, bq)
+    #     raw_input('Continue?')
 
+    left_joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
+    for joint in left_joints:
+        print joint, get_joint_name(pr2, joint), get_joint_limits(pr2, joint), \
+            is_circular(pr2, joint), get_joint_position(pr2, joint)
 
+    #goal = np.zeros(len(left_joints))
+    goal = []
+    for name, value in zip(LEFT_JOINT_NAMES, REST_LEFT_ARM):
+        joint = joint_from_name(pr2, name)
+        goal.append(wrap_joint(pr2, joint, value))
 
-    path = plan_base_motion(pr2, goal)
+    path = plan_joint_motion(pr2, left_joints, goal)
     print path
-    if path is None:
-        return
-    print len(path)
-    for bq in path:
-        set_base_values(pr2, bq)
+    for q in path:
+        set_joint_positions(pr2, left_joints, q)
         raw_input('Continue?')
 
 
