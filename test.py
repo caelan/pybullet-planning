@@ -7,6 +7,12 @@ from motion_planners.rrt_connect import birrt, direct_path
 
 
 REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
+TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
+SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
+REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
+WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -1.4851759349218694, 1.3911839347271555, -1.6531320011389408, -2.978586584568441]
+CENTER_LEFT_ARM = [-0.07133691252641006, -0.052973836083405494, 1.5741805775919033, -1.4481146328076862, 1.571782540186805, -1.4891468812835686, -9.413338322697955]
+WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296, -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
 
 LEFT_ARM_LINK = 'l_gripper_palm_link'
 
@@ -73,6 +79,12 @@ def create_box(w, l, h, color=(1, 0, 0, 1)):
     return p.createMultiBody(baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
     # linkCollisionShapeIndices | linkVisualShapeIndices
+
+def invert((point, quat)):
+    return p.invertTransform(point, quat)
+
+def multiply((point1, quat1), (point2, quat2)):
+    return p.multiplyTransforms(point1, quat1, point2, quat2) # TODO: variable number of args
 
 def create_plane():
     collision_id = p.createVisualShape(p.GEOM_PLANE, normal=[])
@@ -393,6 +405,55 @@ def sample_reachable_base(robot, point, max_attempts=50):
         #return (point, quat)
     return None
 
+GRASP_LENGTH = 0.04
+MAX_GRASP_WIDTH = 0.07
+import math
+
+def get_top_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
+    #w, l, h = np.max(mesh.vertices, axis=0) - \
+    #          np.min(mesh.vertices, axis=0)
+    h = 0.15
+    reflect_z = (np.zeros(3), quat_from_euler([0, math.pi, 0]))
+    translate = ([0, 0, h / 2 - grasp_length], quat_from_euler(np.zeros(3)))
+    #if not limits or (w <= MAX_GRASP_WIDTH):
+    for i in range(1 + under):
+        rotate_z = (np.zeros(3), quat_from_euler([0, 0, math.pi / 2 + i * math.pi]))
+        yield multiply(multiply(translate, rotate_z), reflect_z)
+    #if not limits or (l <= MAX_GRASP_WIDTH):
+    for i in range(1 + under):
+        rotate_z = (np.zeros(3), quat_from_euler([0, 0, i * math.pi]))
+        yield multiply(multiply(translate, rotate_z), reflect_z)
+
+# def get_side_grasps(mesh, under=False, limits=True, grasp_length=GRASP_LENGTH):
+#   w, l, h = np.max(mesh.vertices, axis=0) - \
+#             np.min(mesh.vertices, axis=0)
+#   for j in range(1 + under):
+#     swap_xz = trans_from_quat(quat_from_angle_vector(-math.pi/2 + j*math.pi, [0, 1, 0]))
+#     if not limits or (w <= MAX_GRASP_WIDTH):
+#       translate = trans_from_point(0, 0, l / 2 - grasp_length)
+#       for i in range(2):
+#         rotate_z = trans_from_quat(quat_from_angle_vector(math.pi / 2 + i * math.pi, [1, 0, 0]))
+#         yield translate.dot(rotate_z).dot(swap_xz), np.array([w])
+#     if not limits or (l <= MAX_GRASP_WIDTH):
+#       translate = trans_from_point(0, 0, w / 2 - grasp_length)
+#       for i in range(2):
+#         rotate_z = trans_from_quat(quat_from_angle_vector(i * math.pi, [1, 0, 0]))
+#         yield translate.dot(rotate_z).dot(swap_xz), np.array([l])
+
+def inverse_kinematics(robot, (point, quat)):
+    link = link_from_name(robot, LEFT_ARM_LINK)
+    movable_joints = get_movable_joints(robot)
+    current_conf = get_joint_positions(robot, movable_joints)
+    min_limits = [get_joint_limits(robot, joint)[0] for joint in movable_joints]
+    max_limits = [get_joint_limits(robot, joint)[1] for joint in movable_joints]
+    max_velocities = [get_max_velocity(robot, joint) for joint in movable_joints] # Range of Jacobian
+    #print min_limits
+    #print max_limits
+    #print max_velocities
+    return p.calculateInverseKinematics(robot, link, point, quat, lowerLimits=min_limits,
+                                        upperLimits=max_limits, jointRanges=max_velocities,
+                                        restPoses=current_conf)
+
 def main():
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
@@ -412,6 +473,7 @@ def main():
     pr2 = p.loadURDF("/Users/caelan/Programs/Installation/pr2_description/pr2_local.urdf",
                      useFixedBase=False) # flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
     #pr2 = p.loadURDF("pr2_description/urdf/pr2_simplified.urdf", useFixedBase=False)
+    origin = (0, 0, 0)
 
     print pr2
     # for i in range (10000):
@@ -425,6 +487,11 @@ def main():
     raw_input('Continue?')
 
     print set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT), 0.2)  # Updates automatically
+
+    left_joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
+    right_joints = [joint_from_name(pr2, name) for name in RIGHT_JOINT_NAMES]
+    print set_joint_positions(pr2, left_joints, SIDE_HOLDING_LEFT_ARM) # TOP_HOLDING_LEFT_ARM
+    print set_joint_positions(pr2, right_joints, REST_RIGHT_ARM)
 
     print get_name(pr2)
     print get_body_names()
@@ -525,15 +592,23 @@ def main():
     box = create_box(.07, .05, .15)
     #set_point(box, (1, 1, 0))
 
-    for _ in xrange(20):
+    box_pose = sample_placement(box, table)
+    for grasp_pose in get_top_grasps(box):
+        gripper_pose = multiply(box_pose, invert(grasp_pose))
+        print gripper_pose
+        p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 1, 0))
+    raw_input('Grasps')
+
+    for _ in xrange(100):
         print sample_placement(box, table)
         #print sample_placement(box, table)
         sample_reachable_base(pr2, get_point(box))
-        print get_base_values(pr2)
+        #print get_base_values(pr2)
+        #print inverse_kinematics()
+
         raw_input('Placed!')
 
 
-    origin = (0, 0, 0)
     link = link_from_name(pr2, LEFT_ARM_LINK)
     point, quat = get_link_pose(pr2, link)
     print point, quat
