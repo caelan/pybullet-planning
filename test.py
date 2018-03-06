@@ -50,26 +50,77 @@ class Conf(object):
 def get_joint_type(body, joint):
     return p.getJointInfo(body, joint)[2]
 
+def is_movable(body, joint):
+    return get_joint_type(body, joint) != p.JOINT_FIXED
+
 def is_circular(body, joint):
     lower = p.getJointInfo(body, joint)[8]
     upper = p.getJointInfo(body, joint)[9]
     return upper < lower
 
 def get_joint_limits(body, joint):
-    lower = p.getJointInfo(body, joint)[8]
-    upper = p.getJointInfo(body, joint)[9]
-    if upper < lower:
+    if is_circular(body, joint):
         return REVOLUTE_LIMITS
-    return lower, upper
+    return p.getJointInfo(body, joint)[8:10]
+
+def create_box(w, l, h, color=(1, 0, 0, 1)):
+    half_extents = [w/2., l/2., h/2.]
+    collision_id = p.createCollisionShape(p.GEOM_BOX, halfExtents=half_extents)
+    if (color is None) or not has_gui():
+        visual_id = -1
+    else:
+        visual_id = p.createVisualShape(p.GEOM_BOX, halfExtents=half_extents, rgbaColor=color)
+    return p.createMultiBody(baseCollisionShapeIndex=collision_id,
+                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
+    # linkCollisionShapeIndices | linkVisualShapeIndices
+
+def create_plane():
+    collision_id = p.createVisualShape(p.GEOM_PLANE, normal=[])
+
+def create_mesh():
+    raise NotImplementedError()
+
+def create_cylinder(radius, height):
+    collision_id =  p.createCollisionShape(p.GEOM_CYLINDER, radius=radius, height=height)
+
+def create_capsule(radius, height):
+    collision_id = p.createCollisionShape(p.GEOM_CAPSULE, radius=radius, height=height)
+
+def create_sphere(radius):
+    collision_id = p.createCollisionShape(p.GEOM_SPHERE, radius=radius)
+
+def get_lower_upper(body):
+    return p.getAABB(body)
+
+def get_center_extent(body):
+    lower, upper = get_lower_upper(body)
+    center = (np.array(lower) + upper) / 2
+    extents = (np.array(upper) - lower)
+    return center, extents
+
+def get_shape_data(body):
+    return p.getVisualShapeData(body)
+
+def get_max_velocity(body, joint):
+    return p.getJointInfo(body, joint)[11]
 
 def get_num_joints(body):
     return p.getNumJoints(body)
+
+def get_joints(body):
+    return range(get_num_joints(body))
+
+def get_movable_joints(body): # 45 / 87 on pr2
+    return [joint for joint in get_joints(body) if is_movable(body, joint)]
+
+def joint_from_movable(body, index):
+    return get_joints(body)[index]
 
 def get_joint_name(body, joint):
     return p.getJointInfo(body, joint)[1]
 
 def get_link_name(body, link):
-    return p.getJointInfo(body, link)[11]
+    return p.getJointInfo(body, link)[12]
 
 def get_name(body):
     return p.getBodyInfo(body)[1]
@@ -109,14 +160,22 @@ def set_point(body, point):
 def set_quat(body, quat):
     p.resetBasePositionAndOrientation(body, get_point(body), quat)
 
-def get_link_pose(body, link):
-    point, quat = p.getLinkState(body, link)
-    return np.concatenate([point, quat])
+def get_link_pose(body, link): # Local vs world?
+    #point, quat = p.getLinkState(body, link)[0:2] # Local
+    point, quat = p.getLinkState(body, link)[4:6] # World
+    return point, quat
+    #return np.concatenate([point, quat])
 
 def joint_from_name(body, name):
     for joint in xrange(get_num_joints(body)):
         if get_joint_name(body, joint) == name:
             return joint
+    raise ValueError(body, name)
+
+def link_from_name(body, name):
+    for link in xrange(get_num_joints(body)):
+        if get_link_name(body, link) == name:
+            return link
     raise ValueError(body, name)
 
 def body_from_name(name):
@@ -241,16 +300,18 @@ def violates_limits(body, joints, values):
                 return True
     return False
 
+def sample_joints(body, joints):
+    values = []
+    for joint in joints:
+        limits = REVOLUTE_LIMITS if is_circular(body, joint) \
+            else get_joint_limits(body, joint)
+        values.append(np.random.uniform(*limits))
+    return tuple(values)
+
 def plan_joint_motion(body, joints, end_conf, **kwargs):
     assert len(joints) == len(end_conf)
 
-    def sample_fn():
-        values = []
-        for joint in joints:
-            limits = REVOLUTE_LIMITS if is_circular(body, joint) \
-                else get_joint_limits(body, joint)
-            values.append(np.random.uniform(*limits))
-        return tuple(values)
+    sample_fn = lambda: sample_joints(body, joints)
 
     def difference_fn(q2, q1):
         difference = []
@@ -284,6 +345,53 @@ def plan_joint_motion(body, joints, end_conf, **kwargs):
     start_conf = get_joint_positions(body, joints)
     return birrt(start_conf, end_conf, distance_fn,
                  sample_fn, extend_fn, collision_fn, **kwargs)
+
+def is_connected():
+    return p.getConnectionInfo()['isConnected']
+
+def get_connection():
+    return p.getConnectionInfo()['connectionMethod']
+
+def has_gui():
+    return get_connection() == p.GUI
+
+def sample_placement(top_body, bottom_body, max_attempts=50):
+    bottom_aabb = get_lower_upper(bottom_body)
+    for _ in xrange(max_attempts):
+        theta = np.random.uniform(*REVOLUTE_LIMITS)
+        quat = z_rotation(theta)
+        set_quat(top_body, quat)
+        center, extent = get_center_extent(top_body)
+        lower = (np.array(bottom_aabb[0]) + extent/2)[:2]
+        upper = (np.array(bottom_aabb[1]) - extent/2)[:2]
+        if np.any(upper < lower):
+          continue
+        x, y = np.random.uniform(lower, upper)
+        z = (bottom_aabb[1] + extent/2.)[2]
+        point = np.array([x, y, z]) + (get_point(top_body) - center)
+        set_point(top_body, point)
+        return point, quat
+    return None
+
+def unit_from_theta(theta):
+    return np.array([np.cos(theta), np.sin(theta)])
+
+def sample_reachable_base(robot, point, max_attempts=50):
+    reachable_range = (0.25, 1.0)
+    for _ in xrange(max_attempts):
+        radius = np.random.uniform(*reachable_range)
+        x, y = radius*unit_from_theta(np.random.uniform(-np.pi, np.pi)) + point[:2]
+        yaw = np.random.uniform(*REVOLUTE_LIMITS)
+        base_values = (x, y, yaw)
+        set_base_values(robot, base_values)
+        return base_values
+        #_, _, z = get_point(robot)
+        #point = (x, y, z)
+        #set_point(robot, point)
+        #quat = z_rotation(yaw)
+        #set_quat(robot, quat)
+        #return (point, quat)
+    return None
 
 def main():
     parser = argparse.ArgumentParser()  # Automatically includes help
@@ -379,25 +487,85 @@ def main():
     #     set_base_values(pr2, bq)
     #     raw_input('Continue?')
 
-    left_joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
-    for joint in left_joints:
-        print joint, get_joint_name(pr2, joint), get_joint_limits(pr2, joint), \
-            is_circular(pr2, joint), get_joint_position(pr2, joint)
 
-    #goal = np.zeros(len(left_joints))
-    goal = []
-    for name, value in zip(LEFT_JOINT_NAMES, REST_LEFT_ARM):
-        joint = joint_from_name(pr2, name)
-        goal.append(wrap_joint(pr2, joint, value))
 
-    path = plan_joint_motion(pr2, left_joints, goal)
-    print path
-    for q in path:
-        set_joint_positions(pr2, left_joints, q)
-        raw_input('Continue?')
+    # left_joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
+    # for joint in left_joints:
+    #     print joint, get_joint_name(pr2, joint), get_joint_limits(pr2, joint), \
+    #         is_circular(pr2, joint), get_joint_position(pr2, joint)
+    #
+    # #goal = np.zeros(len(left_joints))
+    # goal = []
+    # for name, value in zip(LEFT_JOINT_NAMES, REST_LEFT_ARM):
+    #     joint = joint_from_name(pr2, name)
+    #     goal.append(wrap_joint(pr2, joint, value))
+    #
+    # path = plan_joint_motion(pr2, left_joints, goal)
+    # print path
+    # for q in path:s
+    #     set_joint_positions(pr2, left_joints, q)
+    #     raw_input('Continue?')
 
+    print p.JOINT_REVOLUTE, p.JOINT_PRISMATIC, p.JOINT_FIXED, p.JOINT_POINT2POINT, p.JOINT_GEAR # 0 1 4 5 6
+
+    print len(get_movable_joints(pr2))
+
+    for joint in xrange(get_num_joints(pr2)):
+        if is_movable(pr2, joint):
+            print joint, get_joint_name(pr2, joint), get_joint_type(pr2, joint)
+
+    joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
+    set_joint_positions(pr2, joints, sample_joints(pr2, joints))
+    print get_joint_positions(pr2, joints) # Need to print before the display updates?
+
+
+
+
+    #for i in xrange(10):
+    box = create_box(.07, .05, .15)
+    #set_point(box, (1, 1, 0))
+
+    for _ in xrange(20):
+        print sample_placement(box, table)
+        #print sample_placement(box, table)
+        sample_reachable_base(pr2, get_point(box))
+        print get_base_values(pr2)
+        raw_input('Placed!')
+
+
+    origin = (0, 0, 0)
+    link = link_from_name(pr2, LEFT_ARM_LINK)
+    point, quat = get_link_pose(pr2, link)
+    print point, quat
+    p.addUserDebugLine(origin, point, lineColorRGB=(1, 1, 0))  # addUserDebugText
+    raw_input('Continue?')
+
+    movable_joints = get_movable_joints(pr2)
+    current_conf = get_joint_positions(pr2, movable_joints)
+
+    #ik_conf = p.calculateInverseKinematics(pr2, link, point)
+    #ik_conf = p.calculateInverseKinematics(pr2, link, point, quat)
+
+    min_limits = [get_joint_limits(pr2, joint)[0] for joint in movable_joints]
+    max_limits = [get_joint_limits(pr2, joint)[1] for joint in movable_joints]
+    max_velocities = [get_max_velocity(pr2, joint) for joint in movable_joints] # Range of Jacobian
+    print min_limits
+    print max_limits
+    print max_velocities
+    ik_conf = p.calculateInverseKinematics(pr2, link, point, quat, lowerLimits=min_limits,
+                                           upperLimits=max_limits, jointRanges=max_velocities, restPoses=current_conf)
+
+
+    value_from_joint = dict(zip(movable_joints, ik_conf))
+    print [value_from_joint[joint] for joint in joints]
+
+    #print len(ik_conf), ik_conf
+    set_joint_positions(pr2, movable_joints, ik_conf)
+    #print len(movable_joints), get_joint_positions(pr2, movable_joints)
+    print get_joint_positions(pr2, joints)
 
     raw_input('Finish?')
+
     p.disconnect()
 
     # createConstraint
