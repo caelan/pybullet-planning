@@ -14,7 +14,7 @@ WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -
 CENTER_LEFT_ARM = [-0.07133691252641006, -0.052973836083405494, 1.5741805775919033, -1.4481146328076862, 1.571782540186805, -1.4891468812835686, -9.413338322697955]
 WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296, -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
 
-LEFT_ARM_LINK = 'l_gripper_palm_link'
+LEFT_ARM_LINK = 'l_gripper_tool_frame' # l_gripper_palm_link | l_gripper_tool_frame
 
 LEFT_JOINT_NAMES = ['l_shoulder_pan_joint', 'l_shoulder_lift_joint', 'l_upper_arm_roll_joint',
                     'l_elbow_flex_joint', 'l_forearm_roll_joint', 'l_wrist_flex_joint', 'l_wrist_roll_joint']
@@ -153,8 +153,9 @@ def get_base_link(body):
     return p.getBodyInfo(body)[0]
 
 def get_pose(body):
-    point, quat = p.getBasePositionAndOrientation(body) # [x,y,z,w]
-    return np.concatenate([point, quat])
+    return p.getBasePositionAndOrientation(body)
+    #point, quat = p.getBasePositionAndOrientation(body) # [x,y,z,w]
+    #return np.concatenate([point, quat])
 
 def get_point(body):
     return p.getBasePositionAndOrientation(body)[0]
@@ -186,6 +187,7 @@ def set_quat(body, quat):
 
 def get_link_pose(body, link): # Local vs world?
     #point, quat = p.getLinkState(body, link)[0:2] # Local
+    #point, quat = p.getLinkState(body, link)[2:4] # World
     point, quat = p.getLinkState(body, link)[4:6] # World
     return point, quat
     #return np.concatenate([point, quat])
@@ -492,22 +494,85 @@ def get_top_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
 #         rotate_z = trans_from_quat(quat_from_angle_vector(i * math.pi, [1, 0, 0]))
 #         yield translate.dot(rotate_z).dot(swap_xz), np.array([l])
 
-def inverse_kinematics(robot, (point, quat)):
+def inverse_kinematics(robot, target_pose):
+    #print get_base_link(robot)
+    #base_pose = get_link_pose(robot, link_from_name(robot, get_base_link(robot)))
+    #pose = multiply(invert(get_pose(robot)), pose)
+    (point, quat) = target_pose
     link = link_from_name(robot, LEFT_ARM_LINK)
 
     movable_joints = get_movable_joints(robot)
     current_conf = get_joint_positions(robot, movable_joints)
-    min_limits = [get_joint_limits(robot, joint)[0] for joint in movable_joints]
-    max_limits = [get_joint_limits(robot, joint)[1] for joint in movable_joints]
-    max_velocities = [get_max_velocity(robot, joint) for joint in movable_joints] # Range of Jacobian
-    #print min_limits
-    #print max_limits
+    # TODO: constrain not moving
+    left_joints = [joint_from_name(robot, name) for name in LEFT_JOINT_NAMES]
+
+    #min_limits = [get_joint_limits(robot, joint)[0] for joint in movable_joints]
+    #max_limits = [get_joint_limits(robot, joint)[1] for joint in movable_joints]
+    min_limits = [get_joint_limits(robot, joint)[0] for joint in get_joints(robot)]
+    max_limits = [get_joint_limits(robot, joint)[1] for joint in get_joints(robot)]
+    print min_limits
+    print max_limits
+    print left_joints
+    print [joint_from_name(robot, name) for name in RIGHT_JOINT_NAMES]
+    print movable_joints
+    #min_limits = [get_joint_limits(robot, joint)[0] if joint in left_joints else current_conf[i]
+    #              for i, joint in enumerate(movable_joints)]
+    #max_limits = [get_joint_limits(robot, joint)[1] if joint in left_joints else current_conf[i]
+    #              for i, joint in enumerate(movable_joints)]
+    max_velocities = [get_max_velocity(robot, joint) for joint in get_joints(robot)] # Range of Jacobian
+    #max_velocities = [get_max_velocity(robot, joint) for joint in movable_joints] # Range of Jacobian
+    print min_limits
+    print max_limits
+    print max_velocities
+    print
     #print max_velocities
+    #kinematic_conf = p.calculateInverseKinematics(robot, link, point, lowerLimits=min_limits,
+    #                                    upperLimits=max_limits, jointRanges=max_velocities,
+    #                                    restPoses=current_conf)
     #kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat, lowerLimits=min_limits,
     #                                    upperLimits=max_limits, jointRanges=max_velocities,
     #                                    restPoses=current_conf)
-    kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat)
-    set_joint_positions(robot, movable_joints, kinematic_conf)
+
+    # https://github.com/bulletphysics/bullet3/blob/c1ba04a5809f7831fa2dee684d6747951a5da602/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
+
+    #damping = tuple(0.1*np.ones(len(movable_joints)))
+    damping = tuple(0.1*np.ones(get_num_joints(robot)))
+    print damping
+    min_limits = 'fis'
+    max_limits = 'stuff' # TODO: these are not used?
+    max_velocities = 'what'
+    current_conf = 'aefawfe'
+
+    # TODO: fix particular joints?
+    t0 = time.time()
+    max_iterations = 150
+    kinematic_conf = current_conf
+    for iterations in xrange(max_iterations): # 0.000863273143768 / iteration
+        #kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat)
+        #kinematic_conf = p.calculateInverseKinematics(robot, link, point)
+        kinematic_conf = p.calculateInverseKinematics(robot, link, point,
+                                                      #quat,
+                                                      lowerLimits=min_limits, upperLimits=max_limits,
+                                                      jointRanges=max_velocities, restPoses=current_conf,
+                                                      #jointDamping=damping,
+                                              )
+        #kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat,
+        #                                              min_limits, max_limits,
+        #                                              max_velocities, current_conf)
+        set_joint_positions(robot, movable_joints, kinematic_conf)
+        link_point, link_quat = get_link_pose(robot, link)
+        print link_point, link_quat
+        if np.allclose(link_point, point, atol=1e-3) and np.allclose(link_quat, quat, atol=1e-3):
+            print iterations
+            break
+        print link_point, link_quat
+    else:
+        #return None
+        return kinematic_conf
+    total_time = (time.time() - t0)
+    print total_time
+    print (time.time() - t0)/max_iterations
+    #kinematic_conf = p.calculateInverseKinematics(robot, link, point)
     return kinematic_conf
 
 def get_gripper_pose(robot):
@@ -645,37 +710,60 @@ def main():
     #set_joint_positions(pr2, joints, sample_joints(pr2, joints))
     #print get_joint_positions(pr2, joints) # Need to print before the display updates?
 
-    print pose_from_tform(TOOL_TFORM)
-    box = create_box(.07, .05, .15)
+    set_base_values(pr2, (1, -1, -np.pi/4))
+    movable_joints = get_movable_joints(pr2)
     gripper_pose = get_link_pose(pr2, link_from_name(pr2, LEFT_ARM_LINK))
-    #gripper_pose = multiply(gripper_pose, TOOL_POSE)
-    #gripper_pose = get_gripper_pose(pr2)
-    for i, grasp_pose in enumerate(get_top_grasps(box)):
-        grasp_pose = multiply(TOOL_POSE, grasp_pose)
-        box_pose = multiply(gripper_pose, grasp_pose)
-        set_pose(box, *box_pose)
-        print get_pose(box)
-        raw_input('Grasp {}'.format(i))
+    print gripper_pose
+    print get_joint_positions(pr2, movable_joints)
+    p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 0, 0))
+    p.stepSimulation()
+    raw_input('Pre2 IK')
+    set_joint_positions(pr2, left_joints, SIDE_HOLDING_LEFT_ARM) # TOP_HOLDING_LEFT_ARM | SIDE_HOLDING_LEFT_ARM
+    print get_joint_positions(pr2, movable_joints)
+    p.stepSimulation()
+    raw_input('Pre IK')
+    conf = inverse_kinematics(pr2, gripper_pose) # Doesn't automatically set configuraitons
+    print conf
+    print get_joint_positions(pr2, movable_joints)
+    set_joint_positions(pr2, movable_joints, conf)
+    print get_link_pose(pr2, link_from_name(pr2, LEFT_ARM_LINK))
+    #print get_joint_positions(pr2, movable_joints)
+    p.stepSimulation()
+    raw_input('Post IK')
     return
 
-    movable_joints = get_movable_joints(pr2)
-    default_conf = get_joint_positions(pr2, movable_joints)
-    for _ in xrange(100):
-        #box_pose = sample_placement(box, table)
-        box_pose = ((0, 0, .7), quat_from_euler(np.zeros(3)))
-        set_pose(box, *box_pose)
-        base_values = sample_reachable_base(pr2, get_point(box))
-        for grasp_pose in list(get_top_grasps(box))[:1]:
-            #gripper_pose = multiply(box_pose, invert(grasp_pose))
-            gripper_pose = box_pose
-            p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 1, 0))
-            set_joint_positions(pr2, movable_joints, default_conf)
-            set_base_values(pr2, base_values)
-            #conf = inverse_kinematics(pr2, gripper_pose)
-            print gripper_pose
-            #print conf
-            print get_base_values(pr2)
-            raw_input('IK Solution')
+    #box = create_box(.07, .05, .15)
+    # print pose_from_tform(TOOL_TFORM)
+    # gripper_pose = get_link_pose(pr2, link_from_name(pr2, LEFT_ARM_LINK))
+    # #gripper_pose = multiply(gripper_pose, TOOL_POSE)
+    # #gripper_pose = get_gripper_pose(pr2)
+    # for i, grasp_pose in enumerate(get_top_grasps(box)):
+    #     grasp_pose = multiply(TOOL_POSE, grasp_pose)
+    #     box_pose = multiply(gripper_pose, grasp_pose)
+    #     set_pose(box, *box_pose)
+    #     print get_pose(box)
+    #     raw_input('Grasp {}'.format(i))
+    # return
+
+    # default_conf = get_joint_positions(pr2, movable_joints)
+    # for _ in xrange(100):
+    #     #box_pose = sample_placement(box, table)
+    #     box_pose = ((0, 0, 1), quat_from_euler(np.zeros(3)))
+    #     set_pose(box, *box_pose)
+    #     base_values = sample_reachable_base(pr2, get_point(box))
+    #     #for grasp_pose in list(get_top_grasps(box))[:1]:
+    #     for grasp_pose in get_top_grasps(box):
+    #         grasp_pose = multiply(TOOL_POSE, grasp_pose)
+    #         gripper_pose = multiply(box_pose, invert(grasp_pose))
+    #         p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 1, 0))
+    #         set_joint_positions(pr2, movable_joints, default_conf)
+    #         set_base_values(pr2, base_values)
+    #         conf = inverse_kinematics(pr2, gripper_pose)
+    #         print gripper_pose
+    #         print conf
+    #         print get_base_values(pr2)
+    #         p.stepSimulation()
+    #         raw_input('IK Solution')
 
 
     link = link_from_name(pr2, LEFT_ARM_LINK)
