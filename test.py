@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 from motion_planners.rrt_connect import birrt, direct_path
 from collections import deque, defaultdict
+from itertools import product
 
 REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
@@ -99,24 +100,22 @@ def get_fixed_links(body):
         edges[link].append(parent)
         edges[parent].append(link)
     visited = set()
-    clusters = []
-    for link in get_links(body):
-        if link in visited:
+    fixed = set()
+    for initial_link in get_links(body):
+        if initial_link in visited:
             continue
-        cluster = [link]
-        queue = deque([link])
-        visited.add(link)
+        cluster = [initial_link]
+        queue = deque([initial_link])
+        visited.add(initial_link)
         while queue:
-            link2 = queue.popleft()
-            for link3 in edges[link2]:
-                if link3 not in visited:
-                    cluster.append(link2)
-                    queue.append(link3)
-                    visited.add(link3)
-        clusters.append(cluster)
-    
-
-    return clusters
+            for next_link in edges[queue.popleft()]:
+                if next_link not in visited:
+                    cluster.append(next_link)
+                    queue.append(next_link)
+                    visited.add(next_link)
+        print cluster
+        fixed.update(product(cluster, cluster))
+    return fixed
 
 def is_movable(body, joint):
     return get_joint_type(body, joint) != p.JOINT_FIXED
@@ -268,12 +267,23 @@ def body_from_name(name):
             return body
     raise ValueError(name)
 
-#def set_joint(body, joint, value):
-#    p.setJointMotorControl2(bodyUniqueId=body,
-#                            jointIndex=joint,
-#                            controlMode=p.POSITION_CONTROL,
-#                            targetPosition=value,
-#                            force=maxForce)
+def set_joint(body, joint, value):
+    p.setJointMotorControl2(bodyUniqueId=body,
+                            jointIndex=joint,
+                            controlMode=p.POSITION_CONTROL,
+                            targetPosition=value,
+                            force=maxForce)
+
+
+def control_joints(body, joints, positions):
+    # TODO: the whole PR2 seems to jitter
+    kp = 1.0
+    kv = 0.3
+    p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, targetPositions=positions,
+                                targetVelocities=[0.0] * len(joints)) #,
+                                #positionGains=[kp] * len(joints),
+                                #velocityGains=[kv] * len(joints),)
+                                #forces=[])
 
 def set_joint_position(body, joint, value):
     p.resetJointState(body, joint, value)
@@ -364,19 +374,30 @@ def pairwise_link_collision(body1, link1, body2, link2, max_distance=0.001): # 1
 def get_contact_links(contact):
     _, body1, body2, link1, link2 = contact[:5]
     distance = contact[8]
-    return (body1, link1), (body2, link2)
+    print link1, link2, distance
+    return (body1, link1), (body2, link2), distance
+
+def get_colliding_links(body, max_distance=0):
+    contacts = p.getClosestPoints(body, body, max_distance) # -1 is the base
+    colliding = set()
+    for (_, link1), (_, link2), _ in map(get_contact_links, contacts):
+        colliding.update([(link1, link2), (link2, link1)])
+    return colliding
 
 def self_collision(body, max_distance=0):
+    # GetNonAdjacentLinks | GetAdjacentLinks
     stuff = p.getClosestPoints(body, body, max_distance) # -1 is the base
-    adjacent = get_adjacent_links(body)
-    fixed = get_fixed_links(body)
-    print adjacent
-    colliding_not_adjacent = {(link1, link2) for (_, link1), (_, link2) in map(get_contact_links, stuff)
+    print stuff
+    adjacent = (get_adjacent_links(body) | get_fixed_links(body))
+    #print fixed
+    print sorted(get_adjacent_links(body))
+    colliding_not_adjacent = {(link1, link2, distance) for (_, link1), (_, link2), distance in map(get_contact_links, stuff)
            if (link1 != link2) and ((link1, link2) not in adjacent) and ((link2, link1) not in adjacent)}
+    colliding_not_adjacent = list(colliding_not_adjacent)
     print colliding_not_adjacent
 
-    print {(get_link_name(body, link1), get_link_name(body, link2))
-           for (link1, link2) in colliding_not_adjacent}
+    print [(get_link_name(body, link1), get_link_name(body, link2), distance)
+           for (link1, link2, distance) in colliding_not_adjacent]
     # TODO: could compute initially colliding links and discount those collisions
 
     return len(colliding_not_adjacent) != 0
@@ -687,17 +708,36 @@ def main():
     p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
     print pybullet_data.getDataPath()
 
-    #p.setGravity(0, 0, -10)
-    #planeId = p.loadURDF("plane.urdf")
-    table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
+    p.setGravity(0, 0, -10)
+    planeId = p.loadURDF("plane.urdf")
+    #table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
 
     # boxId = p.loadURDF("r2d2.urdf",cubeStartPos, cubeStartOrientation)
     # boxId = p.loadURDF("pr2.urdf")
     pr2 = p.loadURDF("/Users/caelan/Programs/Installation/pr2_description/pr2_local.urdf",
                      useFixedBase=False,
-                     flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT)
+                     #flags=p.URDF_USE_SELF_COLLISION)
+                     #flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT)
+                     flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS)
     #pr2 = p.loadURDF("pr2_description/urdf/pr2_simplified.urdf", useFixedBase=False)
     origin = (0, 0, 0)
+    print p.getNumConstraints()
+
+
+    # TODO: no way of controlling the base position by itself
+    # TODO: PR2 seems to collide with itself frequently
+    # real_time = False
+    # p.setRealTimeSimulation(real_time)
+    # left_joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
+    # control_joints(pr2, left_joints, TOP_HOLDING_LEFT_ARM)
+    # while True:
+    #     control_joints(pr2, left_joints, TOP_HOLDING_LEFT_ARM)
+    #     if not real_time:
+    #         p.stepSimulation()
+
+    # A CollisionMap robot allows the user to specify self-collision regions indexed by the values of two joints.
+
+    # GetRigidlyAttachedLinks
 
     print pr2
     # for i in range (10000):
@@ -708,7 +748,7 @@ def main():
     print [get_joint_name(pr2, joint) for joint in get_movable_joints(pr2)]
     print joint_from_name(pr2, TORSO_JOINT)
     print get_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT))
-    open_gripper(pr2, joint_from_name(pr2, LEFT_GRIPPER))
+    #open_gripper(pr2, joint_from_name(pr2, LEFT_GRIPPER))
     print get_joint_limits(pr2, joint_from_name(pr2, LEFT_GRIPPER))
     print get_joint_position(pr2, joint_from_name(pr2, LEFT_GRIPPER))
     print self_collision(pr2)
@@ -807,7 +847,7 @@ def main():
     print len(movable_joints)
     for joint in xrange(get_num_joints(pr2)):
         if is_movable(pr2, joint):
-            print joint, get_joint_name(pr2, joint), get_joint_type(pr2, joint)
+            print joint, get_joint_name(pr2, joint), get_joint_type(pr2, joint), get_joint_limits(pr2, joint)
 
     #joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
     #set_joint_positions(pr2, joints, sample_joints(pr2, joints))
