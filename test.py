@@ -4,7 +4,7 @@ import pybullet_data
 import argparse
 import numpy as np
 from motion_planners.rrt_connect import birrt, direct_path
-
+from collections import deque, defaultdict
 
 REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
@@ -14,7 +14,7 @@ WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -
 CENTER_LEFT_ARM = [-0.07133691252641006, -0.052973836083405494, 1.5741805775919033, -1.4481146328076862, 1.571782540186805, -1.4891468812835686, -9.413338322697955]
 WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296, -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
 
-LEFT_ARM_LINK = 'l_gripper_tool_frame' # l_gripper_palm_link | l_gripper_tool_frame
+LEFT_ARM_LINK = 'l_gripper_palm_link' # l_gripper_palm_link | l_gripper_tool_frame
 
 LEFT_JOINT_NAMES = ['l_shoulder_pan_joint', 'l_shoulder_lift_joint', 'l_upper_arm_roll_joint',
                     'l_elbow_flex_joint', 'l_forearm_roll_joint', 'l_wrist_flex_joint', 'l_wrist_roll_joint']
@@ -25,13 +25,17 @@ HEAD_JOINT_NAMES = ['head_pan_joint', 'head_tilt_joint']
 LEFT_GRIPPER_NAME = 'l_gripper_l_finger_joint'
 LEFT_TOOL_NAME = 'l_gripper_tool_frame' # l_gripper_tool_joint | l_gripper_tool_frame
 
+LEFT_GRIPPER = 'l_gripper_l_finger_joint' # l_gripper_l_finger_joint | l_gripper_joint
+RIGHT_GRIPPER = 'r_gripper_l_finger_joint' # r_gripper_l_finger_joint | r_gripper_joint
+
 
 TOOL_TFORM = [[0., 0., 1., 0.18],
               [0., 1., 0., 0.],
               [-1., 0., 0., 0.],
               [0., 0., 0., 1.]]
 
-TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678])
+TOOL_POSE = ([0.18, 0., 0.],
+             [0., 0.70710678, 0., 0.70710678])
 TOOL_DIRECTION = [ 0., 0., 1.]
 
 # https://github.com/ros/geometry/blob/hydro-devel/tf/src/tf/transformations.py
@@ -65,8 +69,54 @@ class Conf(object):
 
 # https://docs.google.com/document/d/10sXEhzFRSnvFcl3XxNGhnD4N2SedqwdAvK3dsihxVUA/edit#
 
+def get_joint(body, joint_or_name):
+    if type(joint_or_name) is str:
+        return joint_from_name(body, joint_or_name)
+    return joint_or_name
+
+#def get_adjacent_
+
 def get_joint_type(body, joint):
     return p.getJointInfo(body, joint)[2]
+
+def get_link_parent(body, joint):
+    return p.getJointInfo(body, joint)[16]
+
+def get_adjacent_links(body):
+    adjacent = set()
+    for link in get_links(body):
+        parent = get_link_parent(body, link)
+        adjacent.add((link, parent))
+        #adjacent.add((parent, link))
+    return adjacent
+
+def get_adjacent_fixed_links(body):
+    return filter(lambda (link, _): not is_movable(body, link), get_adjacent_links(body))
+
+def get_fixed_links(body):
+    edges = defaultdict(list)
+    for link, parent in get_adjacent_fixed_links(body):
+        edges[link].append(parent)
+        edges[parent].append(link)
+    visited = set()
+    clusters = []
+    for link in get_links(body):
+        if link in visited:
+            continue
+        cluster = [link]
+        queue = deque([link])
+        visited.add(link)
+        while queue:
+            link2 = queue.popleft()
+            for link3 in edges[link2]:
+                if link3 not in visited:
+                    cluster.append(link2)
+                    queue.append(link3)
+                    visited.add(link3)
+        clusters.append(cluster)
+    
+
+    return clusters
 
 def is_movable(body, joint):
     return get_joint_type(body, joint) != p.JOINT_FIXED
@@ -80,6 +130,12 @@ def get_joint_limits(body, joint):
     if is_circular(body, joint):
         return REVOLUTE_LIMITS
     return p.getJointInfo(body, joint)[8:10]
+
+def get_min_limit(body, joint):
+    return get_joint_limits(body, joint)[0]
+
+def get_max_limit(body, joint):
+    return get_joint_limits(body, joint)[1]
 
 def create_box(w, l, h, color=(1, 0, 0, 1)):
     half_extents = [w/2., l/2., h/2.]
@@ -133,6 +189,8 @@ def get_num_joints(body):
 
 def get_joints(body):
     return range(get_num_joints(body))
+
+get_links = get_joints
 
 def get_movable_joints(body): # 45 / 87 on pr2
     return [joint for joint in get_joints(body) if is_movable(body, joint)]
@@ -293,8 +351,35 @@ def tform_from_pose((point, quat)):
 def pose_from_tform(tform):
     return point_from_tform(tform), quat_from_matrix(matrix_from_tform(tform))
 
+def contact_collision():
+    p.stepSimulation()
+    return len(p.getContactPoints()) != 0
+
 def pairwise_collision(body1, body2, max_distance=0.001): # 10000
     return len(p.getClosestPoints(body1, body2, max_distance)) != 0 # getContactPoints
+
+def pairwise_link_collision(body1, link1, body2, link2, max_distance=0.001): # 10000
+    return len(p.getClosestPoints(body1, body2, link1, link2, max_distance)) != 0 # getContactPoints
+
+def get_contact_links(contact):
+    _, body1, body2, link1, link2 = contact[:5]
+    distance = contact[8]
+    return (body1, link1), (body2, link2)
+
+def self_collision(body, max_distance=0):
+    stuff = p.getClosestPoints(body, body, max_distance) # -1 is the base
+    adjacent = get_adjacent_links(body)
+    fixed = get_fixed_links(body)
+    print adjacent
+    colliding_not_adjacent = {(link1, link2) for (_, link1), (_, link2) in map(get_contact_links, stuff)
+           if (link1 != link2) and ((link1, link2) not in adjacent) and ((link2, link1) not in adjacent)}
+    print colliding_not_adjacent
+
+    print {(get_link_name(body, link1), get_link_name(body, link2))
+           for (link1, link2) in colliding_not_adjacent}
+    # TODO: could compute initially colliding links and discount those collisions
+
+    return len(colliding_not_adjacent) != 0
 
 def env_collision(body1):
     for body2 in get_bodies():
@@ -302,6 +387,11 @@ def env_collision(body1):
         #if pairwise_collision(body1, body2):
             return True
     return False
+
+def ray_collision():
+    # rayTestBatch
+    # rayTest
+    raise NotImplementedError()
 
 def wrap_angle(theta):
     return (theta + np.pi) % (2 * np.pi) - np.pi
@@ -551,7 +641,7 @@ def inverse_kinematics(robot, target_pose):
         #kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat)
         #kinematic_conf = p.calculateInverseKinematics(robot, link, point)
         kinematic_conf = p.calculateInverseKinematics(robot, link, point,
-                                                      #quat,
+                                                      quat,
                                                       lowerLimits=min_limits, upperLimits=max_limits,
                                                       jointRanges=max_velocities, restPoses=current_conf,
                                                       #jointDamping=damping,
@@ -561,11 +651,11 @@ def inverse_kinematics(robot, target_pose):
         #                                              max_velocities, current_conf)
         set_joint_positions(robot, movable_joints, kinematic_conf)
         link_point, link_quat = get_link_pose(robot, link)
-        print link_point, link_quat
+        #print link_point, link_quat
         if np.allclose(link_point, point, atol=1e-3) and np.allclose(link_quat, quat, atol=1e-3):
             print iterations
             break
-        print link_point, link_quat
+        #print link_point, link_quat
     else:
         #return None
         return kinematic_conf
@@ -581,6 +671,12 @@ def get_gripper_pose(robot):
     #pose = get_link_pose(robot, link_from_name(robot, LEFT_TOOL_NAME))
     return pose
 
+def close_gripper(robot, joint):
+    set_joint_position(robot, joint, get_min_limit(robot, joint))
+
+def open_gripper(robot, joint):
+    set_joint_position(robot, joint, get_max_limit(robot, joint))
+
 def main():
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
@@ -593,12 +689,13 @@ def main():
 
     #p.setGravity(0, 0, -10)
     #planeId = p.loadURDF("plane.urdf")
-    #table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
+    table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
 
     # boxId = p.loadURDF("r2d2.urdf",cubeStartPos, cubeStartOrientation)
     # boxId = p.loadURDF("pr2.urdf")
     pr2 = p.loadURDF("/Users/caelan/Programs/Installation/pr2_description/pr2_local.urdf",
-                     useFixedBase=False) # flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
+                     useFixedBase=False,
+                     flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT)
     #pr2 = p.loadURDF("pr2_description/urdf/pr2_simplified.urdf", useFixedBase=False)
     origin = (0, 0, 0)
 
@@ -607,9 +704,14 @@ def main():
     #    p.stepSimulation()
     #    time.sleep(1./240.)
 
-    print get_joint_names(pr2)
+    #print get_joint_names(pr2)
+    print [get_joint_name(pr2, joint) for joint in get_movable_joints(pr2)]
     print joint_from_name(pr2, TORSO_JOINT)
     print get_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT))
+    open_gripper(pr2, joint_from_name(pr2, LEFT_GRIPPER))
+    print get_joint_limits(pr2, joint_from_name(pr2, LEFT_GRIPPER))
+    print get_joint_position(pr2, joint_from_name(pr2, LEFT_GRIPPER))
+    print self_collision(pr2)
 
     raw_input('Continue?')
 
@@ -701,7 +803,8 @@ def main():
 
     print p.JOINT_REVOLUTE, p.JOINT_PRISMATIC, p.JOINT_FIXED, p.JOINT_POINT2POINT, p.JOINT_GEAR # 0 1 4 5 6
 
-    print len(get_movable_joints(pr2))
+    movable_joints = get_movable_joints(pr2)
+    print len(movable_joints)
     for joint in xrange(get_num_joints(pr2)):
         if is_movable(pr2, joint):
             print joint, get_joint_name(pr2, joint), get_joint_type(pr2, joint)
@@ -710,29 +813,31 @@ def main():
     #set_joint_positions(pr2, joints, sample_joints(pr2, joints))
     #print get_joint_positions(pr2, joints) # Need to print before the display updates?
 
-    set_base_values(pr2, (1, -1, -np.pi/4))
-    movable_joints = get_movable_joints(pr2)
-    gripper_pose = get_link_pose(pr2, link_from_name(pr2, LEFT_ARM_LINK))
-    print gripper_pose
-    print get_joint_positions(pr2, movable_joints)
-    p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 0, 0))
-    p.stepSimulation()
-    raw_input('Pre2 IK')
-    set_joint_positions(pr2, left_joints, SIDE_HOLDING_LEFT_ARM) # TOP_HOLDING_LEFT_ARM | SIDE_HOLDING_LEFT_ARM
-    print get_joint_positions(pr2, movable_joints)
-    p.stepSimulation()
-    raw_input('Pre IK')
-    conf = inverse_kinematics(pr2, gripper_pose) # Doesn't automatically set configuraitons
-    print conf
-    print get_joint_positions(pr2, movable_joints)
-    set_joint_positions(pr2, movable_joints, conf)
-    print get_link_pose(pr2, link_from_name(pr2, LEFT_ARM_LINK))
-    #print get_joint_positions(pr2, movable_joints)
-    p.stepSimulation()
-    raw_input('Post IK')
-    return
 
-    #box = create_box(.07, .05, .15)
+
+    # set_base_values(pr2, (1, -1, -np.pi/4))
+    # movable_joints = get_movable_joints(pr2)
+    # gripper_pose = get_link_pose(pr2, link_from_name(pr2, LEFT_ARM_LINK))
+    # print gripper_pose
+    # print get_joint_positions(pr2, movable_joints)
+    # p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 0, 0))
+    # p.stepSimulation()
+    # raw_input('Pre2 IK')
+    # set_joint_positions(pr2, left_joints, SIDE_HOLDING_LEFT_ARM) # TOP_HOLDING_LEFT_ARM | SIDE_HOLDING_LEFT_ARM
+    # print get_joint_positions(pr2, movable_joints)
+    # p.stepSimulation()
+    # raw_input('Pre IK')
+    # conf = inverse_kinematics(pr2, gripper_pose) # Doesn't automatically set configuraitons
+    # print conf
+    # print get_joint_positions(pr2, movable_joints)
+    # set_joint_positions(pr2, movable_joints, conf)
+    # print get_link_pose(pr2, link_from_name(pr2, LEFT_ARM_LINK))
+    # #print get_joint_positions(pr2, movable_joints)
+    # p.stepSimulation()
+    # raw_input('Post IK')
+    # return
+
+    box = create_box(.07, .05, .15)
     # print pose_from_tform(TOOL_TFORM)
     # gripper_pose = get_link_pose(pr2, link_from_name(pr2, LEFT_ARM_LINK))
     # #gripper_pose = multiply(gripper_pose, TOOL_POSE)
@@ -745,25 +850,27 @@ def main():
     #     raw_input('Grasp {}'.format(i))
     # return
 
-    # default_conf = get_joint_positions(pr2, movable_joints)
-    # for _ in xrange(100):
-    #     #box_pose = sample_placement(box, table)
-    #     box_pose = ((0, 0, 1), quat_from_euler(np.zeros(3)))
-    #     set_pose(box, *box_pose)
-    #     base_values = sample_reachable_base(pr2, get_point(box))
-    #     #for grasp_pose in list(get_top_grasps(box))[:1]:
-    #     for grasp_pose in get_top_grasps(box):
-    #         grasp_pose = multiply(TOOL_POSE, grasp_pose)
-    #         gripper_pose = multiply(box_pose, invert(grasp_pose))
-    #         p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 1, 0))
-    #         set_joint_positions(pr2, movable_joints, default_conf)
-    #         set_base_values(pr2, base_values)
-    #         conf = inverse_kinematics(pr2, gripper_pose)
-    #         print gripper_pose
-    #         print conf
-    #         print get_base_values(pr2)
-    #         p.stepSimulation()
-    #         raw_input('IK Solution')
+    default_conf = get_joint_positions(pr2, movable_joints)
+    for _ in xrange(100):
+        box_pose = sample_placement(box, table)
+        #box_pose = ((0, 0, 1), quat_from_euler(np.zeros(3)))
+        set_pose(box, *box_pose)
+        base_values = sample_reachable_base(pr2, get_point(box))
+        #for grasp_pose in list(get_top_grasps(box))[:1]:
+        for grasp_pose in get_top_grasps(box):
+            grasp_pose = multiply(TOOL_POSE, grasp_pose)
+            gripper_pose = multiply(box_pose, invert(grasp_pose))
+            p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 1, 0))
+            set_joint_positions(pr2, movable_joints, default_conf)
+            set_base_values(pr2, base_values)
+            print env_collision(pr2), pairwise_collision(pr2, box), pairwise_collision(pr2, pr2)
+            conf = inverse_kinematics(pr2, gripper_pose)
+            print gripper_pose
+            print conf
+            print get_base_values(pr2)
+            p.stepSimulation()
+            print env_collision(pr2), pairwise_collision(pr2, box), pairwise_collision(pr2, pr2), self_collision(pr2)
+            raw_input('IK Solution')
 
 
     link = link_from_name(pr2, LEFT_ARM_LINK)
