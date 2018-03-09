@@ -24,6 +24,41 @@ from pr2_utils import TOP_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, RIG
 # https://docs.google.com/document/d/10sXEhzFRSnvFcl3XxNGhnD4N2SedqwdAvK3dsihxVUA/edit#
 
 
+def inverse_reachability(pr2, box, table):
+    torso = joint_from_name(pr2, TORSO_JOINT)
+    origin = (0, 0, 0)
+    movable_joints = get_movable_joints(pr2)
+    default_conf = get_joint_positions(pr2, movable_joints)
+    for _ in xrange(100):
+        box_pose = sample_placement(box, table)
+        print box_pose
+        #box_pose = ((0, 0, 1), quat_from_euler(np.zeros(3)))
+        set_pose(box, *box_pose)
+        base_values = sample_reachable_base(pr2, get_point(box))
+        for grasp_pose in list(get_top_grasps(box))[:1]:
+        #for grasp_pose in get_top_grasps(box):
+            gripper_pose = multiply(box_pose, invert(grasp_pose))
+            p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 1, 0))
+            set_joint_positions(pr2, movable_joints, default_conf)
+            set_base_values(pr2, base_values)
+            print env_collision(pr2), pairwise_collision(pr2, box), pairwise_collision(pr2, pr2)
+
+            #torso_point, torso_quat = get_link_pose(pr2, torso)
+            #print get_link_pose(pr2, torso)
+            #p.changeConstraint(torso_constraint, jointChildPivot=torso_point,
+            #                   jointChildFrameOrientation=torso_quat, maxForce=1000000)
+
+            conf = inverse_kinematics(pr2, gripper_pose)
+            print gripper_pose
+            print conf
+            print get_base_values(pr2)
+            #p.stepSimulation()
+            print env_collision(pr2), pairwise_collision(pr2, box), \
+                pairwise_collision(pr2, pr2), self_collision(pr2)
+            #print get_link_pose(pr2, torso)
+            raw_input('IK Solution')
+
+
 def main():
     # TODO: teleporting kuka arm
     parser = argparse.ArgumentParser()  # Automatically includes help
@@ -247,35 +282,7 @@ def main():
     #                   parentFramePosition=torso_point,
     #                   childFramePosition=torso_quat)
 
-    default_conf = get_joint_positions(pr2, movable_joints)
-    for _ in xrange(100):
-        box_pose = sample_placement(box, table)
-        print box_pose
-        #box_pose = ((0, 0, 1), quat_from_euler(np.zeros(3)))
-        set_pose(box, *box_pose)
-        base_values = sample_reachable_base(pr2, get_point(box))
-        for grasp_pose in list(get_top_grasps(box))[:1]:
-        #for grasp_pose in get_top_grasps(box):
-            grasp_pose = multiply(TOOL_POSE, grasp_pose)
-            gripper_pose = multiply(box_pose, invert(grasp_pose))
-            p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 1, 0))
-            set_joint_positions(pr2, movable_joints, default_conf)
-            set_base_values(pr2, base_values)
-            print env_collision(pr2), pairwise_collision(pr2, box), pairwise_collision(pr2, pr2)
-
-            torso_point, torso_quat = get_link_pose(pr2, torso)
-            #print get_link_pose(pr2, torso)
-            #p.changeConstraint(torso_constraint, jointChildPivot=torso_point,
-            #                   jointChildFrameOrientation=torso_quat, maxForce=1000000)
-
-            conf = inverse_kinematics(pr2, gripper_pose)
-            print gripper_pose
-            print conf
-            print get_base_values(pr2)
-            #p.stepSimulation()
-            print env_collision(pr2), pairwise_collision(pr2, box), pairwise_collision(pr2, pr2), self_collision(pr2)
-            print get_link_pose(pr2, torso)
-            raw_input('IK Solution')
+    inverse_reachability(pr2, box, table)
 
 
     link = link_from_name(pr2, LEFT_ARM_LINK)

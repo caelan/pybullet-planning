@@ -27,10 +27,10 @@ LEFT_TOOL_NAME = 'l_gripper_tool_frame' # l_gripper_tool_joint | l_gripper_tool_
 LEFT_GRIPPER = 'l_gripper_l_finger_joint' # l_gripper_l_finger_joint | l_gripper_joint
 RIGHT_GRIPPER = 'r_gripper_l_finger_joint' # r_gripper_l_finger_joint | r_gripper_joint
 
-TOOL_TFORM = [[0., 0., 1., 0.18],
-              [0., 1., 0., 0.],
-              [-1., 0., 0., 0.],
-              [0., 0., 0., 1.]]
+#TOOL_TFORM = [[0., 0., 1., 0.18],
+#              [0., 1., 0., 0.],
+#              [-1., 0., 0., 0.],
+#              [0., 0., 0., 1.]]
 TOOL_POSE = ([0.18, 0., 0.],
              [0., 0.70710678, 0., 0.70710678])
 TOOL_DIRECTION = [ 0., 0., 1.]
@@ -75,11 +75,11 @@ def get_top_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
     # if not limits or (w <= MAX_GRASP_WIDTH):
     for i in range(1 + under):
         rotate_z = (np.zeros(3), quat_from_euler([0, 0, math.pi / 2 + i * math.pi]))
-        yield multiply(multiply(translate, rotate_z), reflect_z)
+        yield multiply(multiply(multiply(TOOL_POSE, translate), rotate_z), reflect_z)
     # if not limits or (l <= MAX_GRASP_WIDTH):
     for i in range(1 + under):
         rotate_z = (np.zeros(3), quat_from_euler([0, 0, i * math.pi]))
-        yield multiply(multiply(translate, rotate_z), reflect_z)
+        yield multiply(multiply(multiply(TOOL_POSE, translate), rotate_z), reflect_z)
 
 # def get_side_grasps(mesh, under=False, limits=True, grasp_length=GRASP_LENGTH):
 #   w, l, h = np.max(mesh.vertices, axis=0) - \
