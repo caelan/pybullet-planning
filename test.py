@@ -4,12 +4,13 @@ import pybullet_data
 import argparse
 
 #REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
-from pybullet_utils import TOP_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, RIGHT_JOINT_NAMES, TOOL_POSE, \
-    TOP_HOLDING_RIGHT_ARM, TORSO_JOINT, get_joint_type, is_movable, get_joint_limits, create_box, invert, multiply, \
+from pybullet_utils import get_joint_type, is_movable, get_joint_limits, create_box, invert, multiply, \
     get_max_velocity, get_num_joints, get_movable_joints, get_joint_name, get_name, get_point, get_base_values, \
     set_base_values, set_pose, get_link_pose, joint_from_name, link_from_name, set_joint_position, get_joint_position, \
     get_body_names, get_joint_names, pairwise_collision, get_colliding_links, self_collision, env_collision, \
-    set_joint_positions, get_joint_positions, sample_placement, sample_reachable_base, get_top_grasps, \
+    set_joint_positions, get_joint_positions, sample_placement, sample_reachable_base
+from pr2_utils import TOP_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, RIGHT_JOINT_NAMES, TOOL_POSE, TORSO_JOINT, \
+    TOP_HOLDING_RIGHT_ARM, get_top_grasps, \
     inverse_kinematics
 
 
