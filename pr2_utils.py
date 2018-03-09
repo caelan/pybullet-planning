@@ -8,7 +8,7 @@ import time
 # PR2
 from pybullet_utils import get_joint_limits, multiply, get_max_velocity, get_movable_joints, \
     get_link_pose, joint_from_name, link_from_name, set_joint_position, set_joint_positions, get_joint_positions, \
-    get_min_limit, get_max_limit, quat_from_euler, get_joints
+    get_min_limit, get_max_limit, quat_from_euler, get_joints, violates_limits
 
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
@@ -100,7 +100,7 @@ def get_top_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
 #####################################
 
 def inverse_kinematics_helper(robot, link, (point, quat),
-                              null_space=True, max_iterations=100, tolerance=1e-3):
+                              null_space=False, max_iterations=200, tolerance=1e-3):
     # https://github.com/bulletphysics/bullet3/blob/389d7aaa798e5564028ce75091a3eac6a5f76ea8/examples/SharedMemory/PhysicsClientC_API.cpp
     # https://github.com/bulletphysics/bullet3/blob/c1ba04a5809f7831fa2dee684d6747951a5da602/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
     joints = get_joints(robot) # Need to have all joints (although only movable returned)
@@ -121,6 +121,7 @@ def inverse_kinematics_helper(robot, link, (point, quat),
     t0 = time.time()
     kinematic_conf = get_joint_positions(robot, movable_joints)
     for iterations in xrange(max_iterations): # 0.000863273143768 / iteration
+        # TODO: return none if no progress
         if null_space:
             kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat,
                                                           lowerLimits=min_limits, upperLimits=max_limits,
@@ -130,15 +131,16 @@ def inverse_kinematics_helper(robot, link, (point, quat),
         else:
             kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat)
         if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
-            break
+            return None
         set_joint_positions(robot, movable_joints, kinematic_conf)
         link_point, link_quat = get_link_pose(robot, link)
         if np.allclose(link_point, point, atol=tolerance) and np.allclose(link_quat, quat, atol=tolerance):
             print iterations
             break
     else:
-        #return None
-        return kinematic_conf
+        return None
+    if violates_limits(robot, movable_joints, kinematic_conf):
+        return None
     total_time = (time.time() - t0)
     print total_time
     print (time.time() - t0)/max_iterations

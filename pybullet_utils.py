@@ -6,6 +6,7 @@ from itertools import product
 import numpy as np
 import pybullet as p
 import pybullet_data
+import pickle
 from motion_planners.rrt_connect import birrt
 
 BASE_LIMITS = ([-2.5, -2.5, 0], [2.5, 2.5, 0])
@@ -22,6 +23,16 @@ class Pose(object):
 class Conf(object):
     def __init__(self):
         pass
+
+#####################################
+
+def write_pickle(filename, data):  # NOTE - cannot pickle lambda or nested functions
+    with open(filename, 'wb') as f:
+        pickle.dump(data, f)
+
+def read_pickle(filename):
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
 
 #####################################
 
@@ -422,19 +433,21 @@ def get_contact_links(contact):
     return (body1, link1), (body2, link2), distance
 
 
-def get_colliding_links(body, max_distance=0):
+def get_colliding_links(body, max_distance=-0.001):
     contacts = p.getClosestPoints(body, body, max_distance) # -1 is the base
     colliding = set()
     for (_, link1), (_, link2), _ in map(get_contact_links, contacts):
         colliding.update([(link1, link2), (link2, link1)])
     return colliding
 
+def get_safe_colliding_links(body):
+    return get_adjacent_links(body) | get_fixed_links(body)
 
 def self_collision(body, max_distance=0):
     # GetNonAdjacentLinks | GetAdjacentLinks
     contacts = p.getClosestPoints(body, body, max_distance) # -1 is the base
     #print contacts
-    adjacent = (get_adjacent_links(body) | get_fixed_links(body))
+    adjacent = get_safe_colliding_links(body)
     #print fixed
     #print sorted(get_adjacent_links(body))
     colliding_not_adjacent = {(link1, link2, distance) for (_, link1), (_, link2), distance in map(get_contact_links, contacts)
@@ -447,6 +460,12 @@ def self_collision(body, max_distance=0):
 
     return len(colliding_not_adjacent) != 0
 
+def filtered_self_collision(body, acceptable=tuple(), max_distance=0):
+    contacts = p.getClosestPoints(body, body, max_distance) # -1 is the base
+    for (_, link1), (_, link2), _ in map(get_contact_links, contacts):
+        if (link1 != link2) and (link1, link2) not in acceptable:
+            return True
+    return False
 
 def env_collision(body1):
     for body2 in get_bodies():
