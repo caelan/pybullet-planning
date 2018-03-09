@@ -124,6 +124,11 @@ def point_from_tform(tform):
 def matrix_from_tform(tform):
     return np.array(tform)[:3,:3]
 
+def point_from_pose(pose):
+    return pose[0]
+
+def quat_from_pose(pose):
+    return pose[1]
 
 def tform_from_pose((point, quat)):
     tform = np.eye(4)
