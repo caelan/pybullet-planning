@@ -39,8 +39,9 @@ def main():
 
 
     # boxId = p.loadURDF("r2d2.urdf",cubeStartPos, cubeStartOrientation)
-    #pr2 = p.loadURDF("pr2_simple.urdf")
-    pr2 = p.loadURDF("/Users/caelan/Programs/Installation/pr2_drake/pr2_local2.urdf",)
+    #pr2 = p.loadURDF("pr2_description/pr2.urdf")
+    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf")
+    #pr2 = p.loadURDF("/Users/caelan/Programs/Installation/pr2_drake/pr2_local2.urdf",)
                      #useFixedBase=0,)
                      #flags=p.URDF_USE_SELF_COLLISION)
                      #flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT)
