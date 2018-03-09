@@ -46,6 +46,7 @@ def rightarm_from_leftarm(config):
   return config*right_from_left
 
 REST_RIGHT_ARM = rightarm_from_leftarm(REST_LEFT_ARM)
+TOP_HOLDING_RIGHT_ARM = rightarm_from_leftarm(TOP_HOLDING_LEFT_ARM)
 
 #LEFT_ARM_JOINTS = [15,16,17,18,19,20,21]
 #RIGHT_ARM_JOINTS = [27,28,29,30,31,32,33]
@@ -113,7 +114,7 @@ def get_fixed_links(body):
                     cluster.append(next_link)
                     queue.append(next_link)
                     visited.add(next_link)
-        print cluster
+        #print cluster
         fixed.update(product(cluster, cluster))
     return fixed
 
@@ -374,7 +375,6 @@ def pairwise_link_collision(body1, link1, body2, link2, max_distance=0.001): # 1
 def get_contact_links(contact):
     _, body1, body2, link1, link2 = contact[:5]
     distance = contact[8]
-    print link1, link2, distance
     return (body1, link1), (body2, link2), distance
 
 def get_colliding_links(body, max_distance=0):
@@ -386,18 +386,17 @@ def get_colliding_links(body, max_distance=0):
 
 def self_collision(body, max_distance=0):
     # GetNonAdjacentLinks | GetAdjacentLinks
-    stuff = p.getClosestPoints(body, body, max_distance) # -1 is the base
-    print stuff
+    contacts = p.getClosestPoints(body, body, max_distance) # -1 is the base
+    #print contacts
     adjacent = (get_adjacent_links(body) | get_fixed_links(body))
     #print fixed
-    print sorted(get_adjacent_links(body))
-    colliding_not_adjacent = {(link1, link2, distance) for (_, link1), (_, link2), distance in map(get_contact_links, stuff)
+    #print sorted(get_adjacent_links(body))
+    colliding_not_adjacent = {(link1, link2, distance) for (_, link1), (_, link2), distance in map(get_contact_links, contacts)
            if (link1 != link2) and ((link1, link2) not in adjacent) and ((link2, link1) not in adjacent)}
     colliding_not_adjacent = list(colliding_not_adjacent)
-    print colliding_not_adjacent
-
-    print [(get_link_name(body, link1), get_link_name(body, link2), distance)
-           for (link1, link2, distance) in colliding_not_adjacent]
+    #print colliding_not_adjacent
+    #print [(get_link_name(body, link1), get_link_name(body, link2), distance)
+    #       for (link1, link2, distance) in colliding_not_adjacent]
     # TODO: could compute initially colliding links and discount those collisions
 
     return len(colliding_not_adjacent) != 0
@@ -605,7 +604,7 @@ def get_top_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
 #         rotate_z = trans_from_quat(quat_from_angle_vector(i * math.pi, [1, 0, 0]))
 #         yield translate.dot(rotate_z).dot(swap_xz), np.array([l])
 
-def inverse_kinematics(robot, target_pose):
+def inverse_kinematics(robot, target_pose, flag=True):
     #print get_base_link(robot)
     #base_pose = get_link_pose(robot, link_from_name(robot, get_base_link(robot)))
     #pose = multiply(invert(get_pose(robot)), pose)
@@ -613,25 +612,28 @@ def inverse_kinematics(robot, target_pose):
     link = link_from_name(robot, LEFT_ARM_LINK)
 
     movable_joints = get_movable_joints(robot)
-    current_conf = get_joint_positions(robot, movable_joints)
+    joints = get_joints(robot)
+    current_conf = get_joint_positions(robot, joints)
     # TODO: constrain not moving
     left_joints = [joint_from_name(robot, name) for name in LEFT_JOINT_NAMES]
+    # [joint_from_name(robot, name) for name in RIGHT_JOINT_NAMES]
 
-    #min_limits = [get_joint_limits(robot, joint)[0] for joint in movable_joints]
-    #max_limits = [get_joint_limits(robot, joint)[1] for joint in movable_joints]
-    min_limits = [get_joint_limits(robot, joint)[0] for joint in get_joints(robot)]
-    max_limits = [get_joint_limits(robot, joint)[1] for joint in get_joints(robot)]
-    print min_limits
-    print max_limits
-    print left_joints
-    print [joint_from_name(robot, name) for name in RIGHT_JOINT_NAMES]
-    print movable_joints
-    #min_limits = [get_joint_limits(robot, joint)[0] if joint in left_joints else current_conf[i]
-    #              for i, joint in enumerate(movable_joints)]
-    #max_limits = [get_joint_limits(robot, joint)[1] if joint in left_joints else current_conf[i]
-    #              for i, joint in enumerate(movable_joints)]
-    max_velocities = [get_max_velocity(robot, joint) for joint in get_joints(robot)] # Range of Jacobian
-    #max_velocities = [get_max_velocity(robot, joint) for joint in movable_joints] # Range of Jacobian
+    # https://github.com/bulletphysics/bullet3/blob/389d7aaa798e5564028ce75091a3eac6a5f76ea8/examples/SharedMemory/PhysicsClientC_API.cpp
+    # Need to have the correct number
+
+    # TODO: sample other values for teh arm joints as the reference conf
+
+    min_limits = [get_joint_limits(robot, joint)[0] for joint in joints]
+    max_limits = [get_joint_limits(robot, joint)[1] for joint in joints]
+    min_limits = [get_joint_limits(robot, joint)[0] if joint in left_joints else current_conf[i]
+                  for i, joint in enumerate(joints)]
+    max_limits = [get_joint_limits(robot, joint)[1] if joint in left_joints else current_conf[i]
+                  for i, joint in enumerate(joints)]
+    #min_limits = current_conf
+    #max_limits = current_conf
+    max_velocities = [get_max_velocity(robot, joint) for joint in joints] # Range of Jacobian
+    max_velocities = [10000]*len(joints) # TODO: cannot have zero velocities
+    # TODO: larger definitely better for velocities
     print min_limits
     print max_limits
     print max_velocities
@@ -647,29 +649,35 @@ def inverse_kinematics(robot, target_pose):
     # https://github.com/bulletphysics/bullet3/blob/c1ba04a5809f7831fa2dee684d6747951a5da602/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
 
     #damping = tuple(0.1*np.ones(len(movable_joints)))
-    damping = tuple(0.1*np.ones(get_num_joints(robot)))
-    print damping
-    min_limits = 'fis'
-    max_limits = 'stuff' # TODO: these are not used?
-    max_velocities = 'what'
-    current_conf = 'aefawfe'
+    damping = tuple(0.1*np.ones(len(joints)))
+    #print damping
+    #min_limits = 'fis'
+    #max_limits = 'stuff' # TODO: these are not used?
+    #max_velocities = 'what'
+    #current_conf = 'aefawfe'
 
     # TODO: fix particular joints?
     t0 = time.time()
-    max_iterations = 150
-    kinematic_conf = current_conf
+    max_iterations = 100
+    kinematic_conf = get_joint_positions(robot, movable_joints)
     for iterations in xrange(max_iterations): # 0.000863273143768 / iteration
+        #print kinematic_conf
         #kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat)
         #kinematic_conf = p.calculateInverseKinematics(robot, link, point)
-        kinematic_conf = p.calculateInverseKinematics(robot, link, point,
-                                                      quat,
-                                                      lowerLimits=min_limits, upperLimits=max_limits,
-                                                      jointRanges=max_velocities, restPoses=current_conf,
-                                                      #jointDamping=damping,
-                                              )
+        if flag:
+            kinematic_conf = p.calculateInverseKinematics(robot, link, point,
+                                                          quat,
+                                                          lowerLimits=min_limits, upperLimits=max_limits,
+                                                          jointRanges=max_velocities, restPoses=current_conf,
+                                                          #jointDamping=damping,
+                                                  )
+        else:
+            kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat)
         #kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat,
         #                                              min_limits, max_limits,
         #                                              max_velocities, current_conf)
+        if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
+            break
         set_joint_positions(robot, movable_joints, kinematic_conf)
         link_point, link_quat = get_link_pose(robot, link)
         #print link_point, link_quat
@@ -698,7 +706,17 @@ def close_gripper(robot, joint):
 def open_gripper(robot, joint):
     set_joint_position(robot, joint, get_max_limit(robot, joint))
 
+def remove_constraint(constraint):
+    p.removeConstraint(constraint)
+
+def fixed_constraint(body1, link1, body2, link2):
+    return p.createConstraint(body1, link1, body2, link2,
+                              p.JOINT_FIXED, jointAxis=[0]*3, # JOINT_FIXED
+                              parentFramePosition=[0]*3,
+                              childFramePosition=[0]*3)
+
 def main():
+    # TODO: teleporting kuka arm
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     args = parser.parse_args()
@@ -709,17 +727,21 @@ def main():
     print pybullet_data.getDataPath()
 
     p.setGravity(0, 0, -10)
-    planeId = p.loadURDF("plane.urdf")
-    #table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
+    #planeId = p.loadURDF("plane.urdf")
+    table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
+    box = create_box(.07, .05, .15)
+
 
     # boxId = p.loadURDF("r2d2.urdf",cubeStartPos, cubeStartOrientation)
-    # boxId = p.loadURDF("pr2.urdf")
-    pr2 = p.loadURDF("/Users/caelan/Programs/Installation/pr2_description/pr2_local.urdf",
-                     useFixedBase=False,
+    #pr2 = p.loadURDF("pr2_simple.urdf")
+    pr2 = p.loadURDF("/Users/caelan/Programs/Installation/pr2_description/pr2_local2.urdf",)
+                     #useFixedBase=0,)
                      #flags=p.URDF_USE_SELF_COLLISION)
                      #flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT)
-                     flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS)
+                     #flags=p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS)
     #pr2 = p.loadURDF("pr2_description/urdf/pr2_simplified.urdf", useFixedBase=False)
+    initially_colliding = get_colliding_links(pr2)
+    print len(initially_colliding)
     origin = (0, 0, 0)
     print p.getNumConstraints()
 
@@ -746,26 +768,47 @@ def main():
 
     #print get_joint_names(pr2)
     print [get_joint_name(pr2, joint) for joint in get_movable_joints(pr2)]
-    print joint_from_name(pr2, TORSO_JOINT)
     print get_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT))
     #open_gripper(pr2, joint_from_name(pr2, LEFT_GRIPPER))
-    print get_joint_limits(pr2, joint_from_name(pr2, LEFT_GRIPPER))
-    print get_joint_position(pr2, joint_from_name(pr2, LEFT_GRIPPER))
+    #print get_joint_limits(pr2, joint_from_name(pr2, LEFT_GRIPPER))
+    #print get_joint_position(pr2, joint_from_name(pr2, LEFT_GRIPPER))
     print self_collision(pr2)
 
+    """
+    print p.getNumConstraints()
+    constraint = fixed_constraint(pr2, -1, box, -1) # table
+    p.changeConstraint(constraint)
+    print p.getNumConstraints()
+    print p.getConstraintInfo(constraint)
+    print p.getConstraintState(constraint)
+    p.stepSimulation()
     raw_input('Continue?')
 
+    set_point(pr2, (-2, 0, 0))
+    p.stepSimulation()
+    p.changeConstraint(constraint)
+    print p.getConstraintInfo(constraint)
+    print p.getConstraintState(constraint)
+    raw_input('Continue?')
+    print get_point(pr2)
+    raw_input('Continue?')
+    """
+
+    # TODO: would be good if we could set the joint directly
     print set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT), 0.2)  # Updates automatically
+    print get_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT))
+    #return
 
     left_joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
     right_joints = [joint_from_name(pr2, name) for name in RIGHT_JOINT_NAMES]
     print set_joint_positions(pr2, left_joints, TOP_HOLDING_LEFT_ARM) # TOP_HOLDING_LEFT_ARM | SIDE_HOLDING_LEFT_ARM
-    print set_joint_positions(pr2, right_joints, REST_RIGHT_ARM)
+    print set_joint_positions(pr2, right_joints, TOP_HOLDING_RIGHT_ARM) # TOP_HOLDING_RIGHT_ARM | REST_RIGHT_ARM
 
     print get_name(pr2)
     print get_body_names()
     # print p.getBodyUniqueId(pr2)
     print get_joint_names(pr2)
+
 
     #for joint, value in zip(LEFT_ARM_JOINTS, REST_LEFT_ARM):
     #    set_joint_position(pr2, joint, value)
@@ -877,7 +920,6 @@ def main():
     # raw_input('Post IK')
     # return
 
-    box = create_box(.07, .05, .15)
     # print pose_from_tform(TOOL_TFORM)
     # gripper_pose = get_link_pose(pr2, link_from_name(pr2, LEFT_ARM_LINK))
     # #gripper_pose = multiply(gripper_pose, TOOL_POSE)
@@ -890,26 +932,42 @@ def main():
     #     raw_input('Grasp {}'.format(i))
     # return
 
+    torso = joint_from_name(pr2, TORSO_JOINT)
+    torso_point, torso_quat = get_link_pose(pr2, torso)
+
+    #torso_constraint = p.createConstraint(pr2, torso, -1, -1,
+    #                   p.JOINT_FIXED, jointAxis=[0] * 3,  # JOINT_FIXED
+    #                   parentFramePosition=torso_point,
+    #                   childFramePosition=torso_quat)
+
     default_conf = get_joint_positions(pr2, movable_joints)
     for _ in xrange(100):
         box_pose = sample_placement(box, table)
+        print box_pose
         #box_pose = ((0, 0, 1), quat_from_euler(np.zeros(3)))
         set_pose(box, *box_pose)
         base_values = sample_reachable_base(pr2, get_point(box))
-        #for grasp_pose in list(get_top_grasps(box))[:1]:
-        for grasp_pose in get_top_grasps(box):
+        for grasp_pose in list(get_top_grasps(box))[:1]:
+        #for grasp_pose in get_top_grasps(box):
             grasp_pose = multiply(TOOL_POSE, grasp_pose)
             gripper_pose = multiply(box_pose, invert(grasp_pose))
             p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 1, 0))
             set_joint_positions(pr2, movable_joints, default_conf)
             set_base_values(pr2, base_values)
             print env_collision(pr2), pairwise_collision(pr2, box), pairwise_collision(pr2, pr2)
+
+            torso_point, torso_quat = get_link_pose(pr2, torso)
+            #print get_link_pose(pr2, torso)
+            #p.changeConstraint(torso_constraint, jointChildPivot=torso_point,
+            #                   jointChildFrameOrientation=torso_quat, maxForce=1000000)
+
             conf = inverse_kinematics(pr2, gripper_pose)
             print gripper_pose
             print conf
             print get_base_values(pr2)
-            p.stepSimulation()
+            #p.stepSimulation()
             print env_collision(pr2), pairwise_collision(pr2, box), pairwise_collision(pr2, pr2), self_collision(pr2)
+            print get_link_pose(pr2, torso)
             raw_input('IK Solution')
 
 
