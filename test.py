@@ -1,20 +1,18 @@
 import pybullet as p
 import time
-import pybullet_data
 import argparse
 
-#REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 from pybullet_utils import get_joint_type, is_movable, get_joint_limits, create_box, invert, multiply, \
     get_max_velocity, get_num_joints, get_movable_joints, get_joint_name, get_name, get_point, get_base_values, \
     set_base_values, set_pose, get_link_pose, joint_from_name, link_from_name, set_joint_position, get_joint_position, \
     get_body_names, get_joint_names, pairwise_collision, get_colliding_links, self_collision, env_collision, \
-    set_joint_positions, get_joint_positions, sample_placement, sample_reachable_base
+    set_joint_positions, get_joint_positions, sample_placement, sample_reachable_base, add_data_path, connect
 from pr2_utils import TOP_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, RIGHT_JOINT_NAMES, TOOL_POSE, TORSO_JOINT, \
     TOP_HOLDING_RIGHT_ARM, get_top_grasps, \
     inverse_kinematics
 
 
-# https://github.com/ros/geometry/blob/hydro-devel/tf/src/tf/transformations.py
+#REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 
 #LEFT_ARM_JOINTS = [15,16,17,18,19,20,21]
 #RIGHT_ARM_JOINTS = [27,28,29,30,31,32,33]
@@ -25,26 +23,6 @@ from pr2_utils import TOP_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, RIG
 
 # https://docs.google.com/document/d/10sXEhzFRSnvFcl3XxNGhnD4N2SedqwdAvK3dsihxVUA/edit#
 
-#def get_adjacent_
-
-#def quat_from_matrix(matrix):
-#    return p.getQuaternionFromMatrix(matrix)
-
-# def get_side_grasps(mesh, under=False, limits=True, grasp_length=GRASP_LENGTH):
-#   w, l, h = np.max(mesh.vertices, axis=0) - \
-#             np.min(mesh.vertices, axis=0)
-#   for j in range(1 + under):
-#     swap_xz = trans_from_quat(quat_from_angle_vector(-math.pi/2 + j*math.pi, [0, 1, 0]))
-#     if not limits or (w <= MAX_GRASP_WIDTH):
-#       translate = trans_from_point(0, 0, l / 2 - grasp_length)
-#       for i in range(2):
-#         rotate_z = trans_from_quat(quat_from_angle_vector(math.pi / 2 + i * math.pi, [1, 0, 0]))
-#         yield translate.dot(rotate_z).dot(swap_xz), np.array([w])
-#     if not limits or (l <= MAX_GRASP_WIDTH):
-#       translate = trans_from_point(0, 0, w / 2 - grasp_length)
-#       for i in range(2):
-#         rotate_z = trans_from_quat(quat_from_angle_vector(i * math.pi, [1, 0, 0]))
-#         yield translate.dot(rotate_z).dot(swap_xz), np.array([l])
 
 def main():
     # TODO: teleporting kuka arm
@@ -52,12 +30,9 @@ def main():
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     args = parser.parse_args()
 
-    client = p.connect(p.GUI) if args.viewer else p.connect(p.DIRECT)
+    client = connect(use_gui=args.viewer)
+    add_data_path()
 
-    p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
-    print pybullet_data.getDataPath()
-
-    p.setGravity(0, 0, -10)
     #planeId = p.loadURDF("plane.urdf")
     table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
     box = create_box(.07, .05, .15)

@@ -5,6 +5,7 @@ from itertools import product
 
 import numpy as np
 import pybullet as p
+import pybullet_data
 from motion_planners.rrt_connect import birrt
 
 BASE_LIMITS = ([-2.5, -2.5, 0], [2.5, 2.5, 0])
@@ -26,6 +27,12 @@ class Conf(object):
 
 # Simulation
 
+def connect(use_gui=True):
+    return p.connect(p.GUI) if use_gui else p.connect(p.DIRECT)
+
+def disconnect():
+    return p.disconnect()
+
 def is_connected():
     return p.getConnectionInfo()['isConnected']
 
@@ -35,13 +42,21 @@ def get_connection():
 def has_gui():
     return get_connection() == p.GUI
 
+def add_data_path():
+    return p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
+
+def enable_gravity():
+    p.setGravity(0, 0, -10)
+
+def disable_gravity():
+    p.setGravity(0, 0, 0)
+
 #####################################
 
 # Geometry
 
 def invert((point, quat)):
     return p.invertTransform(point, quat)
-
 
 def multiply((point1, quat1), (point2, quat2)):
     return p.multiplyTransforms(point1, quat1, point2, quat2) # TODO: variable number of args

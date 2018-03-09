@@ -81,95 +81,74 @@ def get_top_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
         rotate_z = (np.zeros(3), quat_from_euler([0, 0, i * math.pi]))
         yield multiply(multiply(translate, rotate_z), reflect_z)
 
+# def get_side_grasps(mesh, under=False, limits=True, grasp_length=GRASP_LENGTH):
+#   w, l, h = np.max(mesh.vertices, axis=0) - \
+#             np.min(mesh.vertices, axis=0)
+#   for j in range(1 + under):
+#     swap_xz = trans_from_quat(quat_from_angle_vector(-math.pi/2 + j*math.pi, [0, 1, 0]))
+#     if not limits or (w <= MAX_GRASP_WIDTH):
+#       translate = trans_from_point(0, 0, l / 2 - grasp_length)
+#       for i in range(2):
+#         rotate_z = trans_from_quat(quat_from_angle_vector(math.pi / 2 + i * math.pi, [1, 0, 0]))
+#         yield translate.dot(rotate_z).dot(swap_xz), np.array([w])
+#     if not limits or (l <= MAX_GRASP_WIDTH):
+#       translate = trans_from_point(0, 0, w / 2 - grasp_length)
+#       for i in range(2):
+#         rotate_z = trans_from_quat(quat_from_angle_vector(i * math.pi, [1, 0, 0]))
+#         yield translate.dot(rotate_z).dot(swap_xz), np.array([l])
 
 #####################################
 
-def inverse_kinematics(robot, target_pose, flag=True):
-    #print get_base_link(robot)
-    #base_pose = get_link_pose(robot, link_from_name(robot, get_base_link(robot)))
-    #pose = multiply(invert(get_pose(robot)), pose)
-    (point, quat) = target_pose
-    link = link_from_name(robot, LEFT_ARM_LINK)
-
-    movable_joints = get_movable_joints(robot)
-    joints = get_joints(robot)
-    current_conf = get_joint_positions(robot, joints)
-    # TODO: constrain not moving
-    left_joints = [joint_from_name(robot, name) for name in LEFT_JOINT_NAMES]
-    # [joint_from_name(robot, name) for name in RIGHT_JOINT_NAMES]
-
+def inverse_kinematics_helper(robot, link, (point, quat),
+                              null_space=True, max_iterations=100, tolerance=1e-3):
     # https://github.com/bulletphysics/bullet3/blob/389d7aaa798e5564028ce75091a3eac6a5f76ea8/examples/SharedMemory/PhysicsClientC_API.cpp
-    # Need to have the correct number
+    # https://github.com/bulletphysics/bullet3/blob/c1ba04a5809f7831fa2dee684d6747951a5da602/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
+    joints = get_joints(robot) # Need to have all joints (although only movable returned)
+    movable_joints = get_movable_joints(robot)
+    current_conf = get_joint_positions(robot, joints)
 
-    # TODO: sample other values for teh arm joints as the reference conf
-
+    # TODO: sample other values for the arm joints as the reference conf
     min_limits = [get_joint_limits(robot, joint)[0] for joint in joints]
     max_limits = [get_joint_limits(robot, joint)[1] for joint in joints]
-    min_limits = [get_joint_limits(robot, joint)[0] if joint in left_joints else current_conf[i]
-                  for i, joint in enumerate(joints)]
-    max_limits = [get_joint_limits(robot, joint)[1] if joint in left_joints else current_conf[i]
-                  for i, joint in enumerate(joints)]
     #min_limits = current_conf
     #max_limits = current_conf
-    max_velocities = [get_max_velocity(robot, joint) for joint in joints] # Range of Jacobian
-    max_velocities = [10000]*len(joints) # TODO: cannot have zero velocities
+    #max_velocities = [get_max_velocity(robot, joint) for joint in joints] # Range of Jacobian
+    max_velocities = [10000]*len(joints)
+    # TODO: cannot have zero velocities
     # TODO: larger definitely better for velocities
-    print min_limits
-    print max_limits
-    print max_velocities
-    print
-    #print max_velocities
-    #kinematic_conf = p.calculateInverseKinematics(robot, link, point, lowerLimits=min_limits,
-    #                                    upperLimits=max_limits, jointRanges=max_velocities,
-    #                                    restPoses=current_conf)
-    #kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat, lowerLimits=min_limits,
-    #                                    upperLimits=max_limits, jointRanges=max_velocities,
-    #                                    restPoses=current_conf)
+    #damping = tuple(0.1*np.ones(len(joints)))
 
-    # https://github.com/bulletphysics/bullet3/blob/c1ba04a5809f7831fa2dee684d6747951a5da602/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
-
-    #damping = tuple(0.1*np.ones(len(movable_joints)))
-    damping = tuple(0.1*np.ones(len(joints)))
-    #print damping
-    #min_limits = 'fis'
-    #max_limits = 'stuff' # TODO: these are not used?
-    #max_velocities = 'what'
-    #current_conf = 'aefawfe'
-
-    # TODO: fix particular joints?
     t0 = time.time()
-    max_iterations = 100
     kinematic_conf = get_joint_positions(robot, movable_joints)
     for iterations in xrange(max_iterations): # 0.000863273143768 / iteration
-        #print kinematic_conf
-        #kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat)
-        #kinematic_conf = p.calculateInverseKinematics(robot, link, point)
-        if flag:
-            kinematic_conf = p.calculateInverseKinematics(robot, link, point,
-                                                          quat,
+        if null_space:
+            kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat,
                                                           lowerLimits=min_limits, upperLimits=max_limits,
                                                           jointRanges=max_velocities, restPoses=current_conf,
                                                           #jointDamping=damping,
                                                   )
         else:
             kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat)
-        #kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat,
-        #                                              min_limits, max_limits,
-        #                                              max_velocities, current_conf)
         if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
             break
         set_joint_positions(robot, movable_joints, kinematic_conf)
         link_point, link_quat = get_link_pose(robot, link)
-        #print link_point, link_quat
-        if np.allclose(link_point, point, atol=1e-3) and np.allclose(link_quat, quat, atol=1e-3):
+        if np.allclose(link_point, point, atol=tolerance) and np.allclose(link_quat, quat, atol=tolerance):
             print iterations
             break
-        #print link_point, link_quat
     else:
         #return None
         return kinematic_conf
     total_time = (time.time() - t0)
     print total_time
     print (time.time() - t0)/max_iterations
-    #kinematic_conf = p.calculateInverseKinematics(robot, link, point)
     return kinematic_conf
+
+def inverse_kinematics(robot, target_pose):
+    #left_joints = [joint_from_name(robot, name) for name in LEFT_JOINT_NAMES]
+    #min_limits = [get_joint_limits(robot, joint)[0] if joint in left_joints else current_conf[i]
+    #              for i, joint in enumerate(joints)]
+    #max_limits = [get_joint_limits(robot, joint)[1] if joint in left_joints else current_conf[i]
+    #              for i, joint in enumerate(joints)]
+    link = link_from_name(robot, LEFT_ARM_LINK)
+    return inverse_kinematics_helper(robot, link, target_pose)
