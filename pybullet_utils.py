@@ -635,19 +635,21 @@ def fixed_constraint(body1, link1, body2, link2):
 
 # Control
 
-def set_joint(body, joint, value):
-    p.setJointMotorControl2(bodyUniqueId=body,
+def control_joint(body, joint, value):
+    max_force = 5
+    return p.setJointMotorControl2(bodyUniqueId=body,
                             jointIndex=joint,
                             controlMode=p.POSITION_CONTROL,
                             targetPosition=value,
-                            force=maxForce)
+                            targetVelocity=0,
+                            force=max_force)
 
 
 def control_joints(body, joints, positions):
     # TODO: the whole PR2 seems to jitter
     kp = 1.0
     kv = 0.3
-    p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, targetPositions=positions,
+    return p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, targetPositions=positions,
                                 targetVelocities=[0.0] * len(joints)) #,
                                 #positionGains=[kp] * len(joints),
                                 #velocityGains=[kv] * len(joints),)
