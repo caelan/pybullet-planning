@@ -1,3 +1,6 @@
+import os
+import random
+
 import numpy as np
 import math
 import pybullet as p
@@ -8,7 +11,8 @@ import time
 # PR2
 from pybullet_utils import get_joint_limits, multiply, get_max_velocity, get_movable_joints, \
     get_link_pose, joint_from_name, link_from_name, set_joint_position, set_joint_positions, get_joint_positions, \
-    get_min_limit, get_max_limit, quat_from_euler, get_joints, violates_limits
+    get_min_limit, get_max_limit, quat_from_euler, get_joints, violates_limits, read_pickle, set_pose, point_from_pose, \
+    sample_reachable_base, set_base_values, get_pose, sample_placement, invert, pairwise_collision, get_name
 
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
@@ -154,3 +158,90 @@ def inverse_kinematics(robot, target_pose):
     #              for i, joint in enumerate(joints)]
     link = link_from_name(robot, LEFT_ARM_LINK)
     return inverse_kinematics_helper(robot, link, target_pose)
+
+#####################################
+
+DATABASES_DIR = 'databases'
+IR_FILENAME = '{}_{}_ir.pickle'
+
+
+def load_inverse_reachability(grasp_type='top', arm='leftarm'):
+    filename = IR_FILENAME.format(grasp_type, arm)
+    path = os.path.join(DATABASES_DIR, filename)
+    return read_pickle(path)['gripper_from_base']
+
+
+def learned_pose_generator(robot, gripper_pose):
+    gripper_from_base_list = load_inverse_reachability()
+    random.shuffle(gripper_from_base_list)
+    for gripper_from_base in gripper_from_base_list:
+        base_pose = multiply(gripper_pose, gripper_from_base)
+        set_pose(robot, base_pose)
+        yield base_pose
+
+
+def uniform_pose_generator(robot, gripper_pose):
+    point = point_from_pose(gripper_pose)
+    while True:
+        base_values = sample_reachable_base(robot, point)
+        set_base_values(robot, base_values)
+        yield get_pose(robot)
+
+
+def create_inverse_reachability(pr2, box, table, num_samples=500):
+    #initially_colliding = get_colliding_links(pr2) | get_safe_colliding_links(pr2)
+    link = link_from_name(pr2, LEFT_ARM_LINK)
+
+    #torso = joint_from_name(pr2, TORSO_JOINT)
+    #origin = (0, 0, 0)
+    movable_joints = get_movable_joints(pr2)
+    default_conf = get_joint_positions(pr2, movable_joints)
+    gripper_from_base_list = []
+    while len(gripper_from_base_list) < num_samples:
+        box_pose = sample_placement(box, table)
+        #box_pose = ((0, 0, 1), quat_from_euler(np.zeros(3)))
+        set_pose(box, *box_pose)
+        for grasp_pose in list(get_top_grasps(box))[:1]:
+        #for grasp_pose in get_top_grasps(box):
+            gripper_pose = multiply(box_pose, invert(grasp_pose))
+            #p.addUserDebugLine(origin, gripper_pose[0], lineColorRGB=(1, 1, 0))
+            set_joint_positions(pr2, movable_joints, default_conf)
+            #set_pose(pr2, *next(uniform_pose_generator(pr2, gripper_pose)))
+            set_pose(pr2, *next(learned_pose_generator(pr2, gripper_pose)))
+
+            if pairwise_collision(pr2, table):
+                continue
+
+            #print env_collision(pr2), pairwise_collision(pr2, box), pairwise_collision(pr2, pr2)
+            #torso_point, torso_quat = get_link_pose(pr2, torso)
+            #print get_link_pose(pr2, torso)
+            #p.changeConstraint(torso_constraint, jointChildPivot=torso_point,
+            #                   jointChildFrameOrientation=torso_quat, maxForce=1000000)
+
+            conf = inverse_kinematics_helper(pr2, link, gripper_pose)
+            if (conf is None) or pairwise_collision(pr2, table):
+                continue
+
+            #colliding = set(get_colliding_links(pr2)) - set(initially_colliding)
+            #print [(get_joint_name(pr2, j1), get_joint_name(pr2, j2)) for (j1, j2) in colliding]
+            #raw_input('awefawef')
+            #if filtered_self_collision(pr2, acceptable=initially_colliding):
+            #    continue
+
+            gripper_from_base = multiply(invert(get_link_pose(pr2, link)), get_pose(pr2))
+            gripper_from_base_list.append(gripper_from_base)
+
+    grasp_type = 'top'
+    arm = 'leftarm'
+    filename = IR_FILENAME.format(grasp_type, arm)
+    path = os.path.join(DATABASES_DIR, filename)
+    data = {
+        'filename': filename,
+        'robot': get_name(pr2),
+        'grasp_type': grasp_type,
+        'arg': arm,
+        'carry_conf': TOP_HOLDING_LEFT_ARM,
+        'gripper_link': link,
+        'gripper_from_base': gripper_from_base_list,
+    }
+    #write_pickle(path, data)

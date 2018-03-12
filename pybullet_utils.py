@@ -14,18 +14,6 @@ REVOLUTE_LIMITS = -np.pi, np.pi
 
 #####################################
 
-class Pose(object):
-    def __init__(self, position, orientation):
-        self.position = position
-        self.orientation = orientation
-
-
-class Conf(object):
-    def __init__(self):
-        pass
-
-#####################################
-
 def write_pickle(filename, data):  # NOTE - cannot pickle lambda or nested functions
     with open(filename, 'wb') as f:
         pickle.dump(data, f)
@@ -365,7 +353,8 @@ def set_point(body, point):
 def set_quat(body, quat):
     p.resetBasePositionAndOrientation(body, get_point(body), quat)
 
-def set_pose(body, point, quat):
+#def set_pose(body, point, quat):
+def set_pose(body, (point, quat)):
     p.resetBasePositionAndOrientation(body, point, quat)
 
 #####################################
