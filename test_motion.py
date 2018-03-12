@@ -18,7 +18,13 @@ def main():
     add_data_path()
 
     plane = p.loadURDF("plane.urdf")
-    table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
+    #table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
+    #table = p.loadURDF("table_square/table_square.urdf")
+    #table = p.loadURDF("cube.urdf")
+    #table = p.loadURDF("block.urdf")
+    #table = p.loadURDF("door.urdf")
+
+
     pr2 = p.loadURDF("pr2_description/pr2.urdf", useFixedBase=True)
 
     base_start = (-2, -2, 0)

@@ -50,6 +50,18 @@ def enable_gravity():
 def disable_gravity():
     p.setGravity(0, 0, 0)
 
+def step_simulation():
+    p.stepSimulation()
+
+def update_state():
+    #for body in get_bodies():
+    #    get_pose(body)
+    p.getKeyboardEvents()
+    p.getMouseEvents()
+
+def reset_simulation():
+    p.resetSimulation()
+
 #####################################
 
 # Geometry
@@ -70,6 +82,9 @@ def quat_from_euler(euler):
 def euler_from_quat(quat):
     return p.getEulerFromQuaternion(quat)
 
+
+def unit_quat():
+    return quat_from_euler([0, 0, 0])
 
 def z_rotation(theta):
     return quat_from_euler([0, 0, theta])

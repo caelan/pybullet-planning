@@ -12,7 +12,7 @@ import time
 from pybullet_utils import get_joint_limits, multiply, get_max_velocity, get_movable_joints, \
     get_link_pose, joint_from_name, link_from_name, set_joint_position, set_joint_positions, get_joint_positions, \
     get_min_limit, get_max_limit, quat_from_euler, get_joints, violates_limits, read_pickle, set_pose, point_from_pose, \
-    sample_reachable_base, set_base_values, get_pose, sample_placement, invert, pairwise_collision, get_name
+    sample_reachable_base, set_base_values, get_pose, sample_placement, invert, pairwise_collision, get_name, euler_from_quat
 
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
@@ -20,16 +20,32 @@ REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.100
 WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -1.4851759349218694, 1.3911839347271555, -1.6531320011389408, -2.978586584568441]
 CENTER_LEFT_ARM = [-0.07133691252641006, -0.052973836083405494, 1.5741805775919033, -1.4481146328076862, 1.571782540186805, -1.4891468812835686, -9.413338322697955]
 WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296, -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
-LEFT_ARM_LINK = 'l_gripper_palm_link' # l_gripper_palm_link | l_gripper_tool_frame
+
 LEFT_JOINT_NAMES = ['l_shoulder_pan_joint', 'l_shoulder_lift_joint', 'l_upper_arm_roll_joint',
                     'l_elbow_flex_joint', 'l_forearm_roll_joint', 'l_wrist_flex_joint', 'l_wrist_roll_joint']
 RIGHT_JOINT_NAMES = ['r_shoulder_pan_joint', 'r_shoulder_lift_joint', 'r_upper_arm_roll_joint',
                      'r_elbow_flex_joint', 'r_forearm_roll_joint', 'r_wrist_flex_joint', 'r_wrist_roll_joint']
+ARM_JOINT_NAMES = {
+    'left': LEFT_JOINT_NAMES,
+    'right': RIGHT_JOINT_NAMES,
+}
+
+LEFT_ARM_LINK = 'l_gripper_palm_link' # l_gripper_palm_link | l_gripper_tool_frame
+ARM_LINK_NAMES = {
+    'left': LEFT_ARM_LINK,
+    'right': 'r_gripper_palm_link',
+}
+
 HEAD_JOINT_NAMES = ['head_pan_joint', 'head_tilt_joint']
-LEFT_GRIPPER_NAME = 'l_gripper_l_finger_joint'
 LEFT_TOOL_NAME = 'l_gripper_tool_frame' # l_gripper_tool_joint | l_gripper_tool_frame
+
 LEFT_GRIPPER = 'l_gripper_l_finger_joint' # l_gripper_l_finger_joint | l_gripper_joint
 RIGHT_GRIPPER = 'r_gripper_l_finger_joint' # r_gripper_l_finger_joint | r_gripper_joint
+
+GRIPPER_JOINT_NAMES = {
+    'left': ['l_gripper_l_finger_joint', 'l_gripper_r_finger_joint'],
+    'right': ['r_gripper_l_finger_joint', 'r_gripper_r_finger_joint'],
+}
 
 #TOOL_TFORM = [[0., 0., 1., 0.18],
 #              [0., 1., 0., 0.],
@@ -53,6 +69,16 @@ TOP_HOLDING_RIGHT_ARM = rightarm_from_leftarm(TOP_HOLDING_LEFT_ARM)
 
 # End-effectors
 
+def get_arm_conf(robot, arm):
+    assert arm in ARM_JOINT_NAMES
+    joints = [joint_from_name(robot, name) for name in ARM_JOINT_NAMES[arm]]
+    return get_joint_positions(robot, joints)
+
+def set_arm_conf(robot, arm, conf):
+    assert arm in ARM_JOINT_NAMES
+    joints = [joint_from_name(robot, name) for name in ARM_JOINT_NAMES[arm]]
+    set_joint_positions(robot, joints, conf)
+
 def get_gripper_pose(robot):
     # world_from_gripper * gripper_from_tool * tool_from_object = world_from_object
     pose = multiply(get_link_pose(robot, link_from_name(robot, LEFT_ARM_LINK)), TOOL_POSE)
@@ -62,12 +88,23 @@ def get_gripper_pose(robot):
 def close_gripper(robot, joint):
     set_joint_position(robot, joint, get_min_limit(robot, joint))
 
-
 def open_gripper(robot, joint):
-    set_joint_position(robot, joint, get_max_limit(robot, joint))
+    set_joint_position(robot, joint, get_max_limit(robot, joint)/2.)
 
+def open_arm(robot, arm): # TODO: these are mirrored on the pr2
+    assert arm in GRIPPER_JOINT_NAMES
+    for name in GRIPPER_JOINT_NAMES[arm]:
+        joint = joint_from_name(robot, name)
+        open_gripper(robot, joint)
 
-GRASP_LENGTH = 0.04
+def close_arm(robot, arm):
+    assert arm in GRIPPER_JOINT_NAMES
+    for name in GRIPPER_JOINT_NAMES[arm]:
+        joint = joint_from_name(robot, name)
+        close_gripper(robot, joint)
+
+#GRASP_LENGTH = 0.04
+GRASP_LENGTH = 0.
 MAX_GRASP_WIDTH = 0.07
 
 def get_top_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
@@ -175,9 +212,12 @@ def learned_pose_generator(robot, gripper_pose):
     gripper_from_base_list = load_inverse_reachability()
     random.shuffle(gripper_from_base_list)
     for gripper_from_base in gripper_from_base_list:
-        base_pose = multiply(gripper_pose, gripper_from_base)
-        set_pose(robot, base_pose)
-        yield base_pose
+        base_point, base_quat = multiply(gripper_pose, gripper_from_base)
+        x, y, _ = base_point
+        _, _, theta = euler_from_quat(base_quat)
+        base_values = (x, y, theta)
+        set_base_values(robot, base_values)
+        yield get_pose(robot)
 
 
 def uniform_pose_generator(robot, gripper_pose):

@@ -5,7 +5,7 @@ import time
 import pstats
 import cProfile
 
-from pybullet_utils import connect, add_data_path, disconnect, get_pose, get_body_names, body_from_name
+from pybullet_utils import connect, add_data_path, disconnect, get_pose, get_body_names, body_from_name, update_state
 from problems import holding_problem
 
 from ss.algorithms.dual_focused import dual_focused
@@ -43,7 +43,7 @@ IsArmTraj = Predicate([AT])
 IsBaseTraj = Predicate([BT])
 IsKin = Predicate([A, O, P, G, BQ, AT])
 IsReachable = Predicate([BQ])
-IsMotion = Predicate([BQ, BT, BQ2])
+IsMotion = Predicate([BQ, BQ2, BT])
 
 AtPose = Predicate([O, P])
 AtBConf = Predicate([BQ])
@@ -80,6 +80,10 @@ def ss_from_problem(problem, bound='cyclic'):
 
     goal_literals = []
     goal_literals += [On(*pair) for pair in problem.goal_on]
+    if problem.goal_conf is not None:
+        goal_conf = Pose(robot, problem.goal_conf)
+        initial_atoms += [IsBConf(goal_conf)]
+        goal_literals += [AtBConf(goal_conf)]
 
     actions = [
         Action(name='pick', param=[A, O, P, G, BQ, AT],
@@ -94,8 +98,8 @@ def ss_from_problem(problem, bound='cyclic'):
                eff=[HandEmpty(A), CanMove(), AtPose(O, P), ~HasGrasp(A, O, G),
                     Increase(TotalCost(), 1)]),
 
-        Action(name='move', param=[BQ, BT, BQ2],
-               pre=[IsMotion(BQ, BT, BQ2),
+        Action(name='move', param=[BQ, BQ2, BT],
+               pre=[IsMotion(BQ, BQ2, BT),
                     CanMove(), AtBConf(BQ), ~Unsafe(BT)],
                eff=[AtBConf(BQ2), ~CanMove(), ~AtBConf(BQ),
                     Increase(TotalCost(), 1)]),
@@ -114,7 +118,7 @@ def ss_from_problem(problem, bound='cyclic'):
     streams = [
         FnStream(name='motion', inp=[BQ, BQ2], domain=[IsBConf(BQ), IsBConf(BQ2)],
                  fn=get_motion_gen(problem), out=[BT],
-                 graph=[IsMotion(BQ, BT, BQ2), IsBaseTraj(BT)], bound=bound),
+                 graph=[IsMotion(BQ, BQ2, BT), IsBaseTraj(BT)], bound=bound),
 
         ListStream(name='grasp', inp=[O], domain=[IsMovable(O)], fn=get_grasp_gen(problem),
                    out=[G], graph=[IsGrasp(O, G), GRASP(G)], bound=bound),
@@ -132,16 +136,36 @@ def ss_from_problem(problem, bound='cyclic'):
     return Problem(initial_atoms, goal_literals, actions, axioms, streams,
                    objective=TotalCost())
 
+def post_process(problem, plan):
+    if plan is None:
+        return None
+    commands = []
+    for i, (action, args) in enumerate(plan):
+        print i, action, args
+        if action.name == 'move':
+            traj = args[-1]
+            new_commands = [traj]
+        elif action.name == 'pick':
+            traj = args[-1]
+            new_commands = [traj]
+        elif action.name == 'place':
+            traj = args[-1].reverse()
+            new_commands = [traj]
+        else:
+            raise ValueError(action.name)
+        commands += new_commands
+    return commands
 
 def main(search='ff-astar', max_time=30, verbose=False):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     args = parser.parse_args()
+    problem_fn = holding_problem
 
     print connect(use_gui=False)
     add_data_path()
 
-    problem = holding_problem()
+    problem = problem_fn()
     print get_body_names()
     pr2 = body_from_name('pr2')
     print get_pose(pr2)
@@ -172,12 +196,25 @@ def main(search='ff-astar', max_time=30, verbose=False):
     if (plan is None) or not args.viewer:
         return
 
-    state_id = p.saveState()
+    #state_id = p.saveState()
+    #disconnect()
+    #connect(use_gui=args.viewer)
+    #p.restoreState(state_id)
+
     disconnect()
     connect(use_gui=args.viewer)
-    p.restoreState(state_id)
+    problem = problem_fn() # TODO: way of doing this without reloading?
+    update_state()
+    raw_input('Begin?')
+    attachments = {}
+    for i, (action, args) in enumerate(plan):
+        print i, action, args
+        control = args[-1]
+        if action.name == 'place':
+            control = control.reverse()
+        control.step()
 
-    p.stepSimulation()
+    #p.stepSimulation()
     raw_input('Finish?')
     disconnect()
 
