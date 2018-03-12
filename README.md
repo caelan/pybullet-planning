@@ -1,6 +1,9 @@
 # ss-pybullet
 STRIPStream + pybullet
 
+![Alt text](images/test.png?raw=true "Title")
+
+
 ## Installation
 Install PyBullet on OSX or Linux using: 
 ```
