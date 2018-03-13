@@ -7,7 +7,7 @@ import cProfile
 
 from pybullet_utils import connect, add_data_path, disconnect, get_pose, get_body_names, \
     body_from_name, update_state, link_from_name, step_simulation
-from problems import holding_problem, stacking_problem
+from problems import holding_problem, stacking_problem, cleaning_problem
 
 from ss.algorithms.dual_focused import dual_focused
 from ss.algorithms.incremental import incremental
@@ -182,7 +182,7 @@ def main(search='ff-astar', max_time=30, verbose=False):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = holding_problem # holding_problem | stacking_problem
+    problem_fn = cleaning_problem # holding_problem | stacking_problem | cleaning_problem
 
     #connect(use_gui=True)
     connect(use_gui=False)
