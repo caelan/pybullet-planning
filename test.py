@@ -23,6 +23,22 @@ from pybullet_utils import get_joint_type, is_movable, get_joint_limits, create_
 
 # https://docs.google.com/document/d/10sXEhzFRSnvFcl3XxNGhnD4N2SedqwdAvK3dsihxVUA/edit#
 
+# http://openrave.org/docs/0.6.6/robots_overview/
+# http://openrave.org/docs/latest_stable/collada_robot_extensions/
+# http://openrave.programmingvision.com/wiki/index.php/Format:XML
+# https://github.com/davetcoleman/pr2_moveit_config/blob/master/config/pr2.srdf
+# http://wiki.ros.org/srdf
+# http://docs.ros.org/kinetic/api/moveit_tutorials/html/doc/urdf_srdf_tutorial.html#srdf
+# http://gazebosim.org/tutorials/?tut=ros_urdf
+# http://sdformat.org/
+# https://github.com/PR2/pr2_common/tree/kinetic-devel/pr2_description
+# http://wiki.ros.org/srdf/review
+
+# https://github.com/rdiankov/openrave/blob/ff43549fb6db281c7bc9a85794b88c29d6522ab4/plugins/baserobots/collisionmaprobot.cpp
+# https://github.com/rdiankov/openrave/blob/176a25e4b50cad1d7237596823764278920a750a/python/bindings/openravepy_collisionchecker.cpp
+# https://github.com/rdiankov/openrave/blob/9bc6b8d459af18c67074da331895c79f7f2f50b0/plugins/oderave/odecollision.h
+# https://github.com/rdiankov/openrave/blob/98b6111423dc7e5fe695dcb8654601b8d87b2a82/src/libopenrave/kinbody.cpp
+# https://github.com/rdiankov/openrave/blob/98b6111423dc7e5fe695dcb8654601b8d87b2a82/src/libopenrave/kinbody.cpp
 
 def main():
     # TODO: teleporting kuka arm

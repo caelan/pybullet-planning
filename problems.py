@@ -12,7 +12,7 @@ def get_fixed_bodies(problem):
     movable = [problem.robot] + list(problem.movable)
     return filter(lambda b: b not in movable, get_bodies())
 
-def holding_problem(arm='left', grasp_type='top'):
+def holding_problem(arm='right', grasp_type='top'):
     other_arm = get_other_arm(arm)
     initial_conf = get_carry_conf(arm, grasp_type)
 
