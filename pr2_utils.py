@@ -138,13 +138,15 @@ def get_top_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
     translate = ([0, 0, h / 2 - grasp_length], unit_quat())
     grasps = []
     # if not limits or (w <= MAX_GRASP_WIDTH):
-    for i in range(1 + under):
-        rotate_z = (unit_point(), quat_from_euler([0, 0, math.pi / 2 + i * math.pi]))
-        grasps += [multiply(TOOL_POSE, translate, rotate_z, reflect_z)]
+    if True:
+        for i in range(1 + under):
+            rotate_z = (unit_point(), quat_from_euler([0, 0, math.pi / 2 + i * math.pi]))
+            grasps += [multiply(TOOL_POSE, translate, rotate_z, reflect_z)]
     # if not limits or (l <= MAX_GRASP_WIDTH):
-    for i in range(1 + under):
-        rotate_z = (unit_point(), quat_from_euler([0, 0, i * math.pi]))
-        grasps += [multiply(TOOL_POSE, translate, rotate_z, reflect_z)]
+    if True:
+        for i in range(1 + under):
+            rotate_z = (unit_point(), quat_from_euler([0, 0, i * math.pi]))
+            grasps += [multiply(TOOL_POSE, translate, rotate_z, reflect_z)]
     set_pose(body, pose)
     return grasps
 
@@ -235,14 +237,14 @@ DATABASES_DIR = 'databases'
 IR_FILENAME = '{}_{}_ir.pickle'
 
 
-def load_inverse_reachability(grasp_type='top', arm='leftarm'):
+def load_inverse_reachability(arm, grasp_type):
     filename = IR_FILENAME.format(grasp_type, arm)
     path = os.path.join(DATABASES_DIR, filename)
     return read_pickle(path)['gripper_from_base']
 
 
-def learned_pose_generator(robot, gripper_pose):
-    gripper_from_base_list = load_inverse_reachability()
+def learned_pose_generator(robot, gripper_pose, arm='leftarm', grasp_type='top'):
+    gripper_from_base_list = load_inverse_reachability(arm, grasp_type)
     random.shuffle(gripper_from_base_list)
     for gripper_from_base in gripper_from_base_list:
         base_point, base_quat = multiply(gripper_pose, gripper_from_base)

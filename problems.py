@@ -5,7 +5,7 @@ from pr2_utils import LEFT_JOINT_NAMES, TOP_HOLDING_LEFT_ARM, set_arm_conf, REST
     close_arm, get_carry_conf, arm_conf, get_other_arm
 import pybullet as p
 
-Problem = namedtuple('Problem', ['robot', 'movable', 'grasp_types', 'surfaces',
+Problem = namedtuple('Problem', ['robot', 'arms', 'movable', 'grasp_types', 'surfaces',
                                  'goal_conf', 'goal_holding', 'goal_on'])
 
 def get_fixed_bodies(problem):
@@ -30,8 +30,7 @@ def holding_problem(arm='left', grasp_type='top'):
     box = create_box(.07, .05, .15)
     set_point(box, (0, 0, .7))
 
-    return Problem(robot=pr2, movable=[box], grasp_types=[grasp_type],
-                   surfaces=[table],
+    return Problem(robot=pr2, movable=[box], arms=[arm], grasp_types=[grasp_type], surfaces=[table],
                    goal_conf=get_pose(pr2), goal_holding=[(arm, box)], goal_on=[])
 
 def stacking_problem():

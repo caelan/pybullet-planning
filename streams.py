@@ -118,6 +118,7 @@ def get_grasp_gen(problem):
             for grasp in get_side_grasps(body):
                 g = Grasp('side', body, grasp, approach, SIDE_HOLDING_LEFT_ARM)
                 grasps += [(g,)]
+        print grasps
         random.shuffle(grasps)
         return grasps
     return fn
@@ -145,7 +146,7 @@ def get_ik_ir_gen(problem):
         default_conf = arm_conf(a, g.carry)
         left_joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
 
-        base_generator = learned_pose_generator(pr2, gripper_pose)
+        base_generator = learned_pose_generator(pr2, gripper_pose, arm=a, grasp_type=g.grasp_type)
         #base_generator = uniform_pose_generator(pr2, gripper_pose)
         while True:
             set_pose(o, p.value)

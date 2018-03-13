@@ -64,8 +64,6 @@ rename_functions(locals())
 
 def ss_from_problem(problem, bound='cyclic'):
     robot = problem.robot
-    arms = ['left']
-    #arms = ['left', 'right']
 
     initial_bq = Pose(robot, get_pose(robot))
     initial_atoms = [
@@ -73,7 +71,7 @@ def ss_from_problem(problem, bound='cyclic'):
         IsBConf(initial_bq), AtBConf(initial_bq),
         initialize(TotalCost(), 0),
     ]
-    for name in arms:
+    for name in problem.arms:
         initial_atoms += [IsArm(name), HandEmpty(name)]
     for body in problem.movable:
         pose = Pose(body, get_pose(body))
