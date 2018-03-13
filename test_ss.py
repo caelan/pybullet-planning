@@ -5,8 +5,9 @@ import time
 import pstats
 import cProfile
 
-from pybullet_utils import connect, add_data_path, disconnect, get_pose, get_body_names, body_from_name, update_state
-from problems import holding_problem
+from pybullet_utils import connect, add_data_path, disconnect, get_pose, get_body_names, \
+    body_from_name, update_state, link_from_name, step_simulation
+from problems import holding_problem, stacking_problem
 
 from ss.algorithms.dual_focused import dual_focused
 from ss.algorithms.incremental import incremental
@@ -18,7 +19,9 @@ from ss.model.streams import Stream, ListStream, GenStream, FnStream, TestStream
 from ss.model.bounds import PartialBoundFn, OutputSet
 from ss.utils import INF
 
-from streams import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, get_grasp_gen
+from streams import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
+    get_grasp_gen, Attach, Detach, Trajectory
+from pr2_utils import ARM_LINK_NAMES, close_arm
 
 A = '?a'
 O = '?o'; O2 = '?o2'
@@ -79,11 +82,12 @@ def ss_from_problem(problem, bound='cyclic'):
             initial_atoms += [Stackable(body, surface)]
 
     goal_literals = []
-    goal_literals += [On(*pair) for pair in problem.goal_on]
     if problem.goal_conf is not None:
         goal_conf = Pose(robot, problem.goal_conf)
         initial_atoms += [IsBConf(goal_conf)]
         goal_literals += [AtBConf(goal_conf)]
+    goal_literals += [Holding(*pair) for pair in problem.goal_holding]
+    goal_literals += [On(*pair) for pair in problem.goal_on]
 
     actions = [
         Action(name='pick', param=[A, O, P, G, BQ, AT],
@@ -139,18 +143,23 @@ def ss_from_problem(problem, bound='cyclic'):
 def post_process(problem, plan):
     if plan is None:
         return None
+    robot = problem.robot
     commands = []
     for i, (action, args) in enumerate(plan):
         print i, action, args
         if action.name == 'move':
-            traj = args[-1]
-            new_commands = [traj]
+            t = args[-1]
+            new_commands = [t]
         elif action.name == 'pick':
-            traj = args[-1]
-            new_commands = [traj]
+            a, b, p, g, _, t = args
+            link = link_from_name(robot, ARM_LINK_NAMES[a])
+            attach = Attach(robot, a, g, b)
+            new_commands = [t, attach, t.reverse()]
         elif action.name == 'place':
-            traj = args[-1].reverse()
-            new_commands = [traj]
+            a, b, p, g, _, t = args
+            link = link_from_name(robot, ARM_LINK_NAMES[a])
+            detach = Detach(robot, a, b)
+            new_commands = [t, detach, t.reverse()]
         else:
             raise ValueError(action.name)
         commands += new_commands
@@ -160,7 +169,7 @@ def main(search='ff-astar', max_time=30, verbose=False):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = holding_problem
+    problem_fn = stacking_problem # holding_problem | stacking_problem
 
     print connect(use_gui=False)
     add_data_path()
@@ -203,18 +212,47 @@ def main(search='ff-astar', max_time=30, verbose=False):
 
     disconnect()
     connect(use_gui=args.viewer)
+
+    #p.configureDebugVisualizer(p.COV_ENABLE_WIREFRAME, 1)
+    p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0) # Gets rid of GUI options
+    #p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
+
+    #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_TINY_RENDERER, 1)
+
+    #p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_VR_RENDER_CONTROLLERS, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_VR_PICKING, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_VR_TELEPORTING, 0)
+
     problem = problem_fn() # TODO: way of doing this without reloading?
-    update_state()
+    commands = post_process(problem, plan)
+
+    #update_state()
+    step_simulation()
     raw_input('Begin?')
     attachments = {}
-    for i, (action, args) in enumerate(plan):
-        print i, action, args
-        control = args[-1]
-        if action.name == 'place':
-            control = control.reverse()
-        control.step()
+    for i, command in enumerate(commands):
+        print i, command
+        if type(command) is Attach:
+            attachments[command.body] = command
+        elif type(command) is Detach:
+            del attachments[command.body]
+        elif type(command) is Trajectory:
+            #for conf in command.path:
+            for conf in command.path[1:]:
+                conf.step()
+                for attach in attachments.values():
+                    attach.step()
+                update_state()
+                #print attachments
+                step_simulation()
+                raw_input('Continue?')
+        else:
+            raise ValueError(command)
 
-    #p.stepSimulation()
     raw_input('Finish?')
     disconnect()
 

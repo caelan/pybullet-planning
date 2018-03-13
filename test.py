@@ -6,7 +6,7 @@ from pr2_utils import TOP_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, RIG
     REST_RIGHT_ARM, \
     load_inverse_reachability, create_inverse_reachability
 from pybullet_utils import get_joint_type, is_movable, get_joint_limits, create_box, get_max_velocity, get_num_joints, \
-    get_movable_joints, get_joint_name, get_name, get_link_pose, joint_from_name, link_from_name, set_joint_position, \
+    get_movable_joints, get_joint_name, get_body_name, get_link_pose, joint_from_name, link_from_name, set_joint_position, \
     get_joint_position, \
     get_body_names, get_joint_names, get_colliding_links, self_collision, set_joint_positions, get_joint_positions, \
     add_data_path, connect
@@ -111,7 +111,7 @@ def main():
     print set_joint_positions(pr2, left_joints, TOP_HOLDING_LEFT_ARM) # TOP_HOLDING_LEFT_ARM | SIDE_HOLDING_LEFT_ARM
     print set_joint_positions(pr2, right_joints, REST_RIGHT_ARM) # TOP_HOLDING_RIGHT_ARM | REST_RIGHT_ARM
 
-    print get_name(pr2)
+    print get_body_name(pr2)
     print get_body_names()
     # print p.getBodyUniqueId(pr2)
     print get_joint_names(pr2)

@@ -54,10 +54,12 @@ def step_simulation():
     p.stepSimulation()
 
 def update_state():
-    #for body in get_bodies():
-    #    get_pose(body)
-    p.getKeyboardEvents()
-    p.getMouseEvents()
+    for body in get_bodies():
+        get_pose(body)
+        for joint in get_joints(body):
+            get_joint_position(body, joint)
+    #p.getKeyboardEvents()
+    #p.getMouseEvents()
 
 def reset_simulation():
     p.resetSimulation()
@@ -69,8 +71,14 @@ def reset_simulation():
 def invert((point, quat)):
     return p.invertTransform(point, quat)
 
-def multiply((point1, quat1), (point2, quat2)):
-    return p.multiplyTransforms(point1, quat1, point2, quat2) # TODO: variable number of args
+#def multiply((point1, quat1), (point2, quat2)):
+#    return p.multiplyTransforms(point1, quat1, point2, quat2)
+
+def multiply(*poses):
+    pose = poses[0]
+    for next_pose in poses[1:]:
+        pose = p.multiplyTransforms(pose[0], pose[1], *next_pose)
+    return pose
 
 def unit_from_theta(theta):
     return np.array([np.cos(theta), np.sin(theta)])
@@ -82,9 +90,14 @@ def quat_from_euler(euler):
 def euler_from_quat(quat):
     return p.getEulerFromQuaternion(quat)
 
+def unit_point():
+    return (0., 0., 0.)
 
 def unit_quat():
     return quat_from_euler([0, 0, 0])
+
+def unit_pose():
+    return (unit_point(), unit_quat())
 
 def z_rotation(theta):
     return quat_from_euler([0, 0, theta])
@@ -316,17 +329,17 @@ def get_num_bodies():
 def get_bodies():
     return range(get_num_bodies())
 
-def get_name(body):
+def get_body_name(body):
     return p.getBodyInfo(body)[1]
 
 def get_body_names():
-    return map(get_name, get_bodies())
+    return map(get_body_name, get_bodies())
 
 
 
 def body_from_name(name):
     for body in xrange(get_num_bodies()):
-        if get_name(body) == name:
+        if get_body_name(body) == name:
             return body
     raise ValueError(name)
 

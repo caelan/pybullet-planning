@@ -1,17 +1,13 @@
-from pybullet_utils import get_joint_type, is_movable, get_joint_limits, create_box, invert, multiply, \
-    get_max_velocity, get_num_joints, get_movable_joints, get_joint_name, get_name, get_point, get_base_values, \
-    set_base_values, set_pose, get_link_pose, joint_from_name, link_from_name, set_joint_position, get_joint_position, \
-    get_body_names, get_joint_names, pairwise_collision, get_colliding_links, self_collision, env_collision, \
-    set_joint_positions, get_joint_positions, sample_placement, sample_reachable_base, add_data_path, connect, \
-    filtered_self_collision, get_safe_colliding_links, get_pose, write_pickle, read_pickle, point_from_pose, \
-    unit_quat, update_state
-from pr2_utils import TOP_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, RIGHT_JOINT_NAMES, TOOL_POSE, TORSO_JOINT, \
-    TOP_HOLDING_RIGHT_ARM, get_top_grasps, REST_RIGHT_ARM, \
-    inverse_kinematics, inverse_kinematics_helper, learned_pose_generator, uniform_pose_generator, \
-    TOOL_DIRECTION
+from pybullet_utils import invert, multiply, get_body_name, set_pose, get_link_pose, joint_from_name, link_from_name, set_joint_position, get_joint_position, \
+    pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
+    unit_quat
+from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, \
+    get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, \
+    inverse_kinematics, inverse_kinematics_helper, learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES
 from problems import get_fixed_bodies
 
 import pybullet as p
+import numpy as np
 
 class Pose(object):
     #def __init__(self, position, orientation):
@@ -26,10 +22,11 @@ class Pose(object):
         return 'p{}'.format(id(self) % 1000)
 
 class Grasp(object):
-    def __init__(self, body, value, approach):
+    def __init__(self, body, value, approach, carry):
         self.body = body
         self.value = tuple(value) # gripper_from_object
         self.approach = tuple(approach)
+        self.carry = tuple(carry)
     def __repr__(self):
         return 'g{}'.format(id(self) % 1000)
 
@@ -47,38 +44,46 @@ class Trajectory(object):
     def __init__(self, path):
         self.path = tuple(path)
         # TODO: constructor that takes in this info
-    def step(self):
-        #for q in self.path:
-        for q in self.path[1:]:
-        #for q in self.path[1::5]:
-            q.step()
-            #set_joint_position(q.body, q.joints, q.values)
-            #p.stepSimulation()
-            update_state()
-            raw_input('Continue?')
+    #def step(self):
+    #    #for q in self.path:
+    #    for q in self.path[1:]:
+    #    #for q in self.path[1::5]:
+    #        q.step()
+    #        #set_joint_position(q.body, q.joints, q.values)
+    #        #p.stepSimulation()
+    #        update_state()
+    #        raw_input('Continue?')
     def reverse(self):
         return Trajectory(reversed(self.path))
     def __repr__(self):
         return 't{}'.format(id(self) % 1000)
 
 class Attach(object):
-    def __init__(self, robot, link, grasp, body):
+    def __init__(self, robot, arm, grasp, body):
         self.robot = robot
-        self.link = link
+        self.arm = arm
         self.grasp = grasp
         self.body = body
     def step(self):
-        gripper_pose = get_link_pose(self.robot, self.link)
+        link = link_from_name(self.robot, ARM_LINK_NAMES[self.arm])
+        gripper_pose = get_link_pose(self.robot, link)
         body_pose = multiply(gripper_pose, self.grasp.value)
         set_pose(self.body, body_pose)
+        close_arm(self.robot, self.arm)
+    def __repr__(self):
+        return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
+                                     self.arm, get_body_name(self.body))
 
 class Detach(object):
-    def __init__(self, robot, link, body):
+    def __init__(self, robot, arm, body):
         self.robot = robot
-        self.link = link
+        self.arm = arm
         self.body = body
     def step(self):
-        pass
+        open_arm(self.robot, self.arm)
+    def __repr__(self):
+        return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
+                                     self.arm, get_body_name(self.body))
 
 class Commands(object):
     def __init__(self, commands):
@@ -95,16 +100,21 @@ def get_motion_gen(problem):
         return (bt,)
     return gen
 
+APPROACH_DISTANCE = 0.1
+
 def get_grasp_gen(problem):
     def gen(body):
         grasps = []
         if 'top' in problem.grasp_types:
-            approach = (TOOL_DIRECTION, unit_quat())
+            approach = (APPROACH_DISTANCE*np.array(TOOL_DIRECTION), unit_quat())
             for grasp in get_top_grasps(body):
-                g = Grasp(body, grasp, approach)
+                g = Grasp(body, grasp, approach, TOP_HOLDING_LEFT_ARM)
                 grasps += [(g,)]
         if 'side' in problem.grasp_types:
-            raise NotImplementedError()
+            approach = (APPROACH_DISTANCE*np.array(TOOL_DIRECTION), unit_quat())
+            for grasp in get_side_grasps(body):
+                g = Grasp(body, grasp, approach, SIDE_HOLDING_LEFT_ARM)
+                grasps += [(g,)]
         return grasps
     return gen
 
@@ -125,11 +135,10 @@ def get_ik_ir_gen(problem):
 
     def gen(a, o, p, g):
         gripper_pose = multiply(p.value, invert(g.value)) # w_f_g = w_f_o * (g_f_o)^-1
-        #gripper_pose = multiply(g.approach, gripper_pose)
+        approach_pose = multiply(g.approach, gripper_pose)
 
         link = link_from_name(pr2, LEFT_ARM_LINK) if a == 'left' else link_from_name(pr2, None)
-
-        default_conf = TOP_HOLDING_LEFT_ARM
+        default_conf = arm_conf(a, g.carry)
         left_joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
 
         base_generator = learned_pose_generator(pr2, gripper_pose)
@@ -141,13 +150,20 @@ def get_ik_ir_gen(problem):
             if any(pairwise_collision(pr2, b) for b in fixed):
                 continue
 
+            stuff_conf = inverse_kinematics_helper(pr2, link, approach_pose)
+            if (stuff_conf is None) or any(pairwise_collision(pr2, b) for b in fixed):
+                continue
+            approach_conf = get_joint_positions(pr2, left_joints)
+
             movable_conf = inverse_kinematics_helper(pr2, link, gripper_pose)
             if (movable_conf is None) or any(pairwise_collision(pr2, b) for b in fixed):
                 continue
             grasp_conf = get_joint_positions(pr2, left_joints)
 
             bp = Pose(pr2, get_pose(pr2))
-            path = [default_conf, grasp_conf, default_conf]
+            path = [default_conf, approach_conf, grasp_conf]
+            #path = [default_conf, grasp_conf]
+
             mt = Trajectory(Conf(pr2, left_joints, q) for q in path)
             yield (bp, mt)
     return gen

@@ -12,7 +12,8 @@ import time
 from pybullet_utils import get_joint_limits, multiply, get_max_velocity, get_movable_joints, \
     get_link_pose, joint_from_name, link_from_name, set_joint_position, set_joint_positions, get_joint_positions, \
     get_min_limit, get_max_limit, quat_from_euler, get_joints, violates_limits, read_pickle, set_pose, point_from_pose, \
-    sample_reachable_base, set_base_values, get_pose, sample_placement, invert, pairwise_collision, get_name, euler_from_quat
+    sample_reachable_base, set_base_values, get_pose, sample_placement, invert, pairwise_collision, get_body_name, \
+    euler_from_quat, unit_point, unit_quat, unit_pose, get_center_extent
 
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
@@ -53,13 +54,20 @@ GRIPPER_JOINT_NAMES = {
 #              [0., 0., 0., 1.]]
 TOOL_POSE = ([0.18, 0., 0.],
              [0., 0.70710678, 0., 0.70710678])
+
 TOOL_DIRECTION = [ 0., 0., 1.]
 TORSO_JOINT = 'torso_lift_joint'
-
 
 def rightarm_from_leftarm(config):
   right_from_left = np.array([-1, 1, -1, 1, -1, 1, 1])
   return config*right_from_left
+
+def arm_conf(arm, config):
+  assert arm in ARM_JOINT_NAMES
+  if arm == 'left':
+      return config
+  else:
+      return rightarm_from_leftarm(config)
 
 
 REST_RIGHT_ARM = rightarm_from_leftarm(REST_LEFT_ARM)
@@ -89,7 +97,8 @@ def close_gripper(robot, joint):
     set_joint_position(robot, joint, get_min_limit(robot, joint))
 
 def open_gripper(robot, joint):
-    set_joint_position(robot, joint, get_max_limit(robot, joint)/2.)
+    #set_joint_position(robot, joint, get_max_limit(robot, joint)/2.)
+    set_joint_position(robot, joint, get_max_limit(robot, joint))
 
 def open_arm(robot, arm): # TODO: these are mirrored on the pr2
     assert arm in GRIPPER_JOINT_NAMES
@@ -122,21 +131,31 @@ def get_top_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
         rotate_z = (np.zeros(3), quat_from_euler([0, 0, i * math.pi]))
         yield multiply(multiply(multiply(TOOL_POSE, translate), rotate_z), reflect_z)
 
-# def get_side_grasps(mesh, under=False, limits=True, grasp_length=GRASP_LENGTH):
-#   w, l, h = np.max(mesh.vertices, axis=0) - \
-#             np.min(mesh.vertices, axis=0)
-#   for j in range(1 + under):
-#     swap_xz = trans_from_quat(quat_from_angle_vector(-math.pi/2 + j*math.pi, [0, 1, 0]))
-#     if not limits or (w <= MAX_GRASP_WIDTH):
-#       translate = trans_from_point(0, 0, l / 2 - grasp_length)
-#       for i in range(2):
-#         rotate_z = trans_from_quat(quat_from_angle_vector(math.pi / 2 + i * math.pi, [1, 0, 0]))
-#         yield translate.dot(rotate_z).dot(swap_xz), np.array([w])
-#     if not limits or (l <= MAX_GRASP_WIDTH):
-#       translate = trans_from_point(0, 0, w / 2 - grasp_length)
-#       for i in range(2):
-#         rotate_z = trans_from_quat(quat_from_angle_vector(i * math.pi, [1, 0, 0]))
-#         yield translate.dot(rotate_z).dot(swap_xz), np.array([l])
+def get_side_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
+  #w, l, h = np.max(mesh.vertices, axis=0) - \
+  #          np.min(mesh.vertices, axis=0)
+  pose = get_pose(body)
+  set_pose(body, unit_pose())
+  center, (w, l, h) = get_center_extent(body)
+  print center
+  grasps = []
+  for j in range(1 + under):
+    swap_xz = (unit_point(), quat_from_euler([0, -math.pi/2 + j*math.pi, 0]))
+    #if not limits or (w <= MAX_GRASP_WIDTH):
+    if True:
+      translate = ([0, 0, l / 2 - grasp_length], unit_quat())
+      for i in range(2):
+        rotate_z = (unit_point(), quat_from_euler([math.pi / 2 + i * math.pi, 0, 0]))
+        grasps += [multiply(TOOL_POSE, translate, rotate_z, swap_xz)] #, np.array([w])
+    if True:
+    #if not limits or (l <= MAX_GRASP_WIDTH):
+      translate = ([0, 0, w / 2 - grasp_length], unit_quat())
+      for i in range(2):
+        rotate_z = (unit_point(), quat_from_euler([i * math.pi, 0, 0]))
+        grasps += [multiply(TOOL_POSE, translate, rotate_z, swap_xz)] #, np.array([l])
+  set_pose(body, pose)
+  return grasps
+
 
 #####################################
 
@@ -277,7 +296,7 @@ def create_inverse_reachability(pr2, box, table, num_samples=500):
     path = os.path.join(DATABASES_DIR, filename)
     data = {
         'filename': filename,
-        'robot': get_name(pr2),
+        'robot': get_body_name(pr2),
         'grasp_type': grasp_type,
         'arg': arm,
         'carry_conf': TOP_HOLDING_LEFT_ARM,
