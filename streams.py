@@ -87,6 +87,30 @@ class Detach(object):
         return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
                                      self.arm, get_body_name(self.body))
 
+class Clean(object):
+    def __init__(self, body):
+        self.body = body
+    def step(self):
+        p.addUserDebugText('Cleaned', textPosition=(0, 0, .25), textColorRGB=(0,0,1), #textSize=1,
+                           lifeTime=0, parentObjectUniqueId=self.body)
+        p.setDebugObjectColor(self.body, 0, objectDebugColorRGB=(0,0,1))
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.body)
+
+class Cook(object):
+    # TODO: global state here?
+    def __init__(self, body):
+        self.body = body
+    def step(self):
+        # changeVisualShape
+        # setDebugObjectColor
+        #p.removeUserDebugItem # TODO: remove cleaned
+        p.addUserDebugText('Cooked', textPosition=(0, 0, .5), textColorRGB=(1,0,0), #textSize=1,
+                           lifeTime=0, parentObjectUniqueId=self.body)
+        #p.setDebugObjectColor(self.body, 0, objectDebugColorRGB=(1,0,0))
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.body)
+
 class Commands(object):
     def __init__(self, commands):
         self.commands = tuple(commands)
@@ -104,7 +128,7 @@ def get_motion_gen(problem):
 
 APPROACH_DISTANCE = 0.1
 
-def get_grasp_gen(problem):
+def get_grasp_gen(problem, randomize=True):
     def fn(body):
         grasps = []
         if 'top' in problem.grasp_types:
@@ -118,8 +142,8 @@ def get_grasp_gen(problem):
             for grasp in get_side_grasps(body):
                 g = Grasp('side', body, grasp, approach, SIDE_HOLDING_LEFT_ARM)
                 grasps += [(g,)]
-        print grasps
-        random.shuffle(grasps)
+        if randomize:
+            random.shuffle(grasps)
         return grasps
     return fn
 

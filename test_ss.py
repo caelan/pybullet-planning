@@ -7,7 +7,7 @@ import cProfile
 
 from pybullet_utils import connect, add_data_path, disconnect, get_pose, get_body_names, \
     body_from_name, update_state, link_from_name, step_simulation
-from problems import holding_problem, stacking_problem, cleaning_problem
+from problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem
 
 from ss.algorithms.dual_focused import dual_focused
 from ss.algorithms.incremental import incremental
@@ -20,7 +20,7 @@ from ss.model.bounds import PartialBoundFn, OutputSet
 from ss.utils import INF
 
 from streams import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
-    get_grasp_gen, Attach, Detach, Trajectory
+    get_grasp_gen, Attach, Detach, Clean, Cook, Trajectory
 from pr2_utils import ARM_LINK_NAMES, close_arm
 
 A = '?a'
@@ -83,6 +83,8 @@ def ss_from_problem(problem, bound='cyclic'):
         initial_atoms += [IsMovable(body), IsPose(body, pose), AtPose(body, pose), POSE(pose)]
         for surface in problem.surfaces:
             initial_atoms += [Stackable(body, surface)]
+    initial_atoms += map(Washer, problem.sinks)
+    initial_atoms += map(Stove, problem.stoves)
 
     goal_literals = []
     if problem.goal_conf is not None:
@@ -91,6 +93,8 @@ def ss_from_problem(problem, bound='cyclic'):
         goal_literals += [AtBConf(goal_conf)]
     goal_literals += [Holding(*pair) for pair in problem.goal_holding]
     goal_literals += [On(*pair) for pair in problem.goal_on]
+    goal_literals += map(Cleaned, problem.goal_cleaned)
+    goal_literals += map(Cooked, problem.goal_cooked)
 
     actions = [
         Action(name='pick', param=[A, O, P, G, BQ, AT],
@@ -173,27 +177,55 @@ def post_process(problem, plan):
             link = link_from_name(robot, ARM_LINK_NAMES[a])
             detach = Detach(robot, a, b)
             new_commands = [t, detach, t.reverse()]
+        elif action.name == 'clean': # TODO: add text or change color?
+            body, sink = args
+            new_commands = [Clean(body)]
+        elif action.name == 'cook':
+            body, stove = args
+            new_commands = [Cook(body)]
         else:
             raise ValueError(action.name)
         commands += new_commands
     return commands
 
+def step_commands(commands):
+    # update_state()
+    step_simulation()
+    raw_input('Begin?')
+    attachments = {}
+    for i, command in enumerate(commands):
+        print i, command
+        if type(command) is Attach:
+            attachments[command.body] = command
+        elif type(command) is Detach:
+            del attachments[command.body]
+        elif type(command) is Trajectory:
+            # for conf in command.path:
+            for conf in command.path[1:]:
+                conf.step()
+                for attach in attachments.values():
+                    attach.step()
+                update_state()
+                # print attachments
+                step_simulation()
+                raw_input('Continue?')
+        elif type(command) in [Clean, Cook]:
+            command.step()
+        else:
+            raise ValueError(command)
+
 def main(search='ff-astar', max_time=30, verbose=False):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = cleaning_problem # holding_problem | stacking_problem | cleaning_problem
+    problem_fn = cooking_problem # holding_problem | stacking_problem | cleaning_problem | cooking_problem
 
     #connect(use_gui=True)
     connect(use_gui=False)
     add_data_path()
 
-    problem = problem_fn()
-    print get_body_names()
-    pr2 = body_from_name('pr2')
-    print get_pose(pr2)
-
-    ss_problem = ss_from_problem(problem)
+    ss_problem = ss_from_problem(problem_fn())
+    print ss_problem
     ss_problem.dump()
 
     #path = os.path.join('worlds', 'test_ss')
@@ -243,30 +275,7 @@ def main(search='ff-astar', max_time=30, verbose=False):
 
     problem = problem_fn() # TODO: way of doing this without reloading?
     commands = post_process(problem, plan)
-
-    #update_state()
-    step_simulation()
-    raw_input('Begin?')
-    attachments = {}
-    for i, command in enumerate(commands):
-        print i, command
-        if type(command) is Attach:
-            attachments[command.body] = command
-        elif type(command) is Detach:
-            del attachments[command.body]
-        elif type(command) is Trajectory:
-            #for conf in command.path:
-            for conf in command.path[1:]:
-                conf.step()
-                for attach in attachments.values():
-                    attach.step()
-                update_state()
-                #print attachments
-                step_simulation()
-                raw_input('Continue?')
-        else:
-            raise ValueError(command)
-
+    step_commands(commands)
     raw_input('Finish?')
     disconnect()
 

@@ -305,6 +305,7 @@ def create_inverse_reachability(robot, body, table, arm, grasp_type, num_samples
             continue
         gripper_from_base = multiply(invert(get_link_pose(robot, link)), get_pose(robot))
         gripper_from_base_list.append(gripper_from_base)
+        print '{} / {}'.format(len(gripper_from_base_list), num_samples)
 
     filename = IR_FILENAME.format(grasp_type, arm)
     path = os.path.join(DATABASES_DIR, filename)

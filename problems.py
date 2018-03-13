@@ -70,20 +70,10 @@ def stacking_problem():
     return Problem(robot=pr2, movable=[box], grasp_types=['top'], surfaces=[table],
                    goal_on=[(box, table)])
 
-def cleaning_problem(arm='left', grasp_type='top'):
-    other_arm = get_other_arm(arm)
-    initial_conf = get_carry_conf(arm, grasp_type)
-
-    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf", useFixedBase=True)
-    set_arm_conf(pr2, arm, initial_conf)
-    open_arm(pr2, arm)
-    set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))
-    close_arm(pr2, other_arm)
-
+def create_kitchen():
     plane = p.loadURDF("plane.urdf")
 
-    w = .4
-    h = .7
+    w = .5; h = .7
     table = create_box(w, w, h, color=(.75, .75, .75, 1))
     set_point(table, (2, 0, h/2))
 
@@ -96,6 +86,36 @@ def cleaning_problem(arm='left', grasp_type='top'):
     stove = create_box(w, w, h, color=(.75, .25, .25, 1))
     set_point(stove, (0, -2, h/2))
 
+    return table, cabbage, sink, stove
+
+def cleaning_problem(arm='left', grasp_type='top'):
+    other_arm = get_other_arm(arm)
+    initial_conf = get_carry_conf(arm, grasp_type)
+
+    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf", useFixedBase=True)
+    set_arm_conf(pr2, arm, initial_conf)
+    open_arm(pr2, arm)
+    set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))
+    close_arm(pr2, other_arm)
+
+    table, cabbage, sink, stove = create_kitchen()
+
     return Problem(robot=pr2, movable=[cabbage], arms=[arm], grasp_types=[grasp_type],
                    surfaces=[table, sink, stove], sinks=[sink], stoves=[stove],
-                   goal_conf=get_pose(pr2), goal_holding=[(arm, cabbage)], goal_on=[])
+                   goal_cleaned=[cabbage])
+
+def cooking_problem(arm='left', grasp_type='top'):
+    other_arm = get_other_arm(arm)
+    initial_conf = get_carry_conf(arm, grasp_type)
+
+    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf", useFixedBase=True)
+    set_arm_conf(pr2, arm, initial_conf)
+    open_arm(pr2, arm)
+    set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))
+    close_arm(pr2, other_arm)
+
+    table, cabbage, sink, stove = create_kitchen()
+
+    return Problem(robot=pr2, movable=[cabbage], arms=[arm], grasp_types=[grasp_type],
+                   surfaces=[table, sink, stove], sinks=[sink], stoves=[stove],
+                   goal_cooked=[cabbage])
