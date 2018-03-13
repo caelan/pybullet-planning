@@ -8,6 +8,7 @@ from problems import get_fixed_bodies
 
 import pybullet as p
 import numpy as np
+import random
 
 class Pose(object):
     #def __init__(self, position, orientation):
@@ -22,7 +23,8 @@ class Pose(object):
         return 'p{}'.format(id(self) % 1000)
 
 class Grasp(object):
-    def __init__(self, body, value, approach, carry):
+    def __init__(self, grasp_type, body, value, approach, carry):
+        self.grasp_type = grasp_type
         self.body = body
         self.value = tuple(value) # gripper_from_object
         self.approach = tuple(approach)
@@ -103,20 +105,22 @@ def get_motion_gen(problem):
 APPROACH_DISTANCE = 0.1
 
 def get_grasp_gen(problem):
-    def gen(body):
+    def fn(body):
         grasps = []
         if 'top' in problem.grasp_types:
             approach = (APPROACH_DISTANCE*np.array(TOOL_DIRECTION), unit_quat())
             for grasp in get_top_grasps(body):
-                g = Grasp(body, grasp, approach, TOP_HOLDING_LEFT_ARM)
+                g = Grasp('top', body, grasp, approach, TOP_HOLDING_LEFT_ARM)
                 grasps += [(g,)]
         if 'side' in problem.grasp_types:
+            # TODO: change this tool direction
             approach = (APPROACH_DISTANCE*np.array(TOOL_DIRECTION), unit_quat())
             for grasp in get_side_grasps(body):
-                g = Grasp(body, grasp, approach, SIDE_HOLDING_LEFT_ARM)
+                g = Grasp('side', body, grasp, approach, SIDE_HOLDING_LEFT_ARM)
                 grasps += [(g,)]
+        random.shuffle(grasps)
         return grasps
-    return gen
+    return fn
 
 def get_stable_gen(problem):
     def gen(body, surface):

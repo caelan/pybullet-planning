@@ -169,9 +169,10 @@ def main(search='ff-astar', max_time=30, verbose=False):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = stacking_problem # holding_problem | stacking_problem
+    problem_fn = holding_problem # holding_problem | stacking_problem
 
-    print connect(use_gui=False)
+    #connect(use_gui=True)
+    connect(use_gui=False)
     add_data_path()
 
     problem = problem_fn()

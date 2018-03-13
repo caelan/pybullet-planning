@@ -73,6 +73,20 @@ def arm_conf(arm, config):
 REST_RIGHT_ARM = rightarm_from_leftarm(REST_LEFT_ARM)
 TOP_HOLDING_RIGHT_ARM = rightarm_from_leftarm(TOP_HOLDING_LEFT_ARM)
 
+def get_carry_conf(arm, grasp_type):
+    if grasp_type == 'top':
+        return arm_conf(arm, TOP_HOLDING_LEFT_ARM)
+    elif grasp_type == 'side':
+        return arm_conf(arm, SIDE_HOLDING_LEFT_ARM)
+    else:
+        raise NotImplementedError()
+
+def get_other_arm(arm):
+    for other_arm in ARM_JOINT_NAMES:
+        if other_arm != arm:
+            return other_arm
+    raise ValueError(arm)
+
 #####################################
 
 # End-effectors
@@ -117,27 +131,27 @@ GRASP_LENGTH = 0.
 MAX_GRASP_WIDTH = 0.07
 
 def get_top_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
-    # w, l, h = np.max(mesh.vertices, axis=0) - \
-    #          np.min(mesh.vertices, axis=0)
-    h = 0.15
+    pose = get_pose(body)
+    set_pose(body, unit_pose())
+    center, (w, l, h) = get_center_extent(body)
     reflect_z = (np.zeros(3), quat_from_euler([0, math.pi, 0]))
-    translate = ([0, 0, h / 2 - grasp_length], quat_from_euler(np.zeros(3)))
+    translate = ([0, 0, h / 2 - grasp_length], unit_quat())
+    grasps = []
     # if not limits or (w <= MAX_GRASP_WIDTH):
     for i in range(1 + under):
-        rotate_z = (np.zeros(3), quat_from_euler([0, 0, math.pi / 2 + i * math.pi]))
-        yield multiply(multiply(multiply(TOOL_POSE, translate), rotate_z), reflect_z)
+        rotate_z = (unit_point(), quat_from_euler([0, 0, math.pi / 2 + i * math.pi]))
+        grasps += [multiply(TOOL_POSE, translate, rotate_z, reflect_z)]
     # if not limits or (l <= MAX_GRASP_WIDTH):
     for i in range(1 + under):
-        rotate_z = (np.zeros(3), quat_from_euler([0, 0, i * math.pi]))
-        yield multiply(multiply(multiply(TOOL_POSE, translate), rotate_z), reflect_z)
+        rotate_z = (unit_point(), quat_from_euler([0, 0, i * math.pi]))
+        grasps += [multiply(TOOL_POSE, translate, rotate_z, reflect_z)]
+    set_pose(body, pose)
+    return grasps
 
 def get_side_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
-  #w, l, h = np.max(mesh.vertices, axis=0) - \
-  #          np.min(mesh.vertices, axis=0)
   pose = get_pose(body)
   set_pose(body, unit_pose())
   center, (w, l, h) = get_center_extent(body)
-  print center
   grasps = []
   for j in range(1 + under):
     swap_xz = (unit_point(), quat_from_euler([0, -math.pi/2 + j*math.pi, 0]))
