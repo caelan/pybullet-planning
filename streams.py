@@ -134,7 +134,7 @@ def get_stable_gen(problem):
             yield [(p,)]
     return gen
 
-def get_ik_ir_gen(problem):
+def get_ik_ir_gen(problem, max_attempts=25):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
 
@@ -149,24 +149,28 @@ def get_ik_ir_gen(problem):
         base_generator = learned_pose_generator(robot, gripper_pose, arm=a, grasp_type=g.grasp_type)
         #base_generator = uniform_pose_generator(robot, gripper_pose)
         while True:
-            set_pose(o, p.value)
-            set_joint_positions(robot, joints, default_conf)
-            set_pose(robot, next(base_generator))
-            if any(pairwise_collision(robot, b) for b in fixed):
-                continue
+            for _ in xrange(max_attempts):
+                set_pose(o, p.value)
+                set_joint_positions(robot, joints, default_conf)
+                set_pose(robot, next(base_generator))
+                if any(pairwise_collision(robot, b) for b in fixed):
+                    continue
 
-            stuff_conf = inverse_kinematics_helper(robot, link, approach_pose)
-            if (stuff_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
-                continue
-            approach_conf = get_joint_positions(robot, joints)
+                stuff_conf = inverse_kinematics_helper(robot, link, approach_pose)
+                if (stuff_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
+                    continue
+                approach_conf = get_joint_positions(robot, joints)
 
-            movable_conf = inverse_kinematics_helper(robot, link, gripper_pose)
-            if (movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
-                continue
-            grasp_conf = get_joint_positions(robot, joints)
+                movable_conf = inverse_kinematics_helper(robot, link, gripper_pose)
+                if (movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
+                    continue
+                grasp_conf = get_joint_positions(robot, joints)
 
-            bp = Pose(robot, get_pose(robot))
-            path = [default_conf, approach_conf, grasp_conf]
-            mt = Trajectory(Conf(robot, joints, q) for q in path)
-            yield (bp, mt)
+                bp = Pose(robot, get_pose(robot))
+                path = [default_conf, approach_conf, grasp_conf]
+                mt = Trajectory(Conf(robot, joints, q) for q in path)
+                yield (bp, mt)
+                break
+            else:
+                yield None
     return gen

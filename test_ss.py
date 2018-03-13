@@ -59,6 +59,11 @@ Holding = Predicate([A, O])
 On = Predicate([O, O2])
 Unsafe = Predicate([AT])
 
+Cleaned = Predicate([O])
+Cooked = Predicate([O])
+Washer = Predicate([O])
+Stove = Predicate([O])
+
 rename_functions(locals())
 
 
@@ -105,6 +110,16 @@ def ss_from_problem(problem, bound='cyclic'):
                     CanMove(), AtBConf(BQ), ~Unsafe(BT)],
                eff=[AtBConf(BQ2), ~CanMove(), ~AtBConf(BQ),
                     Increase(TotalCost(), 1)]),
+
+        Action(name='clean', param=[O, O2],  # Wirelessly communicates to clean
+               pre=[Stackable(O, O2), Washer(O2),
+                    ~Cooked(O), On(O, O2)],
+               eff=[Cleaned(O)]),
+
+        Action(name='cook', param=[O, O2],  # Wirelessly communicates to cook
+               pre=[Stackable(O, O2), Stove(O2),
+                    Cleaned(O), On(O, O2)],
+               eff=[Cooked(O), ~Cleaned(O)]),
     ]
     axioms = [
         Axiom(param=[A, O, G],

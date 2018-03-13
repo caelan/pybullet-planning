@@ -12,7 +12,7 @@ def get_fixed_bodies(problem):
     movable = [problem.robot] + list(problem.movable)
     return filter(lambda b: b not in movable, get_bodies())
 
-def holding_problem(arm='right', grasp_type='top'):
+def holding_problem(arm='left', grasp_type='side'):
     other_arm = get_other_arm(arm)
     initial_conf = get_carry_conf(arm, grasp_type)
 
@@ -50,3 +50,24 @@ def stacking_problem():
 
     return Problem(robot=pr2, movable=[box], grasp_types=['top'], surfaces=[table],
                    goal_conf=get_pose(pr2), goal_holding=[], goal_on=[(box, table)])
+
+def cleaning_problem(arm='left', grasp_type='top'):
+    other_arm = get_other_arm(arm)
+    initial_conf = get_carry_conf(arm, grasp_type)
+
+    #pr2 = p.loadURDF("pr2_description/pr2.urdf", useFixedBase=True)
+    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf", useFixedBase=True)
+    set_base_values(pr2, (0, -2, 0))
+    set_arm_conf(pr2, arm, initial_conf)
+    open_arm(pr2, arm)
+    set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))
+    close_arm(pr2, other_arm)
+
+    plane = p.loadURDF("plane.urdf")
+    table = p.loadURDF("table/table.urdf")
+    #table = p.loadURDF("table_square/table_square.urdf")
+    box = create_box(.07, .05, .15)
+    set_point(box, (0, 0, .7))
+
+    return Problem(robot=pr2, movable=[box], arms=[arm], grasp_types=[grasp_type], surfaces=[table],
+                   goal_conf=get_pose(pr2), goal_holding=[(arm, box)], goal_on=[])

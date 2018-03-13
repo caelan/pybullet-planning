@@ -176,6 +176,23 @@ def get_side_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
   set_pose(body, pose)
   return grasps
 
+def get_x_presses(body, max_orientations=4):
+  pose = get_pose(body)
+  set_pose(body, unit_pose())
+  center, (w, l, h) = get_center_extent(body)
+  grasps = []
+  for j in xrange(max_orientations):
+      swap_xz = (unit_point(), quat_from_euler([0, -math.pi/2 + j*math.pi, 0]))
+      translate = ([0, 0, w / 2], unit_quat())
+      grasps += [multiply(TOOL_POSE, translate, swap_xz)]
+  set_pose(body, pose)
+  return grasps
+
+GET_GRASPS = {
+    'top': get_top_grasps,
+    'side': get_side_grasps,
+    'press': get_x_presses,
+}
 
 #####################################
 
@@ -198,7 +215,7 @@ def inverse_kinematics_helper(robot, link, (point, quat),
     # TODO: larger definitely better for velocities
     #damping = tuple(0.1*np.ones(len(joints)))
 
-    t0 = time.time()
+    #t0 = time.time()
     kinematic_conf = get_joint_positions(robot, movable_joints)
     for iterations in xrange(max_iterations): # 0.000863273143768 / iteration
         # TODO: return none if no progress
@@ -215,15 +232,15 @@ def inverse_kinematics_helper(robot, link, (point, quat),
         set_joint_positions(robot, movable_joints, kinematic_conf)
         link_point, link_quat = get_link_pose(robot, link)
         if np.allclose(link_point, point, atol=tolerance) and np.allclose(link_quat, quat, atol=tolerance):
-            print iterations
+            #print iterations
             break
     else:
         return None
     if violates_limits(robot, movable_joints, kinematic_conf):
         return None
-    total_time = (time.time() - t0)
-    print total_time
-    print (time.time() - t0)/max_iterations
+    #total_time = (time.time() - t0)
+    #print total_time
+    #print (time.time() - t0)/max_iterations
     return kinematic_conf
 
 def inverse_kinematics(robot, target_pose):
@@ -267,16 +284,16 @@ def uniform_pose_generator(robot, gripper_pose, **kwargs):
         yield get_pose(robot)
 
 
-def create_inverse_reachability(robot, box, table, arm, grasp_type, num_samples=500):
+def create_inverse_reachability(robot, body, table, arm, grasp_type, num_samples=500):
     link = get_gripper_link(robot, arm)
     movable_joints = get_movable_joints(robot)
     default_conf = get_joint_positions(robot, movable_joints)
     gripper_from_base_list = []
-    grasps = get_top_grasps(box)
+    grasps = GET_GRASPS[grasp_type](body)
 
     while len(gripper_from_base_list) < num_samples:
-        box_pose = sample_placement(box, table)
-        set_pose(box, box_pose)
+        box_pose = sample_placement(body, table)
+        set_pose(body, box_pose)
         grasp_pose = random.choice(grasps)
         gripper_pose = multiply(box_pose, invert(grasp_pose))
         set_joint_positions(robot, movable_joints, default_conf)
