@@ -6,8 +6,8 @@ import numpy as np
 from pybullet_utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, control_joints, \
     enable_gravity, get_joint_positions
-from pr2_utils import TOP_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, RIGHT_JOINT_NAMES, TOOL_POSE, TORSO_JOINT, \
-    TOP_HOLDING_RIGHT_ARM, get_top_grasps, REST_RIGHT_ARM, SIDE_HOLDING_LEFT_ARM
+from pr2_utils import TOP_HOLDING_LEFT_ARM, ARM_JOINT_NAMES, TORSO_JOINT_NAME, \
+    REST_RIGHT_ARM, SIDE_HOLDING_LEFT_ARM, set_arm_conf
 
 def main():
     parser = argparse.ArgumentParser()  # Automatically includes help
@@ -24,7 +24,6 @@ def main():
     #table = p.loadURDF("block.urdf")
     #table = p.loadURDF("door.urdf")
 
-
     pr2 = p.loadURDF("pr2_description/pr2.urdf", useFixedBase=True)
 
     base_start = (-2, -2, 0)
@@ -37,11 +36,11 @@ def main():
     arm_goal = TOP_HOLDING_LEFT_ARM
 
     set_base_values(pr2, base_start)
-    left_joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
-    right_joints = [joint_from_name(pr2, name) for name in RIGHT_JOINT_NAMES]
+    left_joints = [joint_from_name(pr2, name) for name in ARM_JOINT_NAMES['left']]
+    right_joints = [joint_from_name(pr2, name) for name in ARM_JOINT_NAMES['right']]
     set_joint_positions(pr2, left_joints, arm_start)
     set_joint_positions(pr2, right_joints, REST_RIGHT_ARM)
-    set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT), 0.2)
+    set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT_NAME), 0.2)
 
     raw_input('Plan Base?')
     base_path = plan_base_motion(pr2, base_goal)

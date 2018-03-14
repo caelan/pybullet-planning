@@ -2,7 +2,7 @@ import argparse
 
 import pybullet as p
 
-from pr2_utils import TOP_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, RIGHT_JOINT_NAMES, TORSO_JOINT, \
+from pr2_utils import TOP_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, RIGHT_JOINT_NAMES, TORSO_JOINT_NAME, \
     REST_RIGHT_ARM, \
     load_inverse_reachability, create_inverse_reachability
 from pybullet_utils import get_joint_type, is_movable, get_joint_limits, create_box, get_max_velocity, get_num_joints, \
@@ -91,7 +91,7 @@ def main():
 
     #print get_joint_names(pr2)
     print [get_joint_name(pr2, joint) for joint in get_movable_joints(pr2)]
-    print get_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT))
+    print get_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT_NAME))
     #open_gripper(pr2, joint_from_name(pr2, LEFT_GRIPPER))
     #print get_joint_limits(pr2, joint_from_name(pr2, LEFT_GRIPPER))
     #print get_joint_position(pr2, joint_from_name(pr2, LEFT_GRIPPER))
@@ -118,8 +118,8 @@ def main():
     """
 
     # TODO: would be good if we could set the joint directly
-    print set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT), 0.2)  # Updates automatically
-    print get_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT))
+    print set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT_NAME), 0.2)  # Updates automatically
+    print get_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT_NAME))
     #return
 
     left_joints = [joint_from_name(pr2, name) for name in LEFT_JOINT_NAMES]
@@ -255,7 +255,7 @@ def main():
     #     raw_input('Grasp {}'.format(i))
     # return
 
-    torso = joint_from_name(pr2, TORSO_JOINT)
+    torso = joint_from_name(pr2, TORSO_JOINT_NAME)
     torso_point, torso_quat = get_link_pose(pr2, torso)
 
     #torso_constraint = p.createConstraint(pr2, torso, -1, -1,

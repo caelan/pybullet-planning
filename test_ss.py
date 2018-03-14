@@ -1,30 +1,27 @@
-import pybullet as p
-import os
 import argparse
 import time
 import pstats
 import cProfile
 
-from pybullet_utils import connect, add_data_path, disconnect, get_pose, get_body_names, \
-    body_from_name, update_state, link_from_name, step_simulation
-from problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem
+from pybullet_utils import connect, add_data_path, disconnect, get_pose, \
+    update_state, link_from_name, step_simulation
+from problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
+    cleaning_button_problem
 
 from ss.algorithms.dual_focused import dual_focused
 from ss.algorithms.incremental import incremental
-from ss.algorithms.plan_focused import plan_focused
 from ss.model.functions import Predicate, NonNegFunction, rename_functions, initialize, TotalCost, Increase
 from ss.model.problem import Problem, get_length, get_cost
 from ss.model.operators import Action, Axiom
 from ss.model.streams import Stream, ListStream, GenStream, FnStream, TestStream
-from ss.model.bounds import PartialBoundFn, OutputSet
-from ss.utils import INF
 
 from streams import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
-    get_grasp_gen, Attach, Detach, Clean, Cook, Trajectory
+    get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, Trajectory
 from pr2_utils import ARM_LINK_NAMES, close_arm
 
 A = '?a'
 O = '?o'; O2 = '?o2'
+B = '?b'
 #S = '?s' # Surface (in case I don't want to worry about stacking for real
 P = '?p'; P2 = '?p2'
 G = '?g'
@@ -45,7 +42,6 @@ IsGrasp = Predicate([O, G])
 IsArmTraj = Predicate([AT])
 IsBaseTraj = Predicate([BT])
 IsKin = Predicate([A, O, P, G, BQ, AT])
-IsReachable = Predicate([BQ])
 IsMotion = Predicate([BQ, BQ2, BT])
 
 AtPose = Predicate([O, P])
@@ -64,10 +60,16 @@ Cooked = Predicate([O])
 Washer = Predicate([O])
 Stove = Predicate([O])
 
+# TODO: can either make a single button for thing or can connect
+IsButton = Predicate([O])
+IsPress = Predicate([A, B, BQ, AT])
+IsConnected = Predicate([O, O2])
+#Pressed = Predicate([O])
+
 rename_functions(locals())
 
 
-def ss_from_problem(problem, bound='cyclic'):
+def ss_from_problem(problem, bound='shared'):
     robot = problem.robot
 
     initial_bq = Pose(robot, get_pose(robot))
@@ -85,6 +87,8 @@ def ss_from_problem(problem, bound='cyclic'):
             initial_atoms += [Stackable(body, surface)]
     initial_atoms += map(Washer, problem.sinks)
     initial_atoms += map(Stove, problem.stoves)
+    initial_atoms += [IsConnected(*pair) for pair in problem.buttons]
+    initial_atoms += [IsButton(body) for body, _ in problem.buttons]
 
     goal_literals = []
     if problem.goal_conf is not None:
@@ -115,15 +119,20 @@ def ss_from_problem(problem, bound='cyclic'):
                eff=[AtBConf(BQ2), ~CanMove(), ~AtBConf(BQ),
                     Increase(TotalCost(), 1)]),
 
-        Action(name='clean', param=[O, O2],  # Wirelessly communicates to clean
-               pre=[Stackable(O, O2), Washer(O2),
-                    ~Cooked(O), On(O, O2)],
-               eff=[Cleaned(O)]),
+        #Action(name='clean', param=[O, O2],  # Wirelessly communicates to clean
+        #       pre=[Stackable(O, O2), Washer(O2),
+        #            ~Cooked(O), On(O, O2)],
+        #       eff=[Cleaned(O)]),
+        #
+        #Action(name='cook', param=[O, O2],  # Wirelessly communicates to cook
+        #       pre=[Stackable(O, O2), Stove(O2),
+        #            Cleaned(O), On(O, O2)],
+        #       eff=[Cooked(O), ~Cleaned(O)]),
 
-        Action(name='cook', param=[O, O2],  # Wirelessly communicates to cook
-               pre=[Stackable(O, O2), Stove(O2),
-                    Cleaned(O), On(O, O2)],
-               eff=[Cooked(O), ~Cleaned(O)]),
+        Action(name='clean', param=[O, O2, A, B, BQ, AT],
+               pre=[Stackable(O, O2), Washer(O2), IsConnected(B, O2), IsPress(A, B, BQ, AT),
+                    ~Cooked(O), On(O, O2), HandEmpty(A), AtBConf(BQ)],
+               eff=[Cleaned(O), CanMove()]),
     ]
     axioms = [
         Axiom(param=[A, O, G],
@@ -151,6 +160,11 @@ def ss_from_problem(problem, bound='cyclic'):
         GenStream(name='ik_ir', inp=[A, O, P, G], domain=[IsArm(A), IsPose(O, P), IsGrasp(O, G)],
                   fn=get_ik_ir_gen(problem), out=[BQ, AT],
                   graph=[IsKin(A, O, P, G, BQ, AT), IsBConf(BQ), IsArmTraj(AT)],
+                  bound=bound),
+
+        GenStream(name='press', inp=[A, B], domain=[IsArm(A), IsButton(B)],
+                  fn=get_press_gen(problem), out=[BQ, AT],
+                  graph=[IsPress(A, B, BQ, AT), IsBConf(BQ), IsArmTraj(AT)],
                   bound=bound),
     ]
 
@@ -214,19 +228,19 @@ def step_commands(commands):
         else:
             raise ValueError(command)
 
-def main(search='ff-astar', max_time=30, verbose=False):
+def main(search='ff-astar', max_time=60, verbose=True):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = cooking_problem # holding_problem | stacking_problem | cleaning_problem | cooking_problem
+    problem_fn = cleaning_button_problem # holding_problem | stacking_problem | cleaning_problem | cooking_problem | cleaning_button_problem
 
-    #connect(use_gui=True)
-    connect(use_gui=False)
+    connect(use_gui=True)
+    #connect(use_gui=False)
     add_data_path()
 
     ss_problem = ss_from_problem(problem_fn())
     print ss_problem
-    ss_problem.dump()
+    #ss_problem.dump()
 
     #path = os.path.join('worlds', 'test_ss')
     #p.saveWorld(path)
@@ -258,20 +272,6 @@ def main(search='ff-astar', max_time=30, verbose=False):
 
     disconnect()
     connect(use_gui=args.viewer)
-
-    #p.configureDebugVisualizer(p.COV_ENABLE_WIREFRAME, 1)
-    p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0) # Gets rid of GUI options
-    #p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
-
-    #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
-    #p.configureDebugVisualizer(p.COV_ENABLE_TINY_RENDERER, 1)
-
-    #p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, 0)
-    #p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0)
-    #p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
-    #p.configureDebugVisualizer(p.COV_ENABLE_VR_RENDER_CONTROLLERS, 0)
-    #p.configureDebugVisualizer(p.COV_ENABLE_VR_PICKING, 0)
-    #p.configureDebugVisualizer(p.COV_ENABLE_VR_TELEPORTING, 0)
 
     problem = problem_fn() # TODO: way of doing this without reloading?
     commands = post_process(problem, plan)

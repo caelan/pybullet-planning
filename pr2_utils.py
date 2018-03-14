@@ -20,43 +20,35 @@ SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1
 REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -1.4851759349218694, 1.3911839347271555, -1.6531320011389408, -2.978586584568441]
 CENTER_LEFT_ARM = [-0.07133691252641006, -0.052973836083405494, 1.5741805775919033, -1.4481146328076862, 1.571782540186805, -1.4891468812835686, -9.413338322697955]
-WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296, -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
+#WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296, -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
 
-LEFT_JOINT_NAMES = ['l_shoulder_pan_joint', 'l_shoulder_lift_joint', 'l_upper_arm_roll_joint',
-                    'l_elbow_flex_joint', 'l_forearm_roll_joint', 'l_wrist_flex_joint', 'l_wrist_roll_joint']
-RIGHT_JOINT_NAMES = ['r_shoulder_pan_joint', 'r_shoulder_lift_joint', 'r_upper_arm_roll_joint',
-                     'r_elbow_flex_joint', 'r_forearm_roll_joint', 'r_wrist_flex_joint', 'r_wrist_roll_joint']
 ARM_JOINT_NAMES = {
-    'left': LEFT_JOINT_NAMES,
-    'right': RIGHT_JOINT_NAMES,
+    'left': ['l_shoulder_pan_joint', 'l_shoulder_lift_joint', 'l_upper_arm_roll_joint',
+                    'l_elbow_flex_joint', 'l_forearm_roll_joint', 'l_wrist_flex_joint', 'l_wrist_roll_joint'],
+    'right': ['r_shoulder_pan_joint', 'r_shoulder_lift_joint', 'r_upper_arm_roll_joint',
+                     'r_elbow_flex_joint', 'r_forearm_roll_joint', 'r_wrist_flex_joint', 'r_wrist_roll_joint'],
 }
 
-LEFT_ARM_LINK = 'l_gripper_palm_link' # l_gripper_palm_link | l_gripper_tool_frame
 ARM_LINK_NAMES = {
-    'left': LEFT_ARM_LINK,
+    'left': 'l_gripper_palm_link', # l_gripper_tool_frame,
     'right': 'r_gripper_palm_link',
 }
 
 HEAD_JOINT_NAMES = ['head_pan_joint', 'head_tilt_joint']
-LEFT_TOOL_NAME = 'l_gripper_tool_frame' # l_gripper_tool_joint | l_gripper_tool_frame
-
-LEFT_GRIPPER = 'l_gripper_l_finger_joint' # l_gripper_l_finger_joint | l_gripper_joint
-RIGHT_GRIPPER = 'r_gripper_l_finger_joint' # r_gripper_l_finger_joint | r_gripper_joint
+TORSO_JOINT_NAME = 'torso_lift_joint'
+#LEFT_TOOL_NAME = 'l_gripper_tool_frame' # l_gripper_tool_joint | l_gripper_tool_frame
 
 GRIPPER_JOINT_NAMES = {
-    'left': ['l_gripper_l_finger_joint', 'l_gripper_r_finger_joint'],
-    'right': ['r_gripper_l_finger_joint', 'r_gripper_r_finger_joint'],
+    'left': ['l_gripper_l_finger_joint', 'l_gripper_r_finger_joint'], # l_gripper_joint
+    'right': ['r_gripper_l_finger_joint', 'r_gripper_r_finger_joint'], # r_gripper_joint
 }
 
 #TOOL_TFORM = [[0., 0., 1., 0.18],
 #              [0., 1., 0., 0.],
 #              [-1., 0., 0., 0.],
 #              [0., 0., 0., 1.]]
-TOOL_POSE = ([0.18, 0., 0.],
-             [0., 0.70710678, 0., 0.70710678])
-
+TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678])
 TOOL_DIRECTION = [ 0., 0., 1.]
-TORSO_JOINT = 'torso_lift_joint'
 
 def rightarm_from_leftarm(config):
   right_from_left = np.array([-1, 1, -1, 1, -1, 1, 1])
@@ -191,7 +183,7 @@ def get_x_presses(body, max_orientations=4):
 GET_GRASPS = {
     'top': get_top_grasps,
     'side': get_side_grasps,
-    'press': get_x_presses,
+    #'press': get_x_presses,
 }
 
 #####################################

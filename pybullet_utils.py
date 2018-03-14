@@ -27,7 +27,21 @@ def read_pickle(filename):
 # Simulation
 
 def connect(use_gui=True):
-    return p.connect(p.GUI) if use_gui else p.connect(p.DIRECT)
+    sim_id = p.connect(p.GUI) if use_gui else p.connect(p.DIRECT)
+    if use_gui:
+        p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
+        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_WIREFRAME, 1)
+    #p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_TINY_RENDERER, 1)
+    #p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_VR_RENDER_CONTROLLERS, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_VR_PICKING, 0)
+    #p.configureDebugVisualizer(p.COV_ENABLE_VR_TELEPORTING, 0)
+    return sim_id
 
 def disconnect():
     return p.disconnect()
