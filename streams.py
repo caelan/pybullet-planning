@@ -1,9 +1,10 @@
 from pybullet_utils import invert, multiply, get_body_name, set_pose, get_link_pose, link_from_name, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
-    unit_quat
+    unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values
 from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \
     get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
-    inverse_kinematics, inverse_kinematics_helper, learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses
+    inverse_kinematics, inverse_kinematics_helper, uniform_pose_generator, \
+    learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses
 from problems import get_fixed_bodies
 
 import pybullet as p
@@ -117,14 +118,25 @@ class Commands(object):
     def __repr__(self):
         return 'c{}'.format(id(self) % 1000)
 
-def get_motion_gen(problem):
-    def gen(bq1, bq2):
-        path = [bq1, bq2]
-        #base_path = plan_base_motion(pr2, base_goal)
+# TODO: context aware
+def get_motion_gen(problem, teleport=False):
+    robot = problem.robot
+    fixed = get_fixed_bodies(problem)
 
+    def fn(bq1, bq2):
+        print bq1.value, bq2.value
+        set_pose(robot, bq1.value)
+        if teleport:
+            path = [bq1, bq2]
+        else:
+            raw_path = plan_base_motion(robot, base_values_from_pose(bq2.value))
+            if raw_path is None:
+                print 'Failed motion plan!'
+                return None
+            path = [Pose(robot, pose_from_base_values(q, bq1.value)) for q in raw_path]
         bt = Trajectory(path)
         return (bt,)
-    return gen
+    return fn
 
 APPROACH_DISTANCE = 0.1
 
@@ -158,7 +170,7 @@ def get_stable_gen(problem):
             yield [(p,)]
     return gen
 
-def get_ik_ir_gen(problem, max_attempts=25):
+def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
 
@@ -170,8 +182,10 @@ def get_ik_ir_gen(problem, max_attempts=25):
         default_conf = arm_conf(a, g.carry)
         joints = get_arm_joints(robot, a)
 
-        base_generator = learned_pose_generator(robot, gripper_pose, arm=a, grasp_type=g.grasp_type)
-        #base_generator = uniform_pose_generator(robot, gripper_pose)
+        if learned:
+            base_generator = learned_pose_generator(robot, gripper_pose, arm=a, grasp_type=g.grasp_type)
+        else:
+            base_generator = uniform_pose_generator(robot, gripper_pose)
         while True:
             for _ in xrange(max_attempts):
                 set_pose(o, p.value)
@@ -180,18 +194,26 @@ def get_ik_ir_gen(problem, max_attempts=25):
                 if any(pairwise_collision(robot, b) for b in fixed):
                     continue
 
-                stuff_conf = inverse_kinematics_helper(robot, link, approach_pose)
-                if (stuff_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
+                approach_movable_conf = inverse_kinematics_helper(robot, link, approach_pose)
+                if (approach_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     continue
                 approach_conf = get_joint_positions(robot, joints)
 
-                movable_conf = inverse_kinematics_helper(robot, link, gripper_pose)
-                if (movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
+                grasp_movable_conf = inverse_kinematics_helper(robot, link, gripper_pose)
+                if (grasp_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     continue
                 grasp_conf = get_joint_positions(robot, joints)
 
                 bp = Pose(robot, get_pose(robot))
-                path = [default_conf, approach_conf, grasp_conf]
+
+                if teleport:
+                    path = [default_conf, approach_conf, grasp_conf]
+                else:
+                    #set_joint_positions(robot, joints, approach_conf)
+                    control_path = plan_joint_motion(robot, joints, approach_conf, obstacles=fixed, direct=True)
+                    set_joint_positions(robot, joints, approach_conf)
+                    retreat_path = plan_joint_motion(robot, joints, default_conf, obstacles=fixed)
+                    path = retreat_path[::-1] + control_path[::-1]
                 mt = Trajectory(Conf(robot, joints, q) for q in path)
                 yield (bp, mt)
                 break
@@ -199,7 +221,7 @@ def get_ik_ir_gen(problem, max_attempts=25):
                 yield None
     return gen
 
-def get_press_gen(problem, max_attempts=25):
+def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
 
@@ -215,29 +237,38 @@ def get_press_gen(problem, max_attempts=25):
         approach = ((APPROACH_DISTANCE, 0, 0), unit_quat())
         while True:
             for _ in xrange(max_attempts):
-                press = random.choice(presses)
-                gripper_pose = multiply(pose, invert(press)) # w_f_g = w_f_o * (g_f_o)^-1
+                press_pose = random.choice(presses)
+                gripper_pose = multiply(pose, invert(press_pose)) # w_f_g = w_f_o * (g_f_o)^-1
                 #approach_pose = gripper_pose # w_f_g * g_f_o * o_f_a = w_f_a
-                approach_pose = multiply(gripper_pose, invert(multiply(press, approach)))
+                approach_pose = multiply(gripper_pose, invert(multiply(press_pose, approach)))
 
-                base_generator = learned_pose_generator(robot, gripper_pose, arm=a, grasp_type=grasp_type)
+                if learned:
+                    base_generator = learned_pose_generator(robot, gripper_pose, arm=a, grasp_type=grasp_type)
+                else:
+                    base_generator = uniform_pose_generator(robot, gripper_pose)
                 set_joint_positions(robot, joints, default_conf)
                 set_pose(robot, next(base_generator))
                 if any(pairwise_collision(robot, b) for b in fixed):
                     continue
 
-                stuff_conf = inverse_kinematics_helper(robot, link, approach_pose)
-                if (stuff_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
+                approach_movable_conf = inverse_kinematics_helper(robot, link, approach_pose)
+                if (approach_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     continue
                 approach_conf = get_joint_positions(robot, joints)
 
-                movable_conf = inverse_kinematics_helper(robot, link, gripper_pose)
-                if (movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
+                gripper_movable_conf = inverse_kinematics_helper(robot, link, gripper_pose)
+                if (gripper_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     continue
                 grasp_conf = get_joint_positions(robot, joints)
 
                 bp = Pose(robot, get_pose(robot))
-                path = [default_conf, approach_conf, grasp_conf]
+                if teleport:
+                    path = [default_conf, approach_conf, grasp_conf]
+                else:
+                    control_path = plan_joint_motion(robot, joints, approach_conf, obstacles=fixed, direct=True)
+                    set_joint_positions(robot, joints, approach_conf)
+                    retreat_path = plan_joint_motion(robot, joints, default_conf, obstacles=fixed)
+                    path = retreat_path[::-1] + control_path[::-1]
                 mt = Trajectory(Conf(robot, joints, q) for q in path)
                 yield (bp, mt)
                 break

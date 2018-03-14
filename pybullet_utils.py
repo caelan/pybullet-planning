@@ -7,7 +7,7 @@ import numpy as np
 import pybullet as p
 import pybullet_data
 import pickle
-from motion_planners.rrt_connect import birrt
+from motion_planners.rrt_connect import birrt, direct_path
 
 BASE_LIMITS = ([-2.5, -2.5, 0], [2.5, 2.5, 0])
 REVOLUTE_LIMITS = -np.pi, np.pi
@@ -175,6 +175,18 @@ def wrap_angle(theta):
 
 def circular_difference(theta2, theta1):
     return wrap_angle(theta2 - theta1)
+
+def base_values_from_pose((point, quat)):
+    x, y, _ = point
+    roll, pitch, yaw = euler_from_quat(quat)
+    assert (abs(roll) < 1e-3) and (abs(pitch) < 1e-3)
+    return (x, y, yaw)
+
+def pose_from_base_values(base_values, default_pose):
+    x, y, yaw = base_values
+    _, _, z = default_pose[0]
+    roll, pitch, _ = euler_from_quat(default_pose[1])
+    return (x, y, z), quat_from_euler([roll, pitch, yaw])
 
 #####################################
 
@@ -375,11 +387,7 @@ def get_pose(body):
     #return np.concatenate([point, quat])
 
 def get_base_values(body):
-    x, y, _ = get_point(body)
-    roll, pitch, yaw = euler_from_quat(get_quat(body))
-    assert (abs(roll) < 1e-3) and (abs(pitch) < 1e-3)
-    return (x, y, yaw)
-
+    return base_values_from_pose(get_pose(body))
 
 def set_base_values(body, values):
     _, _, z = get_point(body)
@@ -540,7 +548,7 @@ def sample_joints(body, joints):
 
 
 
-def plan_base_motion(body, end_conf, **kwargs):
+def plan_base_motion(body, end_conf, obstacles=None, direct=False, **kwargs):
     def sample_fn():
         x, y, _ = np.random.uniform(*BASE_LIMITS)
         theta = np.random.uniform(*REVOLUTE_LIMITS)
@@ -570,13 +578,17 @@ def plan_base_motion(body, end_conf, **kwargs):
 
     def collision_fn(q):
         set_base_values(body, q)
-        return env_collision(body)
+        if obstacles is None:
+            return env_collision(body)
+        return any(pairwise_collision(body, obs) for obs in obstacles)
 
     start_conf = get_base_values(body)
+    if direct:
+        return direct_path(start_conf, end_conf, extend_fn, collision_fn)
     return birrt(start_conf, end_conf, distance_fn,
                  sample_fn, extend_fn, collision_fn, **kwargs)
 
-def plan_joint_motion(body, joints, end_conf, **kwargs):
+def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kwargs):
     assert len(joints) == len(end_conf)
 
     sample_fn = lambda: sample_joints(body, joints)
@@ -608,9 +620,13 @@ def plan_joint_motion(body, joints, end_conf, **kwargs):
         if violates_limits(body, joints, q):
             return True
         set_joint_positions(body, joints, q)
-        return env_collision(body)
+        if obstacles is None:
+            return env_collision(body)
+        return any(pairwise_collision(body, obs) for obs in obstacles)
 
     start_conf = get_joint_positions(body, joints)
+    if direct:
+        return direct_path(start_conf, end_conf, extend_fn, collision_fn)
     return birrt(start_conf, end_conf, distance_fn,
                  sample_fn, extend_fn, collision_fn, **kwargs)
 

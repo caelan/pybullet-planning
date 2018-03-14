@@ -216,7 +216,7 @@ def post_process(problem, plan):
         commands += new_commands
     return commands
 
-def step_commands(commands):
+def step_commands(commands, time_step=None):
     # update_state()
     step_simulation()
     raw_input('Begin?')
@@ -236,7 +236,10 @@ def step_commands(commands):
                 update_state()
                 # print attachments
                 step_simulation()
-                raw_input('Continue?')
+                if time_step is None:
+                    raw_input('Continue?')
+                else:
+                    time.sleep(time_step)
         elif type(command) in [Clean, Cook]:
             command.step()
         else:
@@ -246,7 +249,7 @@ def main(search='ff-astar', max_time=60, verbose=True):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = stacking_problem
+    problem_fn = cooking_button_problem
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem | cleaning_button_problem | cooking_button_problem
 
     #connect(use_gui=True)
@@ -290,7 +293,8 @@ def main(search='ff-astar', max_time=60, verbose=True):
 
     problem = problem_fn() # TODO: way of doing this without reloading?
     commands = post_process(problem, plan)
-    step_commands(commands)
+    #step_commands(commands)
+    step_commands(commands, time_step=0.01)
     raw_input('Finish?')
     disconnect()
 
