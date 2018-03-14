@@ -4,7 +4,7 @@ import pstats
 import cProfile
 
 from pybullet_utils import connect, add_data_path, disconnect, get_pose, \
-    update_state, link_from_name, step_simulation
+    update_state, link_from_name, step_simulation, supports_body
 from problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
     cleaning_button_problem, cooking_button_problem
 
@@ -85,6 +85,9 @@ def ss_from_problem(problem, bound='shared'):
         initial_atoms += [IsMovable(body), IsPose(body, pose), AtPose(body, pose), POSE(pose)]
         for surface in problem.surfaces:
             initial_atoms += [Stackable(body, surface)]
+            if supports_body(body, surface):
+                initial_atoms += [IsSupported(pose, surface)]
+
     initial_atoms += map(Washer, problem.sinks)
     initial_atoms += map(Stove, problem.stoves)
     initial_atoms += [IsConnected(*pair) for pair in problem.buttons]
@@ -243,7 +246,7 @@ def main(search='ff-astar', max_time=60, verbose=True):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = cooking_button_problem
+    problem_fn = stacking_problem
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem | cleaning_button_problem | cooking_button_problem
 
     #connect(use_gui=True)

@@ -32,44 +32,62 @@ def get_fixed_bodies(problem):
     movable = [problem.robot] + list(problem.movable)
     return filter(lambda b: b not in movable, get_bodies())
 
+def create_pr2(fixed_torso=True, fixed_base=True):
+    pr2_path = "pr2_description/pr2_fixed_torso.urdf" if fixed_torso else "pr2_description/pr2.urdf"
+    return p.loadURDF(pr2_path, useFixedBase=fixed_base) # Fixed base ensures the robot doesn't fall over
+
+def create_floor():
+    return p.loadURDF("plane.urdf")
+
+def create_table():
+    raise NotImplementedError()
+
+TABLE_MAX_Z = 0.6265 # TODO: the table legs don't seem to be included for collisions?
+
 def holding_problem(arm='left', grasp_type='side'):
     other_arm = get_other_arm(arm)
     initial_conf = get_carry_conf(arm, grasp_type)
 
-    #pr2 = p.loadURDF("pr2_description/pr2.urdf", useFixedBase=True)
-    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf", useFixedBase=True)
+    pr2 = create_pr2()
     set_base_values(pr2, (0, -2, 0))
     set_arm_conf(pr2, arm, initial_conf)
     open_arm(pr2, arm)
     set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))
     close_arm(pr2, other_arm)
 
-    plane = p.loadURDF("plane.urdf")
+    plane = create_floor()
     table = p.loadURDF("table/table.urdf")
     #table = p.loadURDF("table_square/table_square.urdf")
     box = create_box(.07, .05, .15)
-    set_point(box, (0, 0, .7))
+    set_point(box, (0, 0, TABLE_MAX_Z + .15/2))
 
     return Problem(robot=pr2, movable=[box], arms=[arm], grasp_types=[grasp_type], surfaces=[table],
                    goal_conf=get_pose(pr2), goal_holding=[(arm, box)])
 
-def stacking_problem():
-    #pr2 = p.loadURDF("pr2_description/pr2.urdf", useFixedBase=True)
-    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf", useFixedBase=True)
+def stacking_problem(arm='left', grasp_type='top'):
+    other_arm = get_other_arm(arm)
+    initial_conf = get_carry_conf(arm, grasp_type)
+
+    pr2 = create_pr2()
     set_base_values(pr2, (0, -2, 0))
-    set_arm_conf(pr2, 'left', TOP_HOLDING_LEFT_ARM)
-    open_arm(pr2, 'left')
-    set_arm_conf(pr2, 'right', REST_RIGHT_ARM)
-    close_arm(pr2, 'right')
+    set_arm_conf(pr2, arm, initial_conf)
+    open_arm(pr2, arm)
+    set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))
+    close_arm(pr2, other_arm)
 
-    plane = p.loadURDF("plane.urdf")
-    table = p.loadURDF("table/table.urdf")
+    plane = create_floor()
+    table1 = p.loadURDF("table/table.urdf")
     #table = p.loadURDF("table_square/table_square.urdf")
-    box = create_box(.07, .05, .15)
-    set_point(box, (0, 0, .7))
 
-    return Problem(robot=pr2, movable=[box], grasp_types=['top'], surfaces=[table],
-                   goal_on=[(box, table)])
+    block = create_box(.07, .05, .15)
+    set_point(block, (0, 0, TABLE_MAX_Z + .15/2))
+
+    table2 = p.loadURDF("table/table.urdf")
+    set_base_values(table2, (2, 0, 0))
+
+    return Problem(robot=pr2, movable=[block], arms=[arm], grasp_types=[grasp_type], surfaces=[table1, table2],
+                   #goal_on=[(block, table1)])
+                   goal_on=[(block, table2)])
 
 def create_kitchen(w=.5, h=.7):
     plane = p.loadURDF("plane.urdf")

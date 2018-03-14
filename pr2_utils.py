@@ -168,17 +168,17 @@ def get_side_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
   set_pose(body, pose)
   return grasps
 
-def get_x_presses(body, max_orientations=1):
+def get_x_presses(body, max_orientations=1): # g_f_o
   pose = get_pose(body)
   set_pose(body, unit_pose())
   center, (w, l, h) = get_center_extent(body)
-  grasps = []
+  press_poses = []
   for j in xrange(max_orientations):
       swap_xz = (unit_point(), quat_from_euler([0, -math.pi/2 + j*math.pi, 0]))
       translate = ([0, 0, w / 2], unit_quat())
-      grasps += [multiply(TOOL_POSE, translate, swap_xz)]
+      press_poses += [multiply(TOOL_POSE, translate, swap_xz)]
   set_pose(body, pose)
-  return grasps
+  return press_poses
 
 GET_GRASPS = {
     'top': get_top_grasps,

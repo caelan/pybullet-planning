@@ -433,6 +433,11 @@ def create_sphere(radius):
 def create_plane():
     collision_id = p.createVisualShape(p.GEOM_PLANE, normal=[])
 
+def get_shape_data(body):
+    return p.getVisualShapeData(body)
+
+#####################################
+
 def get_lower_upper(body):
     return p.getAABB(body)
 
@@ -442,8 +447,13 @@ def get_center_extent(body):
     extents = (np.array(upper) - lower)
     return center, extents
 
-def get_shape_data(body):
-    return p.getVisualShapeData(body)
+def aabb2d_from_aabb((lower, upper)):
+    return lower[:2], upper[:2]
+
+def aabb_contains(contained, container):
+    lower1, upper1 = contained
+    lower2, upper2 = container
+    return np.all(lower2 <= lower1) and np.all(upper1 <= upper2)
 
 #####################################
 
@@ -607,6 +617,14 @@ def plan_joint_motion(body, joints, end_conf, **kwargs):
 #####################################
 
 # Placements
+
+def supports_body(top_body, bottom_body, epsilon=1e-2): # TODO: above / below
+    top_aabb = get_lower_upper(top_body)
+    bottom_aabb = get_lower_upper(bottom_body)
+    top_z_min = top_aabb[0][2]
+    bottom_z_max = bottom_aabb[1][2]
+    return (bottom_z_max <= top_z_min <= (bottom_z_max + epsilon)) and \
+           (aabb_contains(aabb2d_from_aabb(top_aabb), aabb2d_from_aabb(bottom_aabb)))
 
 def sample_placement(top_body, bottom_body, max_attempts=50):
     bottom_aabb = get_lower_upper(bottom_body)
