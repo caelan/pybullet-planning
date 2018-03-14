@@ -118,6 +118,8 @@ class Commands(object):
     def __repr__(self):
         return 'c{}'.format(id(self) % 1000)
 
+##################################################
+
 # TODO: context aware
 def get_motion_gen(problem, teleport=False):
     robot = problem.robot
@@ -203,7 +205,6 @@ def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False):
                 if (grasp_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     continue
                 grasp_conf = get_joint_positions(robot, joints)
-
                 bp = Pose(robot, get_pose(robot))
 
                 if teleport:
@@ -260,8 +261,8 @@ def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
                 if (gripper_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     continue
                 grasp_conf = get_joint_positions(robot, joints)
-
                 bp = Pose(robot, get_pose(robot))
+
                 if teleport:
                     path = [default_conf, approach_conf, grasp_conf]
                 else:

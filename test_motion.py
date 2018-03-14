@@ -18,7 +18,7 @@ def main():
     add_data_path()
 
     plane = p.loadURDF("plane.urdf")
-    #table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
+    table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
     #table = p.loadURDF("table_square/table_square.urdf")
     #table = p.loadURDF("cube.urdf")
     #table = p.loadURDF("block.urdf")
@@ -28,7 +28,7 @@ def main():
 
     base_start = (-2, -2, 0)
     base_goal = (2, 2, 0)
-    base_goal = base_start
+    #base_goal = base_start
     p.addUserDebugLine(base_start, base_goal, lineColorRGB=(1, 1, 0)) # addUserDebugText
     print base_start, base_goal
 

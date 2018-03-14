@@ -85,7 +85,8 @@ def stacking_problem(arm='left', grasp_type='top'):
     table2 = p.loadURDF("table/table.urdf")
     set_base_values(table2, (2, 0, 0))
 
-    return Problem(robot=pr2, movable=[block], arms=[arm], grasp_types=[grasp_type], surfaces=[table1, table2],
+    return Problem(robot=pr2, movable=[block], arms=[arm],
+                   grasp_types=[grasp_type], surfaces=[table1, table2],
                    #goal_on=[(block, table1)])
                    goal_on=[(block, table2)])
 
@@ -184,4 +185,4 @@ def cooking_button_problem(arm='left', grasp_type='top'):
     return Problem(robot=pr2, movable=[cabbage], arms=[arm], grasp_types=[grasp_type],
                    surfaces=[table, sink, stove], sinks=[sink], stoves=[stove],
                    buttons=[(sink_button, sink), (stove_button, stove)],
-                   goal_cooked=[cabbage])
+                   goal_conf=get_pose(pr2), goal_holding=[(arm, cabbage)], goal_cooked=[cabbage])

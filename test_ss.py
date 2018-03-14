@@ -69,7 +69,7 @@ IsConnected = Predicate([O, O2])
 rename_functions(locals())
 
 
-def ss_from_problem(problem, bound='shared'):
+def ss_from_problem(problem, bound='shared', remote=False):
     robot = problem.robot
 
     initial_bq = Pose(robot, get_pose(robot))
@@ -121,27 +121,33 @@ def ss_from_problem(problem, bound='shared'):
                     CanMove(), AtBConf(BQ), ~Unsafe(BT)],
                eff=[AtBConf(BQ2), ~CanMove(), ~AtBConf(BQ),
                     Increase(TotalCost(), 1)]),
-
-        #Action(name='clean', param=[O, O2],  # Wirelessly communicates to clean
-        #       pre=[Stackable(O, O2), Washer(O2),
-        #            ~Cooked(O), On(O, O2)],
-        #       eff=[Cleaned(O)]),
-        #
-        #Action(name='cook', param=[O, O2],  # Wirelessly communicates to cook
-        #       pre=[Stackable(O, O2), Stove(O2),
-        #            Cleaned(O), On(O, O2)],
-        #       eff=[Cooked(O), ~Cleaned(O)]),
-
-        Action(name='press_clean', param=[O, O2, A, B, BQ, AT],
-               pre=[Stackable(O, O2), Washer(O2), IsConnected(B, O2), IsPress(A, B, BQ, AT),
-                    ~Cooked(O), On(O, O2), HandEmpty(A), AtBConf(BQ)],
-               eff=[Cleaned(O), CanMove()]),
-
-        Action(name='press_cook', param=[O, O2, A, B, BQ, AT],
-               pre=[Stackable(O, O2), Stove(O2), IsConnected(B, O2), IsPress(A, B, BQ, AT),
-                    Cleaned(O), On(O, O2), HandEmpty(A), AtBConf(BQ)],
-               eff=[Cooked(O), ~Cleaned(O), CanMove()]),
     ]
+
+    if remote:
+        actions += [
+            Action(name='clean', param=[O, O2],  # Wirelessly communicates to clean
+                  pre=[Stackable(O, O2), Washer(O2),
+                       ~Cooked(O), On(O, O2)],
+                  eff=[Cleaned(O)]),
+
+            Action(name='cook', param=[O, O2],  # Wirelessly communicates to cook
+                  pre=[Stackable(O, O2), Stove(O2),
+                       Cleaned(O), On(O, O2)],
+                  eff=[Cooked(O), ~Cleaned(O)]),
+        ]
+    else:
+        actions += [
+            Action(name='press_clean', param=[O, O2, A, B, BQ, AT],
+                   pre=[Stackable(O, O2), Washer(O2), IsConnected(B, O2), IsPress(A, B, BQ, AT),
+                        ~Cooked(O), On(O, O2), HandEmpty(A), AtBConf(BQ)],
+                   eff=[Cleaned(O), CanMove()]),
+
+            Action(name='press_cook', param=[O, O2, A, B, BQ, AT],
+                   pre=[Stackable(O, O2), Stove(O2), IsConnected(B, O2), IsPress(A, B, BQ, AT),
+                        Cleaned(O), On(O, O2), HandEmpty(A), AtBConf(BQ)],
+                   eff=[Cooked(O), ~Cleaned(O), CanMove()]),
+        ]
+
     axioms = [
         Axiom(param=[A, O, G],
               pre=[IsArm(A), IsGrasp(O, G),
