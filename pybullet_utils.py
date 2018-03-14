@@ -26,11 +26,11 @@ def read_pickle(filename):
 
 # Simulation
 
-def connect(use_gui=True):
+def connect(use_gui=True, shadows=True):
     sim_id = p.connect(p.GUI) if use_gui else p.connect(p.DIRECT)
     if use_gui:
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
-        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
+        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, shadows)
     #p.configureDebugVisualizer(p.COV_ENABLE_WIREFRAME, 1)
     #p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 0)
     #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)

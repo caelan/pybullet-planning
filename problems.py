@@ -3,6 +3,7 @@ from pybullet_utils import create_box, set_base_values, set_point, set_pose, get
 from pr2_utils import TOP_HOLDING_LEFT_ARM, set_arm_conf, REST_LEFT_ARM, REST_RIGHT_ARM, open_arm, \
     close_arm, get_carry_conf, arm_conf, get_other_arm
 import pybullet as p
+import numpy as np
 
 #Problem = namedtuple('Problem', ['robot', 'arms', 'movable', 'grasp_types', 'surfaces',
 #                                 'goal_conf', 'goal_holding', 'goal_on'])
@@ -133,12 +134,36 @@ def cleaning_button_problem(arm='left', grasp_type='top'):
 
     d = 0.1
     sink_button = create_box(d, d, d, color=(0, 0, 0, 1))
-    set_point(sink_button, (0, 2-(.5+d)/2, .7-d/2))
+    set_pose(sink_button, ((0, 2-(.5+d)/2, .7-d/2), z_rotation(np.pi/2)))
 
     stove_button = create_box(d, d, d, color=(0, 0, 0, 1))
-    set_point(stove_button, (0, -2+(.5+d)/2, .7-d/2))
+    set_pose(stove_button, ((0, -2+(.5+d)/2, .7-d/2), z_rotation(-np.pi/2)))
 
     return Problem(robot=pr2, movable=[cabbage], arms=[arm], grasp_types=[grasp_type],
                    surfaces=[table, sink, stove], sinks=[sink], stoves=[stove],
                    buttons=[(sink_button, sink), (stove_button, stove)],
-                   goal_cleaned=[cabbage])
+                   goal_conf=get_pose(pr2), goal_holding=[(arm, cabbage)], goal_cleaned=[cabbage])
+
+def cooking_button_problem(arm='left', grasp_type='top'):
+    other_arm = get_other_arm(arm)
+    initial_conf = get_carry_conf(arm, grasp_type)
+
+    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf", useFixedBase=True)
+    set_arm_conf(pr2, arm, initial_conf)
+    open_arm(pr2, arm)
+    set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))
+    close_arm(pr2, other_arm)
+
+    table, cabbage, sink, stove = create_kitchen()
+
+    d = 0.1
+    sink_button = create_box(d, d, d, color=(0, 0, 0, 1))
+    set_pose(sink_button, ((0, 2-(.5+d)/2, .7-d/2), z_rotation(np.pi/2)))
+
+    stove_button = create_box(d, d, d, color=(0, 0, 0, 1))
+    set_pose(stove_button, ((0, -2+(.5+d)/2, .7-d/2), z_rotation(-np.pi/2)))
+
+    return Problem(robot=pr2, movable=[cabbage], arms=[arm], grasp_types=[grasp_type],
+                   surfaces=[table, sink, stove], sinks=[sink], stoves=[stove],
+                   buttons=[(sink_button, sink), (stove_button, stove)],
+                   goal_cooked=[cabbage])

@@ -168,7 +168,7 @@ def get_side_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
   set_pose(body, pose)
   return grasps
 
-def get_x_presses(body, max_orientations=4):
+def get_x_presses(body, max_orientations=1):
   pose = get_pose(body)
   set_pose(body, unit_pose())
   center, (w, l, h) = get_center_extent(body)

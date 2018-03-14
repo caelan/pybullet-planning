@@ -212,12 +212,15 @@ def get_press_gen(problem, max_attempts=25):
         joints = get_arm_joints(robot, a)
 
         presses = get_x_presses(o)
+        approach = ((0, -APPROACH_DISTANCE, 0), unit_quat())
         while True:
             for _ in xrange(max_attempts):
                 press = random.choice(presses)
                 gripper_pose = multiply(pose, invert(press))
                 approach_pose = gripper_pose
-                #approach_pose = multiply(g.approach, gripper_pose)
+                #approach_pose = multiply(approach, gripper_pose)
+                #approach_pose = multiply(pose, invert(multiply(press, gripper_pose)))
+                #approach_pose = multiply(pose, multiply(gripper_pose, invert(press)))
 
                 base_generator = learned_pose_generator(robot, gripper_pose, arm=a, grasp_type=grasp_type)
                 set_joint_positions(robot, joints, default_conf)

@@ -6,7 +6,7 @@ import cProfile
 from pybullet_utils import connect, add_data_path, disconnect, get_pose, \
     update_state, link_from_name, step_simulation
 from problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
-    cleaning_button_problem
+    cleaning_button_problem, cooking_button_problem
 
 from ss.algorithms.dual_focused import dual_focused
 from ss.algorithms.incremental import incremental
@@ -129,10 +129,15 @@ def ss_from_problem(problem, bound='shared'):
         #            Cleaned(O), On(O, O2)],
         #       eff=[Cooked(O), ~Cleaned(O)]),
 
-        Action(name='clean', param=[O, O2, A, B, BQ, AT],
+        Action(name='press_clean', param=[O, O2, A, B, BQ, AT],
                pre=[Stackable(O, O2), Washer(O2), IsConnected(B, O2), IsPress(A, B, BQ, AT),
                     ~Cooked(O), On(O, O2), HandEmpty(A), AtBConf(BQ)],
                eff=[Cleaned(O), CanMove()]),
+
+        Action(name='press_cook', param=[O, O2, A, B, BQ, AT],
+               pre=[Stackable(O, O2), Stove(O2), IsConnected(B, O2), IsPress(A, B, BQ, AT),
+                    Cleaned(O), On(O, O2), HandEmpty(A), AtBConf(BQ)],
+               eff=[Cooked(O), ~Cleaned(O), CanMove()]),
     ]
     axioms = [
         Axiom(param=[A, O, G],
@@ -183,12 +188,12 @@ def post_process(problem, plan):
             new_commands = [t]
         elif action.name == 'pick':
             a, b, p, g, _, t = args
-            link = link_from_name(robot, ARM_LINK_NAMES[a])
+            #link = link_from_name(robot, ARM_LINK_NAMES[a])
             attach = Attach(robot, a, g, b)
             new_commands = [t, attach, t.reverse()]
         elif action.name == 'place':
             a, b, p, g, _, t = args
-            link = link_from_name(robot, ARM_LINK_NAMES[a])
+            #link = link_from_name(robot, ARM_LINK_NAMES[a])
             detach = Detach(robot, a, b)
             new_commands = [t, detach, t.reverse()]
         elif action.name == 'clean': # TODO: add text or change color?
@@ -197,6 +202,12 @@ def post_process(problem, plan):
         elif action.name == 'cook':
             body, stove = args
             new_commands = [Cook(body)]
+        elif action.name == 'press_clean':
+            body, sink, arm, button, bq, t = args
+            new_commands = [t, Clean(body), t.reverse()]
+        elif action.name == 'press_cook':
+            body, sink, arm, button, bq, t = args
+            new_commands = [t, Cook(body), t.reverse()]
         else:
             raise ValueError(action.name)
         commands += new_commands
@@ -232,10 +243,11 @@ def main(search='ff-astar', max_time=60, verbose=True):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = cleaning_button_problem # holding_problem | stacking_problem | cleaning_problem | cooking_problem | cleaning_button_problem
+    problem_fn = cooking_button_problem
+    # holding_problem | stacking_problem | cleaning_problem | cooking_problem | cleaning_button_problem | cooking_button_problem
 
-    connect(use_gui=True)
-    #connect(use_gui=False)
+    #connect(use_gui=True)
+    connect(use_gui=False)
     add_data_path()
 
     ss_problem = ss_from_problem(problem_fn())
