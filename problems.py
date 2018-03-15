@@ -42,6 +42,11 @@ def create_floor():
 def create_table():
     raise NotImplementedError()
 
+def create_door():
+    return p.loadURDF("data/door.urdf")
+
+# https://github.com/bulletphysics/bullet3/search?l=XML&q=.urdf&type=&utf8=%E2%9C%93
+
 TABLE_MAX_Z = 0.6265 # TODO: the table legs don't seem to be included for collisions?
 
 def holding_problem(arm='left', grasp_type='side'):
@@ -91,7 +96,7 @@ def stacking_problem(arm='left', grasp_type='top'):
                    goal_on=[(block, table2)])
 
 def create_kitchen(w=.5, h=.7):
-    plane = p.loadURDF("plane.urdf")
+    floor = create_floor()
 
     table = create_box(w, w, h, color=(.75, .75, .75, 1))
     set_point(table, (2, 0, h/2))
@@ -111,13 +116,16 @@ def cleaning_problem(arm='left', grasp_type='top'):
     other_arm = get_other_arm(arm)
     initial_conf = get_carry_conf(arm, grasp_type)
 
-    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf", useFixedBase=True)
+    pr2 = create_pr2()
     set_arm_conf(pr2, arm, initial_conf)
     open_arm(pr2, arm)
     set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))
     close_arm(pr2, other_arm)
 
     table, cabbage, sink, stove = create_kitchen()
+
+    #door = create_door()
+    #set_point(door, (2, 0, 0))
 
     return Problem(robot=pr2, movable=[cabbage], arms=[arm], grasp_types=[grasp_type],
                    surfaces=[table, sink, stove], sinks=[sink], stoves=[stove],
@@ -127,7 +135,7 @@ def cooking_problem(arm='left', grasp_type='top'):
     other_arm = get_other_arm(arm)
     initial_conf = get_carry_conf(arm, grasp_type)
 
-    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf", useFixedBase=True)
+    pr2 = create_pr2()
     set_arm_conf(pr2, arm, initial_conf)
     open_arm(pr2, arm)
     set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))
