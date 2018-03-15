@@ -9,10 +9,11 @@
        <mass value=".0"/>
        <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
     </inertial>
+
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0.6"/>
       <geometry>
-				<mesh filename="table.obj" scale="1.5 1 0.05"/>
+		<mesh filename="table.obj" scale="1.5 1 0.05"/>
       </geometry>
        <material name="white">
         <color rgba="1 1 1 1"/>
@@ -24,6 +25,7 @@
 	 	<box size="1.5 1 0.05"/>
       </geometry>
     </collision>
+
 	<visual>
       <origin rpy="0 0 0" xyz="-0.65 -0.4 0.29"/>
       <geometry>
@@ -31,26 +33,54 @@
       </geometry>
 	  <material name="framemat0"/>	 
     </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="-0.65 -0.4 0.29"/>
+      <geometry>
+	 	<box size="0.1 0.1 0.58"/>
+      </geometry>
+    </collision>
+
     <visual>
       <origin rpy="0 0 0" xyz="-0.65 0.4 0.29"/>
       <geometry>
         <mesh filename="table.obj" scale="0.1 0.1 0.58"/>
       </geometry>
 	  <material name="framemat0"/>
-	  </visual>
+	</visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="-0.65 0.4 0.29"/>
+      <geometry>
+	 	<box size="0.1 0.1 0.58"/>
+      </geometry>
+    </collision>
+
     <visual>
       <origin rpy="0 0 0" xyz="0.65 -0.4 0.29"/>
       <geometry>
         <mesh filename="table.obj" scale="0.1 0.1 0.58"/>
       </geometry>
 	  <material name="framemat0"/>
-	  </visual>
+	</visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.65 -0.4 0.29"/>
+      <geometry>
+	 	<box size="0.1 0.1 0.58"/>
+      </geometry>
+    </collision>
+
     <visual>
       <origin rpy="0 0 0" xyz="0.65 0.4 0.29"/>
       <geometry>
         <mesh filename="table.obj" scale="0.1 0.1 0.58"/>
       </geometry>
     </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.65 0.4 0.29"/>
+      <geometry>
+	 	<box size="0.1 0.1 0.58"/>
+      </geometry>
+    </collision>
+
   </link>
 </robot>
 
