@@ -4,7 +4,7 @@ import pstats
 import cProfile
 
 from pybullet_utils import connect, add_data_path, disconnect, get_pose, \
-    update_state, link_from_name, step_simulation, supports_body
+    update_state, link_from_name, step_simulation, supports_body, joints_from_names, get_joint_positions
 from problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
     cleaning_button_problem, cooking_button_problem
 
@@ -17,7 +17,7 @@ from ss.model.streams import Stream, ListStream, GenStream, FnStream, TestStream
 
 from streams import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
     get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, Trajectory
-from pr2_utils import ARM_LINK_NAMES, close_arm
+from pr2_utils import ARM_LINK_NAMES, close_arm, ARM_JOINT_NAMES, get_arm_joints
 
 import pybullet as p
 
@@ -37,6 +37,7 @@ Stackable = Predicate([O, O2])
 POSE = Predicate([P])
 GRASP = Predicate([G])
 IsBConf = Predicate([BQ])
+IsAConf = Predicate([A, BQ])
 
 IsPose = Predicate([O, P])
 IsSupported = Predicate([P, O2])
@@ -51,6 +52,7 @@ AtBConf = Predicate([BQ])
 HandEmpty = Predicate([A])
 HasGrasp = Predicate([A, O, G])
 CanMove = Predicate([])
+AtAConf = Predicate([A, BQ])
 
 # Derived
 Holding = Predicate([A, O])
@@ -71,7 +73,7 @@ IsConnected = Predicate([O, O2])
 rename_functions(locals())
 
 
-def ss_from_problem(problem, bound='shared', remote=True, movable_collisions=False):
+def ss_from_problem(problem, bound='shared', remote=False, movable_collisions=False):
     robot = problem.robot
 
     initial_bq = Pose(robot, get_pose(robot))
@@ -81,7 +83,9 @@ def ss_from_problem(problem, bound='shared', remote=True, movable_collisions=Fal
         initialize(TotalCost(), 0),
     ]
     for name in problem.arms:
-        initial_atoms += [IsArm(name), HandEmpty(name)]
+        joints = get_arm_joints(robot, name)
+        conf = Conf(robot, joints, get_joint_positions(robot, joints))
+        initial_atoms += [IsArm(name), HandEmpty(name), IsAConf(name, conf), AtAConf(name, conf)]
     for body in problem.movable:
         pose = Pose(body, get_pose(body))
         initial_atoms += [IsMovable(body), IsPose(body, pose), AtPose(body, pose), POSE(pose)]
@@ -130,6 +134,17 @@ def ss_from_problem(problem, bound='shared', remote=True, movable_collisions=Fal
                     CanMove(), AtBConf(BQ), ~Unsafe(BT)],
                eff=[AtBConf(BQ2), ~CanMove(), ~AtBConf(BQ),
                     Increase(TotalCost(), 1)]),
+
+        # TODO: should the robot be allowed to have different carry configs or a defined one?
+        #Action(name='move_arm', param=[A, BQ, BQ2],
+        #       pre=[IsAConf(A, BQ), IsAConf(A, BQ),
+        #            CanMove(), AtBConf(BQ)],
+        #       eff=[AtAConf(BQ2), ~AtAConf(BQ),
+        #            Increase(TotalCost(), 1)]),
+
+        # Why would one want to move to the pick configuration for something anywhere but the goal?
+        # Stream that generates arm motions as long as one is a shared configuration
+        # Maybe I should make a base
     ]
 
     if remote:
@@ -273,7 +288,7 @@ def main(search='ff-astar', max_time=60, verbose=True):
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     parser.add_argument('-display', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = cleaning_problem
+    problem_fn = cooking_button_problem
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem
     # cleaning_button_problem | cooking_button_problem
 

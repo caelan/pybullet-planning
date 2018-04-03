@@ -1,6 +1,14 @@
+from __future__ import print_function
+# from future_builtins import map, filter
+# from builtins import input # TODO - use future
+
+try:
+   input = raw_input
+except NameError:
+   pass
+
 import pybullet as p
 import time
-import argparse
 import numpy as np
 
 from pybullet_utils import set_base_values, joint_from_name, set_joint_position, \
@@ -10,11 +18,7 @@ from pr2_utils import TOP_HOLDING_LEFT_ARM, ARM_JOINT_NAMES, TORSO_JOINT_NAME, \
     REST_RIGHT_ARM, SIDE_HOLDING_LEFT_ARM, set_arm_conf
 
 def main():
-    parser = argparse.ArgumentParser()  # Automatically includes help
-    parser.add_argument('-viewer', action='store_true', help='enable viewer.')
-    args = parser.parse_args()
-
-    connect(use_gui=args.viewer)
+    connect(use_gui=True)
     add_data_path()
 
     plane = p.loadURDF("plane.urdf")
@@ -30,7 +34,7 @@ def main():
     base_goal = (2, 2, 0)
     #base_goal = base_start
     p.addUserDebugLine(base_start, base_goal, lineColorRGB=(1, 1, 0)) # addUserDebugText
-    print base_start, base_goal
+    print(base_start, base_goal)
 
     arm_start = SIDE_HOLDING_LEFT_ARM
     arm_goal = TOP_HOLDING_LEFT_ARM
@@ -42,27 +46,27 @@ def main():
     set_joint_positions(pr2, right_joints, REST_RIGHT_ARM)
     set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT_NAME), 0.2)
 
-    raw_input('Plan Base?')
+    input('Plan Base?')
     base_path = plan_base_motion(pr2, base_goal)
     if base_path is None:
         return
-    print len(base_path)
+    print(len(base_path))
     for bq in base_path:
         set_base_values(pr2, bq)
         #raw_input('Continue?')
         time.sleep(0.05)
 
-    raw_input('Plan Arm?')
+    input('Plan Arm?')
     arm_path = plan_joint_motion(pr2, left_joints, arm_goal)
     if base_path is None:
         return
-    print len(arm_path)
+    print(len(arm_path))
     for q in arm_path:
         set_joint_positions(pr2, left_joints, q)
         #raw_input('Continue?')
         time.sleep(0.01)
 
-    raw_input('Control Arm?')
+    input('Control Arm?')
     real_time = False
     enable_gravity()
     p.setRealTimeSimulation(real_time)
@@ -72,7 +76,7 @@ def main():
             p.stepSimulation()
             #time.sleep(0.01)
 
-    raw_input('Finish?')
+    input('Finish?')
     p.disconnect()
 
 if __name__ == '__main__':

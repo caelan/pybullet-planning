@@ -13,7 +13,7 @@ from pybullet_utils import get_joint_limits, multiply, get_max_velocity, get_mov
     get_link_pose, joint_from_name, link_from_name, set_joint_position, set_joint_positions, get_joint_positions, \
     get_min_limit, get_max_limit, quat_from_euler, get_joints, violates_limits, read_pickle, set_pose, point_from_pose, \
     sample_reachable_base, set_base_values, get_pose, sample_placement, invert, pairwise_collision, get_body_name, \
-    euler_from_quat, unit_point, unit_quat, unit_pose, get_center_extent, write_pickle
+    euler_from_quat, unit_point, unit_quat, unit_pose, get_center_extent, write_pickle, joints_from_names
 
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
@@ -85,7 +85,7 @@ def get_other_arm(arm):
 
 def get_arm_joints(robot, arm):
     assert arm in ARM_JOINT_NAMES
-    return tuple(joint_from_name(robot, name) for name in ARM_JOINT_NAMES[arm])
+    return joints_from_names(robot, ARM_JOINT_NAMES[arm])
 
 def get_arm_conf(robot, arm):
     return get_joint_positions(robot, get_arm_joints(robot, arm))
@@ -173,7 +173,7 @@ def get_x_presses(body, max_orientations=1): # g_f_o
   set_pose(body, unit_pose())
   center, (w, l, h) = get_center_extent(body)
   press_poses = []
-  for j in xrange(max_orientations):
+  for j in range(max_orientations):
       swap_xz = (unit_point(), quat_from_euler([0, -math.pi/2 + j*math.pi, 0]))
       translate = ([0, 0, w / 2], unit_quat())
       press_poses += [multiply(TOOL_POSE, translate, swap_xz)]
@@ -188,8 +188,9 @@ GET_GRASPS = {
 
 #####################################
 
-def inverse_kinematics_helper(robot, link, (point, quat),
+def inverse_kinematics_helper(robot, link, pose,
                               null_space=False, max_iterations=200, tolerance=1e-3):
+    (point, quat) = pose
     # https://github.com/bulletphysics/bullet3/blob/389d7aaa798e5564028ce75091a3eac6a5f76ea8/examples/SharedMemory/PhysicsClientC_API.cpp
     # https://github.com/bulletphysics/bullet3/blob/c1ba04a5809f7831fa2dee684d6747951a5da602/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
     joints = get_joints(robot) # Need to have all joints (although only movable returned)
@@ -209,7 +210,7 @@ def inverse_kinematics_helper(robot, link, (point, quat),
 
     #t0 = time.time()
     kinematic_conf = get_joint_positions(robot, movable_joints)
-    for iterations in xrange(max_iterations): # 0.000863273143768 / iteration
+    for iterations in range(max_iterations): # 0.000863273143768 / iteration
         # TODO: return none if no progress
         if null_space:
             kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat,
@@ -297,7 +298,7 @@ def create_inverse_reachability(robot, body, table, arm, grasp_type, num_samples
             continue
         gripper_from_base = multiply(invert(get_link_pose(robot, link)), get_pose(robot))
         gripper_from_base_list.append(gripper_from_base)
-        print '{} / {}'.format(len(gripper_from_base_list), num_samples)
+        print('{} / {}'.format(len(gripper_from_base_list), num_samples))
 
     filename = IR_FILENAME.format(grasp_type, arm)
     path = os.path.join(DATABASES_DIR, filename)

@@ -40,6 +40,7 @@ def create_floor():
     return p.loadURDF("plane.urdf")
 
 def create_table():
+    # TODO: table URDF
     raise NotImplementedError()
 
 def create_door():

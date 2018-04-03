@@ -9,6 +9,8 @@ import pybullet_data
 import pickle
 from motion_planners.rrt_connect import birrt, direct_path
 
+# https://stackoverflow.com/questions/21892989/what-is-the-good-python3-equivalent-for-auto-tuple-unpacking-in-lambda
+
 BASE_LIMITS = ([-2.5, -2.5, 0], [2.5, 2.5, 0])
 REVOLUTE_LIMITS = -np.pi, np.pi
 
@@ -82,7 +84,8 @@ def reset_simulation():
 
 # Geometry
 
-def invert((point, quat)):
+def invert(pose):
+    (point, quat) = pose
     return p.invertTransform(point, quat)
 
 #def multiply((point1, quat1), (point2, quat2)):
@@ -160,7 +163,8 @@ def point_from_pose(pose):
 def quat_from_pose(pose):
     return pose[1]
 
-def tform_from_pose((point, quat)):
+def tform_from_pose(pose):
+    (point, quat) = pose
     tform = np.eye(4)
     tform[:3,3] = point
     tform[:3,:3] = matrix_from_quat(quat)
@@ -176,7 +180,8 @@ def wrap_angle(theta):
 def circular_difference(theta2, theta1):
     return wrap_angle(theta2 - theta1)
 
-def base_values_from_pose((point, quat)):
+def base_values_from_pose(pose):
+    (point, quat) = pose
     x, y, _ = point
     roll, pitch, yaw = euler_from_quat(quat)
     assert (abs(roll) < 1e-3) and (abs(pitch) < 1e-3)
@@ -197,7 +202,7 @@ def get_num_joints(body):
 
 
 def get_joints(body):
-    return range(get_num_joints(body))
+    return list(range(get_num_joints(body)))
 
 def get_joint(body, joint_or_name):
     if type(joint_or_name) is str:
@@ -205,17 +210,19 @@ def get_joint(body, joint_or_name):
     return joint_or_name
 
 def get_joint_name(body, joint):
-    return p.getJointInfo(body, joint)[1]
+    return p.getJointInfo(body, joint)[1].decode('UTF-8')
 
 def get_joint_names(body):
     return [get_joint_name(body, joint) for joint in get_joints(body)]
 
 def joint_from_name(body, name):
-    for joint in xrange(get_num_joints(body)):
+    for joint in get_joints(body):
         if get_joint_name(body, joint) == name:
             return joint
     raise ValueError(body, name)
 
+def joints_from_names(body, names):
+    return tuple(joint_from_name(body, name) for name in names)
 
 def get_joint_position(body, joint):
     return p.getJointState(body, joint)[0]
@@ -296,7 +303,7 @@ def get_link_parent(body, joint):
     return p.getJointInfo(body, joint)[16]
 
 def link_from_name(body, name):
-    for link in xrange(get_num_joints(body)):
+    for link in get_joints(body):
         if get_link_name(body, link) == name:
             return link
     raise ValueError(body, name)
@@ -318,7 +325,7 @@ def get_adjacent_links(body):
 
 
 def get_adjacent_fixed_links(body):
-    return filter(lambda (link, _): not is_movable(body, link), get_adjacent_links(body))
+    return filter(lambda item: not is_movable(body, item[0]), get_adjacent_links(body))
 
 
 def get_fixed_links(body):
@@ -353,7 +360,7 @@ def get_num_bodies():
 
 
 def get_bodies():
-    return range(get_num_bodies())
+    return list(range(get_num_bodies()))
 
 def get_body_name(body):
     return p.getBodyInfo(body)[1]
@@ -364,7 +371,7 @@ def get_body_names():
 
 
 def body_from_name(name):
-    for body in xrange(get_num_bodies()):
+    for body in range(get_num_bodies()):
         if get_body_name(body) == name:
             return body
     raise ValueError(name)
@@ -404,7 +411,8 @@ def set_quat(body, quat):
     p.resetBasePositionAndOrientation(body, get_point(body), quat)
 
 #def set_pose(body, point, quat):
-def set_pose(body, (point, quat)):
+def set_pose(body, pose):
+    (point, quat) = pose
     p.resetBasePositionAndOrientation(body, point, quat)
 
 #####################################
@@ -455,7 +463,8 @@ def get_center_extent(body):
     extents = (np.array(upper) - lower)
     return center, extents
 
-def aabb2d_from_aabb((lower, upper)):
+def aabb2d_from_aabb(aabb):
+    (lower, upper) = aabb
     return lower[:2], upper[:2]
 
 def aabb_contains(contained, container):
@@ -571,7 +580,7 @@ def plan_base_motion(body, end_conf, obstacles=None, direct=False, **kwargs):
         steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
         n = int(np.max(steps)) + 1
         q = q1
-        for i in xrange(n):
+        for i in range(n):
             q = tuple((1. / (n - i)) * np.array(difference_fn(q2, q)) + q)
             yield q
             # TODO: should wrap these joints
@@ -611,7 +620,7 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kw
         steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
         num_steps = int(np.max(steps)) + 1
         q = q1
-        for i in xrange(num_steps):
+        for i in range(num_steps):
             q = tuple((1. / (num_steps - i)) * np.array(difference_fn(q2, q)) + q)
             yield q
             # TODO: should wrap these joints
@@ -644,7 +653,7 @@ def supports_body(top_body, bottom_body, epsilon=1e-2): # TODO: above / below
 
 def sample_placement(top_body, bottom_body, max_attempts=50):
     bottom_aabb = get_lower_upper(bottom_body)
-    for _ in xrange(max_attempts):
+    for _ in range(max_attempts):
         theta = np.random.uniform(*REVOLUTE_LIMITS)
         quat = z_rotation(theta)
         set_quat(top_body, quat)
@@ -666,7 +675,7 @@ def sample_placement(top_body, bottom_body, max_attempts=50):
 
 def sample_reachable_base(robot, point, max_attempts=50):
     reachable_range = (0.25, 1.0)
-    for _ in xrange(max_attempts):
+    for _ in range(max_attempts):
         radius = np.random.uniform(*reachable_range)
         x, y = radius*unit_from_theta(np.random.uniform(-np.pi, np.pi)) + point[:2]
         yaw = np.random.uniform(*REVOLUTE_LIMITS)
