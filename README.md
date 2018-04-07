@@ -11,8 +11,8 @@ pip install pybullet
 ```
 
 Clone the following repositories and add them to your PYTHONPATH:
-https://github.com/caelan/motion-planners
-https://github.com/caelan/pddlstream
+1) https://github.com/caelan/motion-planners
+2) https://github.com/caelan/pddlstream
 
 ## Examples
 
