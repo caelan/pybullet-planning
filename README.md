@@ -10,6 +10,22 @@ Install PyBullet on OSX or Linux using:
 pip install pybullet
 ```
 
+Clone the following repositories and add them to your PYTHONPATH:
+https://github.com/caelan/motion-planners
+https://github.com/caelan/pddlstream
+
+## Examples
+
+Motion planning
+```
+python test_motion.py
+```
+
+Task and motion planning
+```
+python test_ss.py
+```
+
 ## PyBullet Resources
 pip - https://pypi.python.org/pypi/pybullet
 
