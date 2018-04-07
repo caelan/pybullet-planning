@@ -16,15 +16,9 @@ Clone the following repositories and add them to your PYTHONPATH:
 
 ## Examples
 
-Motion planning
-```
-python test_motion.py
-```
+Motion planning - ```python test_motion.py```
 
-Task and motion planning
-```
-python test_ss.py
-```
+Task and motion planning - ```python test_ss.py```
 
 ## PyBullet Resources
 pip - https://pypi.python.org/pypi/pybullet
