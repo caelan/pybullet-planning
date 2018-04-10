@@ -94,13 +94,13 @@
   <link name="base_link_0"/>
   <link name="base_link_1"/>
   <joint name="x" type="prismatic">
-    <limit lower="-100" upper="100"/>
+    <limit lower="-5" upper="5"/>
     <parent link="world_link"/>
     <child link="base_link_0"/>
     <axis xyz="1 0 0"/>
   </joint>
   <joint name="y" type="prismatic">
-    <limit lower="-100" upper="100"/>
+    <limit lower="-5" upper="5"/>
     <parent link="base_link_0"/>
     <child link="base_link_1"/>
     <axis xyz="0 1 0"/>
@@ -2373,13 +2373,13 @@
   <!--
   <joint name="r_gripper_joint" type="prismatic">
     <parent link="r_gripper_r_finger_tip_link"/>
-    <child link="r_gripper_l_finger_tip_frame"/>
+    <child link="r_gripper_l_finger_tip_link"/>
     <axis xyz="0 1 0"/>
     <dynamics damping="100.0"/>
     <limit effort="1000.0" lower="0.0" upper="0.09" velocity="0.2"/>
     <safety_controller k_position="20.0" k_velocity="5000.0" soft_lower_limit="-0.01" soft_upper_limit="0.088"/>
   </joint>-->
-  <link name="r_gripper_l_finger_tip_frame"/>
+  <!--link name="r_gripper_l_finger_tip_frame"/-->
   <gazebo reference="r_gripper_palm_link">
     <turnGravityOff>true</turnGravityOff>
     <sensor:contact name="r_gripper_palm_contact_sensor">
@@ -3312,7 +3312,7 @@
     <limit effort="1000.0" lower="0.0" upper="0.09" velocity="0.2"/>
     <safety_controller k_position="20.0" k_velocity="5000.0" soft_lower_limit="-0.01" soft_upper_limit="0.088"/>
   </joint>-->
-  <link name="l_gripper_l_finger_tip_frame"/>
+  <!--link name="l_gripper_l_finger_tip_frame"/-->
   <gazebo reference="l_gripper_palm_link">
     <turnGravityOff>true</turnGravityOff>
     <sensor:contact name="l_gripper_palm_contact_sensor">

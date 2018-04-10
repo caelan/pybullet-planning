@@ -605,7 +605,7 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kw
     def difference_fn(q2, q1):
         difference = []
         for joint, value2, value1 in zip(joints, q2, q1):
-            difference.append((value2 - value1) if is_circular(body, joint)
+            difference.append((value2 - value1) if not is_circular(body, joint)
                               else circular_difference(value2, value1))
         return tuple(difference)
 
