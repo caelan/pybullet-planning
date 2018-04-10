@@ -3,11 +3,19 @@ import time
 from collections import defaultdict, deque
 from itertools import product
 
+# from future_builtins import map, filter
+# from builtins import input # TODO - use future
+try:
+   input = raw_input
+except NameError:
+   pass
+
 import numpy as np
 import pybullet as p
 import pybullet_data
 import pickle
 from motion_planners.rrt_connect import birrt, direct_path
+from transformations import quaternion_from_matrix
 
 # https://stackoverflow.com/questions/21892989/what-is-the-good-python3-equivalent-for-auto-tuple-unpacking-in-lambda
 
@@ -57,6 +65,10 @@ def get_connection():
 def has_gui():
     return get_connection() == p.GUI
 
+def get_data_path():
+    import pybullet_data
+    return pybullet_data.getDataPath()
+
 def add_data_path():
     return p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
 
@@ -88,9 +100,6 @@ def invert(pose):
     (point, quat) = pose
     return p.invertTransform(point, quat)
 
-#def multiply((point1, quat1), (point2, quat2)):
-#    return p.multiplyTransforms(point1, quat1, point2, quat2)
-
 def multiply(*poses):
     pose = poses[0]
     for next_pose in poses[1:]:
@@ -102,7 +111,6 @@ def unit_from_theta(theta):
 
 def quat_from_euler(euler):
     return p.getQuaternionFromEuler(euler)
-
 
 def euler_from_quat(quat):
     return p.getEulerFromQuaternion(quat)
@@ -119,7 +127,6 @@ def unit_pose():
 def z_rotation(theta):
     return quat_from_euler([0, 0, theta])
 
-
 def matrix_from_quat(quat):
     return p.getMatrixFromQuaternion(quat)
 
@@ -127,32 +134,10 @@ def matrix_from_quat(quat):
 def quat_from_matrix(mat):
     matrix = np.eye(4)
     matrix[:3,:3] = mat
-    q = np.empty((4,), dtype=np.float64)
-    M = np.array(matrix, dtype=np.float64, copy=False)[:4, :4]
-    t = np.trace(M)
-    if t > M[3, 3]:
-        q[3] = t
-        q[2] = M[1, 0] - M[0, 1]
-        q[1] = M[0, 2] - M[2, 0]
-        q[0] = M[2, 1] - M[1, 2]
-    else:
-        i, j, k = 0, 1, 2
-        if M[1, 1] > M[0, 0]:
-            i, j, k = 1, 2, 0
-        if M[2, 2] > M[i, i]:
-            i, j, k = 2, 0, 1
-        t = M[i, i] - (M[j, j] + M[k, k]) + M[3, 3]
-        q[i] = t
-        q[j] = M[i, j] + M[j, i]
-        q[k] = M[k, i] + M[i, k]
-        q[3] = M[k, j] - M[j, k]
-    q *= 0.5 / math.sqrt(t * M[3, 3])
-    return q # [x, y, z, w].
-
+    return quaternion_from_matrix(matrix)
 
 def point_from_tform(tform):
     return np.array(tform)[:3,3]
-
 
 def matrix_from_tform(tform):
     return np.array(tform)[:3,:3]
@@ -192,6 +177,66 @@ def pose_from_base_values(base_values, default_pose):
     _, _, z = default_pose[0]
     roll, pitch, _ = euler_from_quat(default_pose[1])
     return (x, y, z), quat_from_euler([roll, pitch, yaw])
+
+#####################################
+
+# Bodies
+
+def get_num_bodies():
+    return p.getNumBodies()
+
+def get_bodies():
+    return list(range(get_num_bodies()))
+
+def get_body_name(body):
+    return p.getBodyInfo(body)[1]
+
+def get_body_names():
+    return map(get_body_name, get_bodies())
+
+def body_from_name(name):
+    for body in range(get_num_bodies()):
+        if get_body_name(body) == name:
+            return body
+    raise ValueError(name)
+
+def get_base_link(body):
+    return p.getBodyInfo(body)[0]
+
+def get_point(body):
+    return p.getBasePositionAndOrientation(body)[0]
+
+def get_quat(body):
+    return p.getBasePositionAndOrientation(body)[1]
+
+def get_pose(body):
+    return p.getBasePositionAndOrientation(body)
+    #point, quat = p.getBasePositionAndOrientation(body) # [x,y,z,w]
+    #return np.concatenate([point, quat])
+
+def get_base_values(body):
+    return base_values_from_pose(get_pose(body))
+
+def set_base_values(body, values):
+    _, _, z = get_point(body)
+    x, y, theta = values
+    set_point(body, (x, y, z))
+    set_quat(body, z_rotation(theta))
+
+def set_point(body, point):
+    _, quat = p.getBasePositionAndOrientation(body)
+    p.resetBasePositionAndOrientation(body, point, quat)
+
+def set_quat(body, quat):
+    p.resetBasePositionAndOrientation(body, get_point(body), quat)
+
+def set_pose(body, pose):
+    (point, quat) = pose
+    p.resetBasePositionAndOrientation(body, point, quat)
+
+def dump_world():
+    for body in get_bodies():
+        print(body, get_body_name(body), get_base_link(body))
 
 #####################################
 
@@ -353,70 +398,6 @@ def get_fixed_links(body):
 
 #####################################
 
-# Bodies
-
-def get_num_bodies():
-    return p.getNumBodies()
-
-
-def get_bodies():
-    return list(range(get_num_bodies()))
-
-def get_body_name(body):
-    return p.getBodyInfo(body)[1]
-
-def get_body_names():
-    return map(get_body_name, get_bodies())
-
-
-
-def body_from_name(name):
-    for body in range(get_num_bodies()):
-        if get_body_name(body) == name:
-            return body
-    raise ValueError(name)
-
-
-
-def get_base_link(body):
-    return p.getBodyInfo(body)[0]
-
-def get_point(body):
-    return p.getBasePositionAndOrientation(body)[0]
-
-
-def get_quat(body):
-    return p.getBasePositionAndOrientation(body)[1]
-
-def get_pose(body):
-    return p.getBasePositionAndOrientation(body)
-    #point, quat = p.getBasePositionAndOrientation(body) # [x,y,z,w]
-    #return np.concatenate([point, quat])
-
-def get_base_values(body):
-    return base_values_from_pose(get_pose(body))
-
-def set_base_values(body, values):
-    _, _, z = get_point(body)
-    x, y, theta = values
-    set_point(body, (x, y, z))
-    set_quat(body, z_rotation(theta))
-
-def set_point(body, point):
-    _, quat = p.getBasePositionAndOrientation(body)
-    p.resetBasePositionAndOrientation(body, point, quat)
-
-
-def set_quat(body, quat):
-    p.resetBasePositionAndOrientation(body, get_point(body), quat)
-
-#def set_pose(body, point, quat):
-def set_pose(body, pose):
-    (point, quat) = pose
-    p.resetBasePositionAndOrientation(body, point, quat)
-
-#####################################
-
 # Shapes
 
 def create_box(w, l, h, color=(1, 0, 0, 1)):
@@ -436,23 +417,29 @@ def create_mesh():
 
 def create_cylinder(radius, height):
     collision_id =  p.createCollisionShape(p.GEOM_CYLINDER, radius=radius, height=height)
+    raise NotImplementedError()
 
 
 def create_capsule(radius, height):
     collision_id = p.createCollisionShape(p.GEOM_CAPSULE, radius=radius, height=height)
+    raise NotImplementedError()
 
 
 def create_sphere(radius):
     collision_id = p.createCollisionShape(p.GEOM_SPHERE, radius=radius)
+    raise NotImplementedError()
 
 
 def create_plane():
     collision_id = p.createVisualShape(p.GEOM_PLANE, normal=[])
+    raise NotImplementedError()
 
 def get_shape_data(body):
     return p.getVisualShapeData(body)
 
 #####################################
+
+# Bounding box
 
 def get_lower_upper(body):
     return p.getAABB(body)
@@ -671,10 +658,9 @@ def sample_placement(top_body, bottom_body, max_attempts=50):
 
 #####################################
 
-# Kinematics
+# Reachability
 
-def sample_reachable_base(robot, point, max_attempts=50):
-    reachable_range = (0.25, 1.0)
+def sample_reachable_base(robot, point, reachable_range=(0.25, 1.0), max_attempts=50):
     for _ in range(max_attempts):
         radius = np.random.uniform(*reachable_range)
         x, y = radius*unit_from_theta(np.random.uniform(-np.pi, np.pi)) + point[:2]
@@ -682,12 +668,6 @@ def sample_reachable_base(robot, point, max_attempts=50):
         base_values = (x, y, yaw)
         set_base_values(robot, base_values)
         return base_values
-        #_, _, z = get_point(robot)
-        #point = (x, y, z)
-        #set_point(robot, point)
-        #quat = z_rotation(yaw)
-        #set_quat(robot, quat)
-        #return (point, quat)
     return None
 
 

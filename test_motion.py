@@ -1,11 +1,6 @@
-from __future__ import print_function
-# from future_builtins import map, filter
-# from builtins import input # TODO - use future
+#!/usr/bin/env python
 
-try:
-   input = raw_input
-except NameError:
-   pass
+from __future__ import print_function
 
 import pybullet as p
 import time
