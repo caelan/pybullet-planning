@@ -25,7 +25,7 @@ def main():
 
     use_pr2_drake = False
     if use_pr2_drake:
-        pr2 = p.loadURDF("models/pr2_drake/urdf/pr2_simplified.urdf", useFixedBase=True)
+        pr2 = p.loadURDF("models/drake/pr2_description/urdf/pr2_simplified.urdf", useFixedBase=True)
     else:
         pr2 = p.loadURDF("models/pr2_description/pr2.urdf", useFixedBase=True)
 
