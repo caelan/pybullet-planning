@@ -21,6 +21,29 @@ def main():
     connect(use_gui=True)
     add_data_path()
 
+    import pybullet_data
+    print(pybullet_data.getDataPath())
+
+    #p.loadURDF("r2d2.urdf", useFixedBase=True)
+    #p.loadURDF("samurai.urdf", useFixedBase=True) # World
+    #p.loadURDF("quadruped/minitaur.urdf", useFixedBase=True) # Walker
+    #p.loadURDF("kuka_lwr/kuka.urdf", useFixedBase=True)
+    #p.loadURDF("kuka_iiwa/model.urdf", useFixedBase=True)
+    #p.loadURDF("kuka_iiwa/model_free_base.urdf", useFixedBase=True)
+    #p.loadSDF("kuka_iiwa/kuka_with_gripper.sdf")
+    #p.loadMJCF("kuka_iiwa/kuka_with_gripper.sdf", useFixedBase=True)
+    p.loadMJCF("mjcf/humanoid.xml")
+    #p.loadBullet()
+
+
+
+    #p.loadURDF("husky/husky.urdf", useFixedBase=True) # Car
+    #p.loadURDF("kiva_shelf/model.sdf", useFixedBase=True) # Car
+
+
+    input('Continue?')
+    return
+
     plane = p.loadURDF("plane.urdf")
     table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
     #table = p.loadURDF("table_square/table_square.urdf")
@@ -30,9 +53,9 @@ def main():
 
     use_pr2_drake = False
     if use_pr2_drake:
-        pr2 = p.loadURDF("models/pr2_drake/urdf/pr2_simplified.urdf", useFixedBase=True)
+        pr2 = p.loadURDF("pr2_drake/urdf/pr2_simplified.urdf", useFixedBase=True)
     else:
-        pr2 = p.loadURDF("models/pr2_description/pr2.urdf", useFixedBase=True)
+        pr2 = p.loadURDF("pr2_description/pr2.urdf", useFixedBase=True)
 
     base_start = (-2, -2, 0)
     base_goal = (2, 2, 0)
