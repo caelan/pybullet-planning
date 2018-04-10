@@ -61,7 +61,7 @@ def main():
     #p.loadURDF("husky/husky.urdf", useFixedBase=True) # Car
     #p.loadURDF("kiva_shelf/model.sdf", useFixedBase=True) # Car
 
-    robot = load_model(KUKA_IIWA_URDF)
+    robot = load_model(KUKA_IIWA_URDF, fixed_base=False)
     floor = load_model('models/short_floor.urdf')
     dump_world()
 

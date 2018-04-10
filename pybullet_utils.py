@@ -1,6 +1,8 @@
+from __future__ import print_function
+
 import math
 import time
-from collections import defaultdict, deque
+from collections import defaultdict, deque, namedtuple
 from itertools import product
 
 # from future_builtins import map, filter
@@ -12,17 +14,17 @@ except NameError:
 
 import numpy as np
 import pybullet as p
-import pybullet_data
 import pickle
 from motion_planners.rrt_connect import birrt, direct_path
 from transformations import quaternion_from_matrix
 
 # https://stackoverflow.com/questions/21892989/what-is-the-good-python3-equivalent-for-auto-tuple-unpacking-in-lambda
 
-BASE_LIMITS = ([-2.5, -2.5, 0], [2.5, 2.5, 0])
 REVOLUTE_LIMITS = -np.pi, np.pi
 
 #####################################
+
+# I/O
 
 def write_pickle(filename, data):  # NOTE - cannot pickle lambda or nested functions
     with open(filename, 'wb') as f:
@@ -70,7 +72,7 @@ def get_data_path():
     return pybullet_data.getDataPath()
 
 def add_data_path():
-    return p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
+    return p.setAdditionalSearchPath(get_data_path())
 
 def enable_gravity():
     p.setGravity(0, 0, -10)
@@ -95,6 +97,20 @@ def reset_simulation():
 #####################################
 
 # Geometry
+
+def Point(x=0., y=0., z=0.):
+    return np.array([x, y, z])
+
+def Euler(roll=0., pitch=0., yaw=0.):
+    return np.array([roll, pitch, yaw])
+
+def Pose(point=None, euler=None):
+    point = Point() if point is None else point
+    euler = Euler() if euler is None else euler
+    return (point, quat_from_euler(euler))
+
+def Pose2d(x=0., y=0., yaw=0.):
+    return np.array([x, y, yaw])
 
 def invert(pose):
     (point, quat) = pose
@@ -130,7 +146,6 @@ def z_rotation(theta):
 def matrix_from_quat(quat):
     return p.getMatrixFromQuaternion(quat)
 
-
 def quat_from_matrix(mat):
     matrix = np.eye(4)
     matrix[:3,:3] = mat
@@ -154,7 +169,6 @@ def tform_from_pose(pose):
     tform[:3,3] = point
     tform[:3,:3] = matrix_from_quat(quat)
     return tform
-
 
 def pose_from_tform(tform):
     return point_from_tform(tform), quat_from_matrix(matrix_from_tform(tform))
@@ -182,11 +196,17 @@ def pose_from_base_values(base_values, default_pose):
 
 # Bodies
 
+def remove_body(body):
+    return p.removeBody(body)
+
 def get_num_bodies():
     return p.getNumBodies()
 
 def get_bodies():
     return list(range(get_num_bodies()))
+
+def get_base_link(body):
+    return p.getBodyInfo(body)[0]
 
 def get_body_name(body):
     return p.getBodyInfo(body)[1]
@@ -200,32 +220,21 @@ def body_from_name(name):
             return body
     raise ValueError(name)
 
-def get_base_link(body):
-    return p.getBodyInfo(body)[0]
-
 def get_point(body):
     return p.getBasePositionAndOrientation(body)[0]
 
 def get_quat(body):
-    return p.getBasePositionAndOrientation(body)[1]
+    return p.getBasePositionAndOrientation(body)[1] # [x,y,z,w]
 
 def get_pose(body):
     return p.getBasePositionAndOrientation(body)
-    #point, quat = p.getBasePositionAndOrientation(body) # [x,y,z,w]
     #return np.concatenate([point, quat])
 
 def get_base_values(body):
     return base_values_from_pose(get_pose(body))
 
-def set_base_values(body, values):
-    _, _, z = get_point(body)
-    x, y, theta = values
-    set_point(body, (x, y, z))
-    set_quat(body, z_rotation(theta))
-
 def set_point(body, point):
-    _, quat = p.getBasePositionAndOrientation(body)
-    p.resetBasePositionAndOrientation(body, point, quat)
+    p.resetBasePositionAndOrientation(body, point, get_quat(body))
 
 def set_quat(body, quat):
     p.resetBasePositionAndOrientation(body, get_point(body), quat)
@@ -234,17 +243,42 @@ def set_pose(body, pose):
     (point, quat) = pose
     p.resetBasePositionAndOrientation(body, point, quat)
 
+def set_base_values(body, values):
+    _, _, z = get_point(body)
+    x, y, theta = values
+    set_point(body, (x, y, z))
+    set_quat(body, z_rotation(theta))
+
 def dump_world():
     for body in get_bodies():
-        print(body, get_body_name(body), get_base_link(body))
+        print('Body id: {} | Name: {}: | Base link: {} | Rigid: {}'.format(
+            body, get_body_name(body), get_base_link(body), is_rigid_body(body)))
+        for joint in get_joints(body):
+            print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
+                joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
+                is_circular(body, joint), get_joint_limits(body, joint)))
+        print()
+
+def is_rigid_body(body):
+    for joint in get_joints(body):
+        if is_movable(body, joint):
+            return False
+    return True
 
 #####################################
 
 # Joints
 
+JOINT_TYPES = {
+    p.JOINT_REVOLUTE: 'revolute',
+    p.JOINT_PRISMATIC: 'prismatic',
+    p.JOINT_FIXED: 'fixed',
+    p.JOINT_SPHERICAL: 'spherical',
+    p.JOINT_PLANAR: 'planar'
+}
+
 def get_num_joints(body):
     return p.getNumJoints(body)
-
 
 def get_joints(body):
     return list(range(get_num_joints(body)))
@@ -283,10 +317,8 @@ def set_joint_positions(body, joints, values):
     for joint, value in zip(joints, values):
         set_joint_position(body, joint, value)
 
-
 def get_joint_type(body, joint):
     return p.getJointInfo(body, joint)[2]
-
 
 def is_movable(body, joint):
     return get_joint_type(body, joint) != p.JOINT_FIXED
@@ -294,22 +326,17 @@ def is_movable(body, joint):
 def get_movable_joints(body): # 45 / 87 on pr2
     return [joint for joint in get_joints(body) if is_movable(body, joint)]
 
-
 def joint_from_movable(body, index):
     return get_joints(body)[index]
 
-
 def is_circular(body, joint):
-    lower = p.getJointInfo(body, joint)[8]
-    upper = p.getJointInfo(body, joint)[9]
+    lower, upper = p.getJointInfo(body, joint)[8:10]
     return upper < lower
-
 
 def get_joint_limits(body, joint):
     if is_circular(body, joint):
         return REVOLUTE_LIMITS
     return p.getJointInfo(body, joint)[8:10]
-
 
 def get_min_limit(body, joint):
     return get_joint_limits(body, joint)[0]
@@ -319,6 +346,20 @@ def get_max_limit(body, joint):
 
 def get_max_velocity(body, joint):
     return p.getJointInfo(body, joint)[11]
+
+def get_joint_q_index(body, joint):
+    return p.getJointInfo(body, joint)[3]
+
+def get_joint_v_index(body, joint):
+    return p.getJointInfo(body, joint)[4]
+
+def get_joint_axis(body, joint):
+    return p.getJointInfo(body, joint)[13]
+
+def get_joint_parent_frame(body, joint):
+    point = p.getJointInfo(body, joint)[14]
+    euler = p.getJointInfo(body, joint)[15]
+    return (point, quat_from_euler(euler))
 
 def violates_limit(body, joint, value):
     if not is_circular(body, joint):
@@ -353,12 +394,15 @@ def link_from_name(body, name):
             return link
     raise ValueError(body, name)
 
-def get_link_pose(body, link): # Local vs world?
-    #point, quat = p.getLinkState(body, link)[0:2] # Local
-    #point, quat = p.getLinkState(body, link)[2:4] # World
-    point, quat = p.getLinkState(body, link)[4:6] # World
-    return point, quat
-    #return np.concatenate([point, quat])
+def get_com_pose(body, link): # COM = center of mass
+    return p.getLinkState(body, link)[0:2]
+
+def get_inertial_pose(body, link):
+    return p.getLinkState(body, link)[2:4]
+
+def get_link_pose(body, link):
+    # if set to 1 (or True), the Cartesian world position/orientation will be recomputed using forward kinematics.
+    return p.getLinkState(body, link)[4:6]
 
 def get_adjacent_links(body):
     adjacent = set()
@@ -400,6 +444,15 @@ def get_fixed_links(body):
 
 # Shapes
 
+SHAPE_TYPES = {
+    p.GEOM_SPHERE: 'sphere',
+    p.GEOM_BOX: 'box',
+    p.GEOM_CAPSULE: 'capsule',
+    p.GEOM_CYLINDER: 'cylinder',
+    p.GEOM_PLANE: 'plane',
+    p.GEOM_MESH: 'mesh',
+}
+
 def create_box(w, l, h, color=(1, 0, 0, 1)):
     half_extents = [w/2., l/2., h/2.]
     collision_id = p.createCollisionShape(p.GEOM_BOX, halfExtents=half_extents)
@@ -436,6 +489,13 @@ def create_plane():
 
 def get_shape_data(body):
     return p.getVisualShapeData(body)
+
+CollisionShapeData = namedtuple('CollisionShapeData', ['unique_id', 'link_index',
+                                                       'geometry_type', 'dimensions', 'filename',
+                                                       'local_frame_pos', 'local_frame_orn'])
+
+def get_collision_data(body, link=-1): # 1 for the base
+    return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link)]
 
 #####################################
 
@@ -542,48 +602,6 @@ def sample_joints(body, joints):
         values.append(np.random.uniform(*limits))
     return tuple(values)
 
-
-
-def plan_base_motion(body, end_conf, obstacles=None, direct=False, **kwargs):
-    def sample_fn():
-        x, y, _ = np.random.uniform(*BASE_LIMITS)
-        theta = np.random.uniform(*REVOLUTE_LIMITS)
-        return (x, y, theta)
-
-    def difference_fn(q2, q1):
-        #return np.array(q2) - np.array(q1)
-        dx, dy = np.array(q2[:2]) - np.array(q1[:2])
-        dtheta = circular_difference(q2[2], q1[2])
-        return (dx, dy, dtheta)
-
-    weights = 1*np.ones(3)
-    def distance_fn(q1, q2):
-        difference = np.array(difference_fn(q2, q1))
-        return np.sqrt(np.dot(weights, difference * difference))
-        #return np.linalg.norm(np.array(q2) - np.array(q1))
-
-    resolutions = 0.05*np.ones(3)
-    def extend_fn(q1, q2):
-        steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
-        n = int(np.max(steps)) + 1
-        q = q1
-        for i in range(n):
-            q = tuple((1. / (n - i)) * np.array(difference_fn(q2, q)) + q)
-            yield q
-            # TODO: should wrap these joints
-
-    def collision_fn(q):
-        set_base_values(body, q)
-        if obstacles is None:
-            return env_collision(body)
-        return any(pairwise_collision(body, obs) for obs in obstacles)
-
-    start_conf = get_base_values(body)
-    if direct:
-        return direct_path(start_conf, end_conf, extend_fn, collision_fn)
-    return birrt(start_conf, end_conf, distance_fn,
-                 sample_fn, extend_fn, collision_fn, **kwargs)
-
 def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kwargs):
     assert len(joints) == len(end_conf)
 
@@ -621,6 +639,47 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kw
         return any(pairwise_collision(body, obs) for obs in obstacles)
 
     start_conf = get_joint_positions(body, joints)
+    if direct:
+        return direct_path(start_conf, end_conf, extend_fn, collision_fn)
+    return birrt(start_conf, end_conf, distance_fn,
+                 sample_fn, extend_fn, collision_fn, **kwargs)
+
+def plan_base_motion(body, end_conf, obstacles=None, direct=False, **kwargs):
+    BASE_LIMITS = ([-2.5, -2.5, 0], [2.5, 2.5, 0])
+    def sample_fn():
+        x, y, _ = np.random.uniform(*BASE_LIMITS)
+        theta = np.random.uniform(*REVOLUTE_LIMITS)
+        return (x, y, theta)
+
+    def difference_fn(q2, q1):
+        #return np.array(q2) - np.array(q1)
+        dx, dy = np.array(q2[:2]) - np.array(q1[:2])
+        dtheta = circular_difference(q2[2], q1[2])
+        return (dx, dy, dtheta)
+
+    weights = 1*np.ones(3)
+    def distance_fn(q1, q2):
+        difference = np.array(difference_fn(q2, q1))
+        return np.sqrt(np.dot(weights, difference * difference))
+        #return np.linalg.norm(np.array(q2) - np.array(q1))
+
+    resolutions = 0.05*np.ones(3)
+    def extend_fn(q1, q2):
+        steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
+        n = int(np.max(steps)) + 1
+        q = q1
+        for i in range(n):
+            q = tuple((1. / (n - i)) * np.array(difference_fn(q2, q)) + q)
+            yield q
+            # TODO: should wrap these joints
+
+    def collision_fn(q):
+        set_base_values(body, q)
+        if obstacles is None:
+            return env_collision(body)
+        return any(pairwise_collision(body, obs) for obs in obstacles)
+
+    start_conf = get_base_values(body)
     if direct:
         return direct_path(start_conf, end_conf, extend_fn, collision_fn)
     return birrt(start_conf, end_conf, distance_fn,
