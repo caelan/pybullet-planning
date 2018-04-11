@@ -6,12 +6,8 @@ import pybullet as p
 import time
 import numpy as np
 
-from pr2_utils import TOP_HOLDING_LEFT_ARM, ARM_JOINT_NAMES, TORSO_JOINT_NAME, \
-    REST_RIGHT_ARM, SIDE_HOLDING_LEFT_ARM, BASE_JOINT_NAMES
-from pybullet_utils import set_base_values, joint_from_name, set_joint_position, \
-    set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
-    joint_controller, disconnect, wait_for_interrupt, create_sphere, set_point, Point, \
-    enable_real_time, wait_for_duration, dump_world
+from pybullet_utils import add_data_path, connect, enable_gravity, input, disconnect, create_sphere, set_point, Point, \
+    enable_real_time, dump_world
 
 
 def main():
@@ -42,10 +38,10 @@ def main():
     dt = 1. / 240
     #dt = 0
     print('dt:', dt)
+    enable_gravity()
     #wait_for_duration(5.0, dt=dt)
 
     enable_real_time()
-    enable_gravity()
     try:
         while True:
             enable_gravity() # enable_real_time requires a command
@@ -54,14 +50,10 @@ def main():
         pass
     print()
 
-
-    #enable_real_time()
     #time.sleep(1.0)
     #wait_for_interrupt()
     input('Finish?')
     disconnect()
-
-
 
 if __name__ == '__main__':
     main()

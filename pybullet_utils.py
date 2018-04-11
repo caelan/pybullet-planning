@@ -332,7 +332,7 @@ def set_base_values(body, values):
 def dump_world():
     for body in get_bodies():
         print('Body id: {} | Name: {}: | Rigid: {} | Fixed: {}'.format(
-            body, get_body_name(body), is_rigid_body(body), is_fixed_body(body)))
+            body, get_body_name(body), is_rigid_body(body), is_fixed_base(body)))
         for joint in get_joints(body):
             print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
                 joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
@@ -348,8 +348,8 @@ def is_rigid_body(body):
             return False
     return True
 
-def is_fixed_body(body):
-    return get_mass(body) == 0
+def is_fixed_base(body):
+    return get_mass(body) == STATIC_MASS
 
 #####################################
 
@@ -559,7 +559,7 @@ SHAPE_TYPES = {
     p.GEOM_MESH: 'mesh',
 }
 
-def create_box(w, l, h, mass=0, color=(1, 0, 0, 1)):
+def create_box(w, l, h, mass=STATIC_MASS, color=(1, 0, 0, 1)):
     half_extents = [w/2., l/2., h/2.]
     collision_id = p.createCollisionShape(p.GEOM_BOX, halfExtents=half_extents)
     if (color is None) or not has_gui():
@@ -574,16 +574,25 @@ def create_mesh():
     raise NotImplementedError()
 
 
-def create_cylinder(radius, height):
+def create_cylinder(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
     collision_id =  p.createCollisionShape(p.GEOM_CYLINDER, radius=radius, height=height)
-    raise NotImplementedError()
+    if (color is None) or not has_gui():
+        visual_id = -1
+    else:
+        visual_id = p.createVisualShape(p.GEOM_CYLINDER, radius=radius, height=height, rgbaColor=color)
+    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
+                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
 
-
-def create_capsule(radius, height):
+def create_capsule(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
     collision_id = p.createCollisionShape(p.GEOM_CAPSULE, radius=radius, height=height)
-    raise NotImplementedError()
+    if (color is None) or not has_gui():
+        visual_id = -1
+    else:
+        visual_id = p.createVisualShape(p.GEOM_CAPSULE, radius=radius, height=height, rgbaColor=color)
+    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
+                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
 
-def create_sphere(radius, mass=0, color=(0, 0, 1, 1)):
+def create_sphere(radius, mass=STATIC_MASS, color=(0, 0, 1, 1)):
     # mass = 0  => static
     collision_id = p.createCollisionShape(p.GEOM_SPHERE, radius=radius)
     if (color is None) or not has_gui():
@@ -592,7 +601,6 @@ def create_sphere(radius, mass=0, color=(0, 0, 1, 1)):
         visual_id = p.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color)
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
-
 
 def create_plane():
     collision_id = p.createVisualShape(p.GEOM_PLANE, normal=[])
