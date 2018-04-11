@@ -33,7 +33,7 @@ def get_fixed_bodies(problem):
     return filter(lambda b: b not in movable, get_bodies())
 
 def create_pr2(fixed_torso=True, fixed_base=True):
-    pr2_path = "pr2_description/pr2_fixed_torso.urdf" if fixed_torso else "pr2_description/pr2.urdf"
+    pr2_path = "models/pr2_description/pr2_fixed_torso.urdf" if fixed_torso else "models/pr2_description/pr2.urdf"
     return p.loadURDF(pr2_path, useFixedBase=fixed_base) # Fixed base ensures the robot doesn't fall over
 
 def create_floor():
@@ -152,7 +152,7 @@ def cleaning_button_problem(arm='left', grasp_type='top'):
     other_arm = get_other_arm(arm)
     initial_conf = get_carry_conf(arm, grasp_type)
 
-    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf", useFixedBase=True)
+    pr2 = create_pr2(fixed_torso=True)
     set_arm_conf(pr2, arm, initial_conf)
     open_arm(pr2, arm)
     set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))
@@ -176,7 +176,7 @@ def cooking_button_problem(arm='left', grasp_type='top'):
     other_arm = get_other_arm(arm)
     initial_conf = get_carry_conf(arm, grasp_type)
 
-    pr2 = p.loadURDF("pr2_description/pr2_fixed_torso.urdf", useFixedBase=True)
+    pr2 = create_pr2(fixed_torso=True)
     set_arm_conf(pr2, arm, initial_conf)
     open_arm(pr2, arm)
     set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))

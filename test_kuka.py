@@ -18,7 +18,7 @@ from pybullet_utils import GraspInfo, link_from_name, WorldSaver
 from pybullet_utils import connect, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
     BLOCK_URDF, get_configuration, get_link_pose, get_refine_fn, \
     SINK_URDF, STOVE_URDF, load_model, wait_for_interrupt, is_placement, sample_placement, wait_for_duration, \
-    set_joint_positions, get_body_name, disconnect, \
+    set_joint_positions, get_body_name, disconnect, clone_body, JOINT_TYPES, get_data_path, \
     get_movable_joints, DRAKE_IIWA_URDF, INF, plan_joint_motion, end_effector_from_body, \
     body_from_end_effector, approach_from_grasp, joint_controller, get_constraints, grasp_constraint
 from pybullet_utils import get_bodies, input
@@ -449,6 +449,8 @@ def load_world():
     sink = load_model(SINK_URDF, pose=Pose(Point(x=-0.5)))
     stove = load_model(STOVE_URDF, pose=Pose(Point(x=+0.5)))
     block = load_model(BLOCK_URDF, fixed_base=False)
+    #cup = load_model('models/dinnerware/cup/cup_small.urdf',
+    # Pose(Point(x=+0.5, y=+0.5, z=0.5)), fixed_base=False)
 
     set_pose(block, Pose(Point(y=0.5, z=stable_z(block, floor))))
     # print(get_camera())
@@ -464,6 +466,11 @@ def main():
 
     connect(use_gui=args.viewer)
     robot, block = load_world()
+
+    #robot2 = clone_body(robot)
+    #block2 = clone_body(block)
+    #dump_world()
+
     saved_world = WorldSaver()
     dump_world()
 

@@ -77,9 +77,14 @@ def load_model(model_file, pose=None, fixed_base=True):
 def wait_for_duration(duration, dt=0):
     t0 = time.time()
     while (time.time() - t0) <= duration:
+        disable_gravity()
+    # TODO: wait until keypress
+
+def simulate_for_duration(duration, dt=0):
+    t0 = time.time()
+    while (time.time() - t0) <= duration:
         step_simulation()
         time.sleep(dt)
-    # TODO: wait until keypress
 
 def wait_for_interrupt(max_time=np.inf):
     print('Press Ctrl-C to continue')
@@ -140,7 +145,7 @@ def add_data_path():
     return p.setAdditionalSearchPath(get_data_path())
 
 def enable_gravity():
-    p.setGravity(0, 0, -10)
+    p.setGravity(0, 0, -9.8)
 
 def disable_gravity():
     p.setGravity(0, 0, 0)
@@ -168,7 +173,7 @@ def reset_simulation():
 def get_camera():
     return p.getDebugVisualizerCamera()
 
-def set_camera(yaw, pitch, distance, target_position):
+def set_camera(yaw, pitch, distance, target_position=np.zeros(3)):
     p.resetDebugVisualizerCamera(distance, yaw, pitch, target_position)
 
 def set_default_camera():
@@ -285,14 +290,19 @@ def get_num_bodies():
 def get_bodies():
     return list(range(get_num_bodies()))
 
+BodyInfo = namedtuple('BodyInfo', ['base_name', 'body_name'])
+
+def get_body_info(body):
+    return BodyInfo(*p.getBodyInfo(body))
+
 def get_base_name(body):
-    return p.getBodyInfo(body)[0]
+    return get_body_info(body).base_name
 
 def get_body_name(body):
-    return p.getBodyInfo(body)[1]
+    return get_body_info(body).body_name
 
-def get_body_names():
-    return map(get_body_name, get_bodies())
+#def get_body_names():
+#    return map(get_body_name, get_bodies())
 
 def body_from_name(name):
     for body in range(get_num_bodies()):
@@ -329,9 +339,18 @@ def set_base_values(body, values):
     set_point(body, (x, y, z))
     set_quat(body, z_rotation(theta))
 
+def is_rigid_body(body):
+    for joint in get_joints(body):
+        if is_movable(body, joint):
+            return False
+    return True
+
+def is_fixed_base(body):
+    return get_mass(body) == STATIC_MASS
+
 def dump_world():
     for body in get_bodies():
-        print('Body id: {} | Name: {}: | Rigid: {} | Fixed: {}'.format(
+        print('Body id: {} | Name: {} | Rigid: {} | Fixed: {}'.format(
             body, get_body_name(body), is_rigid_body(body), is_fixed_base(body)))
         for joint in get_joints(body):
             print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
@@ -342,15 +361,6 @@ def dump_world():
             print('Link id: {} | Name: {} | Mass: {}'.format(link, get_link_name(body, link), get_mass(body, link)))
         print()
 
-def is_rigid_body(body):
-    for joint in get_joints(body):
-        if is_movable(body, joint):
-            return False
-    return True
-
-def is_fixed_base(body):
-    return get_mass(body) == STATIC_MASS
-
 #####################################
 
 # Joints
@@ -360,7 +370,9 @@ JOINT_TYPES = {
     p.JOINT_PRISMATIC: 'prismatic',
     p.JOINT_FIXED: 'fixed',
     p.JOINT_SPHERICAL: 'spherical',
-    p.JOINT_PLANAR: 'planar'
+    p.JOINT_PLANAR: 'planar',
+    p.JOINT_POINT2POINT: 'point2point',
+    p.JOINT_GEAR: 'gear',
 }
 
 def get_num_joints(body):
@@ -374,11 +386,20 @@ def get_joint(body, joint_or_name):
         return joint_from_name(body, joint_or_name)
     return joint_or_name
 
-def get_joint_name(body, joint):
-    return p.getJointInfo(body, joint)[1].decode('UTF-8')
+JointInfo = namedtuple('JointInfo', ['jointIndex', 'jointName', 'jointType',
+                                     'qIndex', 'uIndex', 'flags',
+                                     'jointDamping', 'jointFriction', 'jointLowerLimit', 'jointUpperLimit',
+                                     'jointMaxForce', 'jointMaxVelocity', 'linkName', 'jointAxis',
+                                     'parentFramePos', 'parentFrameOrn', 'parentIndex'])
 
-def get_joint_names(body):
-    return [get_joint_name(body, joint) for joint in get_joints(body)]
+def get_joint_info(body, joint):
+    return JointInfo(*p.getJointInfo(body, joint))
+
+def get_joint_name(body, joint):
+    return get_joint_info(body, joint).jointName.decode('UTF-8')
+
+#def get_joint_names(body):
+#    return [get_joint_name(body, joint) for joint in get_joints(body)]
 
 def joint_from_name(body, name):
     for joint in get_joints(body):
@@ -410,7 +431,7 @@ def set_configuration(body, values):
     set_joint_positions(body, get_movable_joints(body), values)
 
 def get_joint_type(body, joint):
-    return p.getJointInfo(body, joint)[2]
+    return get_joint_info(body, joint).jointType
 
 def is_movable(body, joint):
     return get_joint_type(body, joint) != p.JOINT_FIXED
@@ -422,13 +443,14 @@ def joint_from_movable(body, index):
     return get_joints(body)[index]
 
 def is_circular(body, joint):
-    lower, upper = p.getJointInfo(body, joint)[8:10]
-    return upper < lower
+    joint_info = get_joint_info(body, joint)
+    return joint_info.jointUpperLimit < joint_info.jointLowerLimit
 
 def get_joint_limits(body, joint):
     if is_circular(body, joint):
         return REVOLUTE_LIMITS
-    return p.getJointInfo(body, joint)[8:10]
+    joint_info = get_joint_info(body, joint)
+    return joint_info.jointLowerLimit, joint_info.jointUpperLimit
 
 def get_min_limit(body, joint):
     return get_joint_limits(body, joint)[0]
@@ -437,20 +459,21 @@ def get_max_limit(body, joint):
     return get_joint_limits(body, joint)[1]
 
 def get_max_velocity(body, joint):
-    return p.getJointInfo(body, joint)[11]
+    return get_joint_info(body, joint).jointMaxVelocity
 
 def get_joint_q_index(body, joint):
-    return p.getJointInfo(body, joint)[3]
+    return get_joint_info(body, joint).qIndex
 
 def get_joint_v_index(body, joint):
-    return p.getJointInfo(body, joint)[4]
+    return get_joint_info(body, joint).uIndex
 
 def get_joint_axis(body, joint):
-    return p.getJointInfo(body, joint)[13]
+    return get_joint_info(body, joint).jointAxis
 
 def get_joint_parent_frame(body, joint):
-    point = p.getJointInfo(body, joint)[14]
-    euler = p.getJointInfo(body, joint)[15]
+    joint_info = get_joint_info(body, joint)
+    point = joint_info.parentFramePos
+    euler = joint_info.parentFrameOrn
     return (point, quat_from_euler(euler))
 
 def violates_limit(body, joint, value):
@@ -478,10 +501,10 @@ STATIC_MASS = 0
 get_links = get_joints
 
 def get_link_name(body, link):
-    return p.getJointInfo(body, link)[12]
+    return get_joint_info(body, link).linkName
 
 def get_link_parent(body, joint):
-    return p.getJointInfo(body, joint)[16]
+    return get_joint_info(body, joint).parentIndex
 
 def link_from_name(body, name):
     for link in get_joints(body):
@@ -489,15 +512,25 @@ def link_from_name(body, name):
             return link
     raise ValueError(body, name)
 
+LinkState = namedtuple('LinkState', ['linkWorldPosition', 'linkWorldOrientation',
+                                     'localInertialFramePosition', 'localInertialFrameOrientation',
+                                     'worldLinkFramePosition', 'worldLinkFrameOrientation'])
+
+def get_link_state(body, link):
+    return LinkState(*p.getLinkState(body, link))
+
 def get_com_pose(body, link): # COM = center of mass
-    return p.getLinkState(body, link)[0:2]
+    link_state = get_link_state(body, link)
+    return link_state.linkWorldPosition, link_state.linkWorldOrientation
 
 def get_inertial_pose(body, link):
-    return p.getLinkState(body, link)[2:4]
+    link_state = get_link_state(body, link)
+    return link_state.localInertialFramePosition, link_state.localInertialFrameOrientation
 
 def get_link_pose(body, link):
     # if set to 1 (or True), the Cartesian world position/orientation will be recomputed using forward kinematics.
-    return p.getLinkState(body, link)[4:6]
+    link_state = get_link_state(body, link)
+    return link_state.worldLinkFramePosition, link_state.worldLinkFrameOrientation
 
 def get_adjacent_links(body):
     adjacent = set()
@@ -570,10 +603,6 @@ def create_box(w, l, h, mass=STATIC_MASS, color=(1, 0, 0, 1)):
                              baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
     # linkCollisionShapeIndices | linkVisualShapeIndices
 
-def create_mesh():
-    raise NotImplementedError()
-
-
 def create_cylinder(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
     collision_id =  p.createCollisionShape(p.GEOM_CYLINDER, radius=radius, height=height)
     if (color is None) or not has_gui():
@@ -602,19 +631,185 @@ def create_sphere(radius, mass=STATIC_MASS, color=(0, 0, 1, 1)):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
 
-def create_plane():
-    collision_id = p.createVisualShape(p.GEOM_PLANE, normal=[])
+def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(.5, .5, .5, 1)):
+    collision_id = p.createCollisionShape(p.GEOM_PLANE, normal=normal)
+    if (color is None) or not has_gui():
+        visual_id = -1
+    else:
+        visual_id = p.createVisualShape(p.GEOM_PLANE, normal=normal, rgbaColor=color)
+    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
+                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
+
+
+def create_mesh(filename, scale=1):
+    collision_id = p.createVisualShape(p.GEOM_MESH, fileName=filename, meshScale=scale*np.ones(3))
     raise NotImplementedError()
 
-def get_shape_data(body):
-    return p.getVisualShapeData(body)
+VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
+                                                 'visualGeometryType', 'dimensions', 'meshAssetFileName',
+                                                 'localVisualFrame_position', 'localVisualFrame_orientation',
+                                                 'rgbaColor'])
 
-CollisionShapeData = namedtuple('CollisionShapeData', ['unique_id', 'link_index',
+def visual_shape_from_data(data):
+    return p.createVisualShape(shapeType=data.visualGeometryType,
+                                  radius=get_data_radius(data.visualGeometryType, data.dimensions),
+                                  halfExtents=get_data_extents(data.visualGeometryType, data.dimensions),
+                                  length=get_data_height(data.visualGeometryType, data.dimensions),
+                                  fileName=data.meshAssetFileName,
+                                  meshScale=get_data_scale(data.visualGeometryType, data.dimensions),
+                                  planeNormal=get_data_normal(data.visualGeometryType, data.dimensions),
+                                   rgbaColor=data.rgbaColor,
+                                #specularColor=,
+                                   visualFramePosition=data.localVisualFrame_position,
+                                   visualFrameOrientation=data.localVisualFrame_orientation)
+
+def get_visual_data(body, link=BASE_LINK):
+    visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body)]
+    return filter(lambda d: d.linkIndex == link, visual_data)
+
+CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'linkIndex',
                                                        'geometry_type', 'dimensions', 'filename',
                                                        'local_frame_pos', 'local_frame_orn'])
 
-def get_collision_data(body, link=-1): # 1 for the base
+def collision_shape_from_data(data):
+    return p.createCollisionShape(shapeType=data.geometry_type,
+                                  radius=get_data_radius(data.geometry_type, data.dimensions),
+                                  halfExtents=get_data_extents(data.geometry_type, data.dimensions),
+                                  height=get_data_height(data.geometry_type, data.dimensions),
+                                  fileName=data.filename,
+                                  meshScale=get_data_scale(data.geometry_type, data.dimensions),
+                                  planeNormal=get_data_normal(data.geometry_type, data.dimensions),
+                                  collisionFramePosition=data.local_frame_pos,
+                                  collisionFrameOrientation=data.local_frame_pos)
+    #return p.createCollisionShapeArray()
+
+#import pybullet_envs
+import pybullet_utils # urdfEditor
+
+def clone_body(body, collision=False, visual=False):
+    # TODO: names are not retained
+    def clone_collision_shape(link=BASE_LINK):
+        if not collision:
+            return -1
+        collision_data = get_collision_data(body, link)
+        if collision_data:
+            assert (len(collision_data) == 1)
+            return collision_shape_from_data(collision_data[0])
+        return -1
+
+    def clone_visual_shape(link=BASE_LINK):
+        if not visual or not has_gui():
+            return -1
+        visual_data = get_visual_data(body, link)
+        if visual_data:
+            assert (len(visual_data) == 1)
+            return visual_shape_from_data(visual_data[0])
+        return -1
+
+    masses = []
+    collision_shapes = []
+    visual_shapes = []
+    positions = []
+    orientations = []
+    inertial_positions = []
+    inertial_orientations = []
+    parent_indices = []
+    joint_types = []
+    joint_axes = []
+    for link in get_links(body):
+        joint_info = get_joint_info(body, link)
+        dynamics_info = get_dynamics_info(body, link)
+        masses.append(dynamics_info.mass)
+        collision_shapes.append(clone_collision_shape(link))
+        visual_shapes.append(clone_visual_shape(link))
+        positions.append(joint_info.parentFramePos)
+        orientations.append(joint_info.parentFrameOrn)
+        inertial_positions.append(dynamics_info.local_inertial_pos)
+        inertial_orientations.append(dynamics_info.local_inertial_orn)
+        parent_indices.append(joint_info.parentIndex)
+        joint_types.append(joint_info.jointType)
+        joint_axes.append(joint_info.jointAxis)
+    # print(masses,
+    # collision_shapes,
+    # visual_shapes,
+    # positions,
+    # orientations,
+    # inertial_positions,
+    # inertial_orientations,
+    # parent_indices,
+    # joint_types,
+    # joint_axes)
+
+    base_dynamics_info = get_dynamics_info(body)
+    return p.createMultiBody(baseMass=base_dynamics_info.mass,
+                             baseCollisionShapeIndex=clone_collision_shape(),
+                             baseVisualShapeIndex=clone_visual_shape(),
+                             basePosition=get_point(body),
+                             baseOrientation=get_quat(body),
+                             baseInertialFramePosition=base_dynamics_info.local_inertial_pos,
+                             baseInertialFrameOrientation=base_dynamics_info.local_inertial_orn,
+                             linkMasses=masses,
+                             linkCollisionShapeIndices=collision_shapes,
+                             linkVisualShapeIndices=visual_shapes,
+                             linkPositions=positions,
+                             linkOrientations=orientations,
+                             linkInertialFramePositions=inertial_positions,
+                             linkInertialFrameOrientations=inertial_orientations,
+                             linkParentIndices=parent_indices,
+                             linkJointTypes=joint_types,
+                             linkJointAxis=joint_axes,
+                             useMaximalCoordinates=0)
+
+def get_collision_data(body, link=BASE_LINK):
     return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link)]
+
+def get_data_extents(geometry_type, dimensions):
+    """
+    depends on geometry type:
+    for GEOM_BOX: extents,
+    for GEOM_SPHERE dimensions[0] = radius,
+    for GEOM_CAPSULE and GEOM_CYLINDER, dimensions[0] = height (length), dimensions[1] = radius.
+    For GEOM_MESH, dimensions is the scaling factor.
+    :return:
+    """
+    if geometry_type == p.GEOM_BOX:
+        return dimensions
+    return [1, 1, 1]
+
+def get_data_radius(geometry_type, dimensions):
+    if geometry_type == p.GEOM_SPHERE:
+        return dimensions[0]
+    if geometry_type in (p.GEOM_SPHERE, p.GEOM_CAPSULE):
+        return dimensions[1]
+    return 0.5
+
+def get_data_height(geometry_type, dimensions):
+    if geometry_type in (p.GEOM_SPHERE, p.GEOM_CAPSULE):
+        return dimensions[0]
+    return 1
+
+def get_data_scale(geometry_type, dimensions):
+    if geometry_type == p.GEOM_MESH:
+        return dimensions
+    return [1, 1, 1]
+
+def get_data_normal(geometry_type, dimensions):
+    if geometry_type == p.GEOM_PLANE:
+        return dimensions
+    return [0, 0, 1]
+
+def set_color(body, color, link=BASE_LINK, shape_index=-1):
+    """
+    Experimental for internal use, recommended ignore shapeIndex or leave it -1.
+    Intention was to let you pick a specific shape index to modify,
+    since URDF (and SDF etc) can have more than 1 visual shape per link.
+    This shapeIndex matches the list ordering returned by getVisualShapeData.
+    :param body:
+    :param link:
+    :param shape_index:
+    :return:
+    """
+    return p.changeVisualShape(body, link, rgbaColor=color)
 
 #####################################
 
@@ -622,6 +817,8 @@ def get_collision_data(body, link=-1): # 1 for the base
 
 def get_lower_upper(body):
     return p.getAABB(body)
+
+get_aabb = get_lower_upper
 
 def get_center_extent(body):
     lower, upper = get_lower_upper(body)
@@ -638,10 +835,13 @@ def aabb_contains(contained, container):
     lower2, upper2 = container
     return np.all(lower2 <= lower1) and np.all(upper1 <= upper2)
 
+def get_bodies_in_region(aabb):
+    (lower, upper) = aabb
+    return p.getOverlappingObjects(lower, upper)
+
 #####################################
 
 # Collision
-
 
 def contact_collision():
     p.stepSimulation()
@@ -922,7 +1122,7 @@ ConstraintInfo = namedtuple('ConstraintInfo', ['parentBodyUniqueId', 'parentJoin
                                                'jointFrameOrientationParent', 'jointFrameOrientationChild', 'maxAppliedForce'])
 
 def get_constraint_info(constraint):
-    return [ConstraintInfo(*tup) for tup in p.getConstraintInfo(constraint)]
+    return ConstraintInfo(*p.getConstraintInfo(constraint))
 
 def fixed_constraint(parent_body, link1, child_body, link2):
     return p.createConstraint(parent_body, link1, child_body, link2,
@@ -931,7 +1131,7 @@ def fixed_constraint(parent_body, link1, child_body, link2):
                               childFramePosition=[0]*3)
 
 def grasp_constraint(body, robot, robot_link):
-    body_link = -1
+    body_link = BASE_LINK
     body_pose = get_pose(body)
     end_effector_pose = get_link_pose(robot, robot_link)
     grasp_pose = multiply(invert(end_effector_pose), body_pose)
