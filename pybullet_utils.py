@@ -876,15 +876,51 @@ def sample_reachable_base(robot, point, reachable_range=(0.25, 1.0), max_attempt
 
 # Constraints
 
+def get_constraints():
+    return list(range(p.getNumConstraints()))
+
 def remove_constraint(constraint):
     p.removeConstraint(constraint)
 
+ConstraintInfo = namedtuple('ConstraintInfo', ['parentBodyUniqueId', 'parentJointIndex',
+                                               'childBodyUniqueId', 'childLinkIndex', 'constraintType',
+                                               'jointAxis', 'jointPivotInParent', 'jointPivotInChild',
+                                               'jointFrameOrientationParent', 'jointFrameOrientationChild', 'maxAppliedForce'])
 
-def fixed_constraint(body1, link1, body2, link2):
-    return p.createConstraint(body1, link1, body2, link2,
-                              p.JOINT_FIXED, jointAxis=[0]*3, # JOINT_FIXED
+def get_constraint_info(constraint):
+    return [ConstraintInfo(*tup) for tup in p.getConstraintInfo(constraint)]
+
+def fixed_constraint(parent_body, link1, child_body, link2):
+    return p.createConstraint(parent_body, link1, child_body, link2,
+                              p.JOINT_FIXED, jointAxis=[0]*3,  # JOINT_FIXED
                               parentFramePosition=[0]*3,
                               childFramePosition=[0]*3)
+
+def grasp_constraint(body, robot, robot_link):
+    body_link = -1
+    body_pose = get_pose(body)
+    end_effector_pose = get_link_pose(robot, robot_link)
+    grasp_pose = multiply(invert(end_effector_pose), body_pose)
+    point, quat = grasp_pose
+    # TODO: can I do this when I'm not adjacent?
+    # joint axis in local frame (ignored for JOINT_FIXED)
+    #return p.createConstraint(robot, robot_link, body, body_link,
+    #                          p.JOINT_FIXED, jointAxis=unit_point(),
+    #                          parentFramePosition=unit_point(),
+    #                          childFramePosition=point,
+    #                          parentFrameOrientation=unit_quat(),
+    #                          childFrameOrientation=quat)
+    return p.createConstraint(robot, robot_link, body, body_link, # Both seem to work
+                              p.JOINT_FIXED, jointAxis=unit_point(),
+                              parentFramePosition=point,
+                              childFramePosition=unit_point(),
+                              parentFrameOrientation=quat,
+                              childFrameOrientation=unit_quat())
+
+def get_grasp_constraints():
+    pass
+
+
 
 #####################################
 

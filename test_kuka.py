@@ -20,7 +20,7 @@ from pybullet_utils import connect, dump_world, get_pose, set_pose, Pose, Point,
     SINK_URDF, STOVE_URDF, load_model, wait_for_interrupt, is_placement, sample_placement, wait_for_duration, \
     set_joint_positions, get_body_name, disconnect, \
     get_movable_joints, DRAKE_IIWA_URDF, INF, plan_joint_motion, end_effector_from_body, \
-    body_from_end_effector, approach_from_grasp, joint_controller
+    body_from_end_effector, approach_from_grasp, joint_controller, get_constraints, grasp_constraint
 from pybullet_utils import get_bodies, input
 
 GRASP_INFO = {
@@ -88,6 +88,8 @@ class BodyGrasp(object):
         self.approach_pose = approach_pose
         self.robot = robot
         self.link = link
+    #def constraint(self):
+    #    grasp_constraint()
     def assign(self):
         end_effector_pose = get_link_pose(self.robot, self.link)
         body_pose = body_from_end_effector(end_effector_pose, self.grasp_pose)
@@ -125,6 +127,9 @@ class BodyPath(object):
             yield i
     def control(self): # TODO: real_time
         # TODO: just waypoints
+        if not get_constraints():
+            for grasp in self.grasps:
+                grasp_constraint(grasp.body, grasp.robot, grasp.link)
         for values in self.path:
             for _ in joint_controller(self.body, self.joints, values):
                 p.stepSimulation()
@@ -443,7 +448,7 @@ def load_world():
     floor = load_model('models/short_floor.urdf')
     sink = load_model(SINK_URDF, pose=Pose(Point(x=-0.5)))
     stove = load_model(STOVE_URDF, pose=Pose(Point(x=+0.5)))
-    block = load_model(BLOCK_URDF)
+    block = load_model(BLOCK_URDF, fixed_base=False)
 
     set_pose(block, Pose(Point(y=0.5, z=stable_z(block, floor))))
     # print(get_camera())
