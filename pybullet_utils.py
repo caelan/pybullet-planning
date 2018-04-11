@@ -24,6 +24,22 @@ REVOLUTE_LIMITS = -np.pi, np.pi
 
 #####################################
 
+# Models
+
+KUKA_IIWA_URDF = "kuka_iiwa/model.urdf"
+KUKA_IIWA_GRIPPER_SDF = "kuka_iiwa/kuka_with_gripper.sdf"
+R2D2_URDF = "r2d2.urdf"
+MINITAUR_URDF = "quadruped/minitaur.urdf"
+HUMANOID_MJCF = "mjcf/humanoid.xml"
+HUSKY_URDF = "husky/husky.urdf"
+KIVA_SHELF_SDF = "kiva_shelf/model.sdf"
+SMALL_BLOCK_URDF = "models/drake/objects/block_for_pick_and_place.urdf"
+BLOCK_URDF = "models/drake/objects/block_for_pick_and_place_mid_size.urdf"
+SINK_URDF = 'models/sink.urdf'
+STOVE_URDF = 'models/stove.urdf'
+
+#####################################
+
 # I/O
 
 def write_pickle(filename, data):  # NOTE - cannot pickle lambda or nested functions
@@ -37,6 +53,36 @@ def read_pickle(filename):
 #####################################
 
 # Simulation
+
+def load_model(model_file, pose=None, fixed_base=True):
+    add_data_path()
+    if model_file.endswith('.urdf'):
+        body = p.loadURDF(model_file, useFixedBase=fixed_base)
+    elif model_file.endswith('.sdf'):
+        body = p.loadSDF(model_file)
+    elif model_file.endswith('.xml'):
+        body = p.loadMJCF(model_file)
+    elif model_file.endswith('.bullet'):
+        body = p.loadBullet(model_file)
+    else:
+        raise ValueError(model_file)
+    if pose is not None:
+        set_pose(body, pose)
+    return body
+
+def wait(max_time):
+    t0 = time.time()
+    while (time.time() - t0) <= max_time:
+        step_simulation()
+
+def wait_for_interrupt(max_time=np.inf):
+    print('Press Ctrl-C to continue')
+    try:
+        wait(max_time)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print()
 
 def connect(use_gui=True, shadows=True):
     sim_id = p.connect(p.GUI) if use_gui else p.connect(p.DIRECT)
