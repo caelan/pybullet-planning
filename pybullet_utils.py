@@ -74,10 +74,11 @@ def load_model(model_file, pose=None, fixed_base=True):
         set_pose(body, pose)
     return body
 
-def wait_for_duration(duration):
+def wait_for_duration(duration, dt=0):
     t0 = time.time()
     while (time.time() - t0) <= duration:
         step_simulation()
+        time.sleep(dt)
     # TODO: wait until keypress
 
 def wait_for_interrupt(max_time=np.inf):
@@ -147,8 +148,11 @@ def disable_gravity():
 def step_simulation():
     p.stepSimulation()
 
-def set_real_time(real_time=True):
-    p.setRealTimeSimulation(real_time)
+def enable_real_time():
+    p.setRealTimeSimulation(1)
+
+def disable_real_time():
+    p.setRealTimeSimulation(0)
 
 def update_state():
     for body in get_bodies():
@@ -281,7 +285,7 @@ def get_num_bodies():
 def get_bodies():
     return list(range(get_num_bodies()))
 
-def get_base_link(body):
+def get_base_name(body):
     return p.getBodyInfo(body)[0]
 
 def get_body_name(body):
@@ -327,15 +331,15 @@ def set_base_values(body, values):
 
 def dump_world():
     for body in get_bodies():
-        print('Body id: {} | Name: {}: | Rigid: {}'.format(
-            body, get_body_name(body), is_rigid_body(body)))
+        print('Body id: {} | Name: {}: | Rigid: {} | Fixed: {}'.format(
+            body, get_body_name(body), is_rigid_body(body), is_fixed_body(body)))
         for joint in get_joints(body):
             print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
                 joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
                 is_circular(body, joint), get_joint_limits(body, joint)))
-        print('Link id: {} | Name: {}'.format(-1, get_base_link(body)))
+        print('Link id: {} | Name: {} | Mass: {}'.format(-1, get_base_name(body), get_mass(body)))
         for link in get_links(body):
-            print('Link id: {} | Name: {}'.format(link, get_link_name(body, link)))
+            print('Link id: {} | Name: {} | Mass: {}'.format(link, get_link_name(body, link), get_mass(body, link)))
         print()
 
 def is_rigid_body(body):
@@ -343,6 +347,9 @@ def is_rigid_body(body):
         if is_movable(body, joint):
             return False
     return True
+
+def is_fixed_body(body):
+    return get_mass(body) == 0
 
 #####################################
 
@@ -465,6 +472,9 @@ def wrap_joint(body, joint, value):
 
 # Links
 
+BASE_LINK = -1
+STATIC_MASS = 0
+
 get_links = get_joints
 
 def get_link_name(body, link):
@@ -525,6 +535,17 @@ def get_fixed_links(body):
         fixed.update(product(cluster, cluster))
     return fixed
 
+DynamicsInfo = namedtuple('DynamicsInfo', ['mass', 'lateral_friction',
+                                           'local_inertia_diagonal', 'local_inertial_pos',  'local_inertial_orn',
+                                           'restitution', 'rolling_friction', 'spinning_friction',
+                                           'contact_damping', 'contact_stiffness'])
+
+def get_dynamics_info(body, link=BASE_LINK):
+    return DynamicsInfo(*p.getDynamicsInfo(body, link))
+
+def get_mass(body, link=BASE_LINK):
+    return get_dynamics_info(body, link).mass
+
 #####################################
 
 # Shapes
@@ -538,14 +559,14 @@ SHAPE_TYPES = {
     p.GEOM_MESH: 'mesh',
 }
 
-def create_box(w, l, h, color=(1, 0, 0, 1)):
+def create_box(w, l, h, mass=0, color=(1, 0, 0, 1)):
     half_extents = [w/2., l/2., h/2.]
     collision_id = p.createCollisionShape(p.GEOM_BOX, halfExtents=half_extents)
     if (color is None) or not has_gui():
         visual_id = -1
     else:
         visual_id = p.createVisualShape(p.GEOM_BOX, halfExtents=half_extents, rgbaColor=color)
-    return p.createMultiBody(baseCollisionShapeIndex=collision_id,
+    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
     # linkCollisionShapeIndices | linkVisualShapeIndices
 
@@ -562,10 +583,15 @@ def create_capsule(radius, height):
     collision_id = p.createCollisionShape(p.GEOM_CAPSULE, radius=radius, height=height)
     raise NotImplementedError()
 
-
-def create_sphere(radius):
+def create_sphere(radius, mass=0, color=(0, 0, 1, 1)):
+    # mass = 0  => static
     collision_id = p.createCollisionShape(p.GEOM_SPHERE, radius=radius)
-    raise NotImplementedError()
+    if (color is None) or not has_gui():
+        visual_id = -1
+    else:
+        visual_id = p.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color)
+    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
+                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
 
 
 def create_plane():
