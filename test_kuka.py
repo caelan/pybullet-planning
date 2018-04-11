@@ -4,14 +4,7 @@ from __future__ import print_function
 
 import pybullet as p
 import time
-
-from pybullet_utils import connect, input, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
-    KUKA_IIWA_URDF, BLOCK_URDF, get_configuration, set_configuration, get_link_pose, \
-    SINK_URDF, STOVE_URDF, load_model, wait_for_interrupt, is_placement, sample_placement, wait_for_input, \
-    wait_for_duration, set_joint_positions, get_joint_positions, get_body_name, \
-    get_joints, get_movable_joints, DRAKE_IIWA_URDF, INF, plan_joint_motion
-from pr2_utils import get_top_grasps, inverse_kinematics_helper
-from pybullet_utils import get_bodies, is_rigid_body
+import argparse
 
 from ss.algorithms.dual_focused import dual_focused
 from ss.model.functions import Predicate, rename_functions, initialize, TotalCost
@@ -19,6 +12,26 @@ from ss.model.operators import Action, Axiom
 from ss.model.plan import print_plan
 from ss.model.problem import Problem
 from ss.model.streams import GenStream, FnStream
+
+from pr2_utils import get_top_grasps, inverse_kinematics_helper
+from pybullet_utils import GraspInfo, link_from_name, WorldSaver
+from pybullet_utils import connect, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
+    BLOCK_URDF, get_configuration, get_link_pose, \
+    SINK_URDF, STOVE_URDF, load_model, wait_for_interrupt, is_placement, sample_placement, wait_for_duration, \
+    set_joint_positions, get_body_name, \
+    get_movable_joints, DRAKE_IIWA_URDF, INF, plan_joint_motion, end_effector_from_body, \
+    body_from_end_effector, approach_from_grasp
+from pybullet_utils import get_bodies
+
+GRASP_INFO = {
+    'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
+                                                 max_width=INF,  grasp_length=0),
+                     Pose(0.1*Point(z=1))),
+}
+
+TOOL_FRAMES = {
+    'iiwa14': 'iiwa_link_ee_kuka', # iiwa_link_ee
+}
 
 #######################################################
 
@@ -176,14 +189,6 @@ class Command(object):
 
 #######################################################
 
-from pybullet_utils import GraspInfo, HoldingInfo, link_from_name
-
-GRASP_INFO = {
-    'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
-                                                 max_width=INF,  grasp_length=0),
-                     Pose(0.1*Point(z=1))),
-}
-
 def get_grasp_gen(robot, grasp_name):
     grasp_info = GRASP_INFO[grasp_name]
     end_effector_link = link_from_name(robot, TOOL_FRAMES[get_body_name(robot)])
@@ -207,16 +212,6 @@ def get_stable_gen(fixed=[]):
             # TODO: check collisions
     return gen
 
-from pybullet_utils import multiply, invert
-
-def end_effector_from_body(body_pose, grasp_pose):
-    return multiply(body_pose, invert(grasp_pose))
-
-def body_from_end_effector(end_effector_pose, grasp_pose):
-    return multiply(end_effector_pose, grasp_pose)
-
-def approach_from_grasp(approach_pose, end_effector_pose):
-    return multiply(approach_pose, end_effector_pose)
 
 def get_ik_fn(robot, fixed=[], teleport=True):
     model_ids = ([robot] + fixed)
@@ -269,7 +264,7 @@ def get_motion_gen(robot, fixed=[], teleport=True):
 def get_holding_motion_gen(robot, fixed=[], teleport=True):
     model_ids = ([robot] + fixed)
     def fn(conf1, conf2, body, grasp):
-        assert (conf1.positions == conf2.positions)
+        assert ((conf1.body == conf2.body) and (conf1.joints == conf2.joints))
         if teleport:
             path = [conf1.configuration, conf2.configuration]
         else:
@@ -334,10 +329,10 @@ def ss_from_problem(robot, movable=[], bound='shared', teleport=False, movable_c
 
     body = movable[0]
     goal_literals = [
-        #AtConf(conf),
+        AtConf(conf),
         Holding(body),
-        # On(body, fixed_models[0]),
-        # On(body, fixed_models[2]),
+        #On(body, fixed[0]),
+        #On(body, fixed[2]),
         # Cleaned(body),
         #Cooked(body),
     ]
@@ -423,36 +418,22 @@ def ss_from_problem(robot, movable=[], bound='shared', teleport=False, movable_c
     return Problem(initial_atoms, goal_literals, actions, axioms, streams,
                    objective=TotalCost())
 
-class BodySaver(object):
-    def __init__(self, body, pose=None):
-        if pose is None:
-            pose = get_pose(body)
-        self.body = body
-        self.pose = pose
-        self.conf = get_configuration(body)
-    def restore(self):
-        set_configuration(self.body, self.conf)
-        set_pose(self.body, self.pose)
-
-class WorldSaver(object):
-    def __init__(self):
-        self.body_savers = [BodySaver(body) for body in get_bodies()]
-    def restore(self):
-        for body_saver in self.body_savers:
-            body_saver.restore()
-
-TOOL_FRAMES = {
-    'iiwa14': 'iiwa_link_ee_kuka', # iiwa_link_ee
-}
+#######################################################
 
 def main():
-    connect(use_gui=True)
+    parser = argparse.ArgumentParser()  # Automatically includes help
+    parser.add_argument('-viewer', action='store_true', help='enable viewer.')
+    parser.add_argument('-display', action='store_true', help='enable viewer.')
+    args = parser.parse_args()
+
+    connect(use_gui=args.viewer)
 
     #print(get_data_path())
     #p.loadURDF("samurai.urdf", useFixedBase=True) # World
     #p.loadURDF("kuka_lwr/kuka.urdf", useFixedBase=True)
     #p.loadURDF("kuka_iiwa/model_free_base.urdf", useFixedBase=True)
 
+    # TODO: store internal world info here to be reloaded
     robot = load_model(DRAKE_IIWA_URDF)
     #robot = load_model(KUKA_IIWA_URDF)
     floor = load_model('models/short_floor.urdf')
@@ -466,19 +447,22 @@ def main():
     dump_world()
     saved_world = WorldSaver()
 
-    #wait_for_interrupt()
-    #wait_for_input()
-
-    ss_problem = ss_from_problem(robot, movable=[block], teleport=False, movable_collisions=False)
+    ss_problem = ss_from_problem(robot, movable=[block], teleport=True, movable_collisions=False)
     #ss_problem = ss_problem.debug_problem()
     #print(ss_problem)
 
+    t0 = time.time()
     plan, evaluations = dual_focused(ss_problem, verbose=True)
     # plan, evaluations = incremental(ss_problem, verbose=True)
     print_plan(plan, evaluations)
-    if plan is None:
+    print(time.time() - t0)
+    if (not args.display) or (plan is None):
+        p.disconnect()
         return
     saved_world.restore()
+
+    #connect(use_gui=True)
+    # TODO: how to reenable the viewer
 
     paths = []
     for action, args in plan:
@@ -488,8 +472,8 @@ def main():
             paths += args[-1].body_paths
     print(paths)
     command = Command(paths)
-    command.step()
-    #command.execute(time_step=0.05)
+    #command.step()
+    command.execute(time_step=0.05)
 
     wait_for_interrupt()
     p.disconnect()

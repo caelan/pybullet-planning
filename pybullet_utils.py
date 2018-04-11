@@ -858,3 +858,35 @@ def control_joints(body, joints, positions):
                                 #positionGains=[kp] * len(joints),
                                 #velocityGains=[kv] * len(joints),)
                                 #forces=[])
+
+
+def end_effector_from_body(body_pose, grasp_pose):
+    return multiply(body_pose, invert(grasp_pose))
+
+
+def body_from_end_effector(end_effector_pose, grasp_pose):
+    return multiply(end_effector_pose, grasp_pose)
+
+
+def approach_from_grasp(approach_pose, end_effector_pose):
+    return multiply(approach_pose, end_effector_pose)
+
+
+class BodySaver(object):
+    def __init__(self, body, pose=None):
+        if pose is None:
+            pose = get_pose(body)
+        self.body = body
+        self.pose = pose
+        self.conf = get_configuration(body)
+    def restore(self):
+        set_configuration(self.body, self.conf)
+        set_pose(self.body, self.pose)
+
+
+class WorldSaver(object):
+    def __init__(self):
+        self.body_savers = [BodySaver(body) for body in get_bodies()]
+    def restore(self):
+        for body_saver in self.body_savers:
+            body_saver.restore()
