@@ -94,6 +94,15 @@ def update_state():
 def reset_simulation():
     p.resetSimulation()
 
+def get_camera():
+    return p.getDebugVisualizerCamera()
+
+def set_camera(yaw, pitch, distance, target_position):
+    p.resetDebugVisualizerCamera(distance, yaw, pitch, target_position)
+
+def set_default_camera():
+    set_camera(160, -35, 2.5, Point())
+
 #####################################
 
 # Geometry
@@ -689,12 +698,16 @@ def plan_base_motion(body, end_conf, obstacles=None, direct=False, **kwargs):
 
 # Placements
 
-def supports_body(top_body, bottom_body, epsilon=1e-2): # TODO: above / below
-    top_aabb = get_lower_upper(top_body)
-    bottom_aabb = get_lower_upper(bottom_body)
-    top_z_min = top_aabb[0][2]
+def stable_z(body, surface):
+    _, extent = get_center_extent(body)
+    _, upper = get_lower_upper(surface)
+    return (upper + extent)[2]
+
+def is_placement(body, surface, epsilon=1e-2): # TODO: above / below
+    top_aabb = get_lower_upper(body)
+    bottom_aabb = get_lower_upper(surface)
     bottom_z_max = bottom_aabb[1][2]
-    return (bottom_z_max <= top_z_min <= (bottom_z_max + epsilon)) and \
+    return (bottom_z_max <= top_aabb[0][2] <= (bottom_z_max + epsilon)) and \
            (aabb_contains(aabb2d_from_aabb(top_aabb), aabb2d_from_aabb(bottom_aabb)))
 
 def sample_placement(top_body, bottom_body, max_attempts=50):

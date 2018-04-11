@@ -4,7 +4,7 @@ import pstats
 import cProfile
 
 from pybullet_utils import connect, add_data_path, disconnect, get_pose, \
-    update_state, link_from_name, step_simulation, supports_body, joints_from_names, get_joint_positions
+    update_state, link_from_name, step_simulation, is_placement, joints_from_names, get_joint_positions
 from problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
     cleaning_button_problem, cooking_button_problem
 
@@ -91,7 +91,7 @@ def ss_from_problem(problem, bound='shared', remote=False, movable_collisions=Fa
         initial_atoms += [IsMovable(body), IsPose(body, pose), AtPose(body, pose), POSE(pose)]
         for surface in problem.surfaces:
             initial_atoms += [Stackable(body, surface)]
-            if supports_body(body, surface):
+            if is_placement(body, surface):
                 initial_atoms += [IsSupported(pose, surface)]
 
     initial_atoms += map(Washer, problem.sinks)
