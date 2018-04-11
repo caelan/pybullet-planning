@@ -26,6 +26,8 @@ REVOLUTE_LIMITS = -np.pi, np.pi
 
 # Models
 
+DRAKE_IIWA_URDF = "models/drake/iiwa_description/urdf/iiwa14_polytope_collision.urdf"
+
 KUKA_IIWA_URDF = "kuka_iiwa/model.urdf"
 KUKA_IIWA_GRIPPER_SDF = "kuka_iiwa/kuka_with_gripper.sdf"
 R2D2_URDF = "r2d2.urdf"
@@ -306,12 +308,15 @@ def set_base_values(body, values):
 
 def dump_world():
     for body in get_bodies():
-        print('Body id: {} | Name: {}: | Base link: {} | Rigid: {}'.format(
-            body, get_body_name(body), get_base_link(body), is_rigid_body(body)))
+        print('Body id: {} | Name: {}: | Rigid: {}'.format(
+            body, get_body_name(body), is_rigid_body(body)))
         for joint in get_joints(body):
             print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
                 joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
                 is_circular(body, joint), get_joint_limits(body, joint)))
+        print('Link id: {} | Name: {}'.format(-1, get_base_link(body)))
+        for link in get_links(body):
+            print('Link id: {} | Name: {}'.format(link, get_link_name(body, link)))
         print()
 
 def is_rigid_body(body):
@@ -361,7 +366,7 @@ def joints_from_names(body, names):
 def get_joint_position(body, joint):
     return p.getJointState(body, joint)[0]
 
-def get_joint_positions(body, joints):
+def get_joint_positions(body, joints=None):
     return tuple(get_joint_position(body, joint) for joint in joints)
 
 def set_joint_position(body, joint, value):
@@ -371,6 +376,12 @@ def set_joint_positions(body, joints, values):
     assert len(joints) == len(values)
     for joint, value in zip(joints, values):
         set_joint_position(body, joint, value)
+
+def get_configuration(body):
+    return get_joint_positions(body, get_joints(body))
+
+def set_configuration(body, values):
+    set_joint_positions(body, get_joints(body), values)
 
 def get_joint_type(body, joint):
     return p.getJointInfo(body, joint)[2]
