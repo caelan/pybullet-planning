@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import sys
 import math
 import time
 from collections import defaultdict, deque, namedtuple
@@ -21,6 +22,7 @@ from transformations import quaternion_from_matrix
 # https://stackoverflow.com/questions/21892989/what-is-the-good-python3-equivalent-for-auto-tuple-unpacking-in-lambda
 
 REVOLUTE_LIMITS = -np.pi, np.pi
+INF = np.inf
 
 #####################################
 
@@ -72,19 +74,33 @@ def load_model(model_file, pose=None, fixed_base=True):
         set_pose(body, pose)
     return body
 
-def wait(max_time):
+def wait_for_duration(duration):
     t0 = time.time()
-    while (time.time() - t0) <= max_time:
+    while (time.time() - t0) <= duration:
         step_simulation()
+    # TODO: wait until keypress
 
 def wait_for_interrupt(max_time=np.inf):
     print('Press Ctrl-C to continue')
     try:
-        wait(max_time)
+        wait_for_duration(max_time)
     except KeyboardInterrupt:
         pass
     finally:
         print()
+
+def wait_for_input(s=''):
+    print(s)
+    while True:
+        step_simulation()
+        line = sys.stdin.readline()
+        if line:
+            print('Fish')
+        #events = p.getKeyboardEvents() # TODO: only works when the viewer is in focus
+        #if events:
+        #    print(events)
+        # https://docs.python.org/2/library/select.html
+
 
 def connect(use_gui=True, shadows=True):
     sim_id = p.connect(p.GUI) if use_gui else p.connect(p.DIRECT)
@@ -378,10 +394,10 @@ def set_joint_positions(body, joints, values):
         set_joint_position(body, joint, value)
 
 def get_configuration(body):
-    return get_joint_positions(body, get_joints(body))
+    return get_joint_positions(body, get_movable_joints(body))
 
 def set_configuration(body, values):
-    set_joint_positions(body, get_joints(body), values)
+    set_joint_positions(body, get_movable_joints(body), values)
 
 def get_joint_type(body, joint):
     return p.getJointInfo(body, joint)[2]
@@ -758,7 +774,7 @@ def plan_base_motion(body, end_conf, obstacles=None, direct=False, **kwargs):
 def stable_z(body, surface):
     _, extent = get_center_extent(body)
     _, upper = get_lower_upper(surface)
-    return (upper + extent)[2]
+    return (upper + extent/2)[2]
 
 def is_placement(body, surface, epsilon=1e-2): # TODO: above / below
     top_aabb = get_lower_upper(body)
@@ -784,6 +800,11 @@ def sample_placement(top_body, bottom_body, max_attempts=50):
         set_point(top_body, point)
         return point, quat
     return None
+
+#####################################
+
+GraspInfo = namedtuple('GraspInfo', ['get_grasps', 'approach_pose'])
+HoldingInfo = namedtuple('HoldingInfo', ['frame', 'grasp_pose', 'body'])
 
 #####################################
 

@@ -128,23 +128,22 @@ def close_arm(robot, arm):
 GRASP_LENGTH = 0.
 MAX_GRASP_WIDTH = 0.07
 
-def get_top_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
+def get_top_grasps(body, under=False, tool_pose=TOOL_POSE,
+                   max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
     pose = get_pose(body)
     set_pose(body, unit_pose())
     center, (w, l, h) = get_center_extent(body)
     reflect_z = (np.zeros(3), quat_from_euler([0, math.pi, 0]))
     translate = ([0, 0, h / 2 - grasp_length], unit_quat())
     grasps = []
-    # if not limits or (w <= MAX_GRASP_WIDTH):
-    if True:
+    if w <= max_width:
         for i in range(1 + under):
             rotate_z = (unit_point(), quat_from_euler([0, 0, math.pi / 2 + i * math.pi]))
-            grasps += [multiply(TOOL_POSE, translate, rotate_z, reflect_z)]
-    # if not limits or (l <= MAX_GRASP_WIDTH):
-    if True:
+            grasps += [multiply(tool_pose, translate, rotate_z, reflect_z)]
+    if l <= max_width:
         for i in range(1 + under):
             rotate_z = (unit_point(), quat_from_euler([0, 0, i * math.pi]))
-            grasps += [multiply(TOOL_POSE, translate, rotate_z, reflect_z)]
+            grasps += [multiply(tool_pose, translate, rotate_z, reflect_z)]
     set_pose(body, pose)
     return grasps
 
