@@ -18,10 +18,10 @@ from pybullet_utils import GraspInfo, link_from_name, WorldSaver
 from pybullet_utils import connect, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
     BLOCK_URDF, get_configuration, get_link_pose, \
     SINK_URDF, STOVE_URDF, load_model, wait_for_interrupt, is_placement, sample_placement, wait_for_duration, \
-    set_joint_positions, get_body_name, \
+    set_joint_positions, get_body_name, disconnect, \
     get_movable_joints, DRAKE_IIWA_URDF, INF, plan_joint_motion, end_effector_from_body, \
     body_from_end_effector, approach_from_grasp
-from pybullet_utils import get_bodies
+from pybullet_utils import get_bodies, input
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
@@ -420,14 +420,7 @@ def ss_from_problem(robot, movable=[], bound='shared', teleport=False, movable_c
 
 #######################################################
 
-def main():
-    parser = argparse.ArgumentParser()  # Automatically includes help
-    parser.add_argument('-viewer', action='store_true', help='enable viewer.')
-    parser.add_argument('-display', action='store_true', help='enable viewer.')
-    args = parser.parse_args()
-
-    connect(use_gui=args.viewer)
-
+def load_world():
     #print(get_data_path())
     #p.loadURDF("samurai.urdf", useFixedBase=True) # World
     #p.loadURDF("kuka_lwr/kuka.urdf", useFixedBase=True)
@@ -435,19 +428,30 @@ def main():
 
     # TODO: store internal world info here to be reloaded
     robot = load_model(DRAKE_IIWA_URDF)
-    #robot = load_model(KUKA_IIWA_URDF)
+    # robot = load_model(KUKA_IIWA_URDF)
     floor = load_model('models/short_floor.urdf')
     sink = load_model(SINK_URDF, pose=Pose(Point(x=-0.5)))
     stove = load_model(STOVE_URDF, pose=Pose(Point(x=+0.5)))
     block = load_model(BLOCK_URDF)
 
     set_pose(block, Pose(Point(y=0.5, z=stable_z(block, floor))))
-    #print(get_camera())
+    # print(get_camera())
     set_default_camera()
-    dump_world()
-    saved_world = WorldSaver()
 
-    ss_problem = ss_from_problem(robot, movable=[block], teleport=True, movable_collisions=False)
+    return robot, block
+
+def main():
+    parser = argparse.ArgumentParser()  # Automatically includes help
+    parser.add_argument('-viewer', action='store_true', help='enable viewer.')
+    parser.add_argument('-display', action='store_true', help='enable viewer.')
+    args = parser.parse_args()
+
+    connect(use_gui=args.viewer)
+    robot, block = load_world()
+    saved_world = WorldSaver()
+    dump_world()
+
+    ss_problem = ss_from_problem(robot, movable=[block], teleport=False, movable_collisions=False)
     #ss_problem = ss_problem.debug_problem()
     #print(ss_problem)
 
@@ -459,24 +463,28 @@ def main():
     if (not args.display) or (plan is None):
         p.disconnect()
         return
-    saved_world.restore()
-
-    #connect(use_gui=True)
-    # TODO: how to reenable the viewer
 
     paths = []
-    for action, args in plan:
+    for action, params in plan:
         if action.name == 'place':
-            paths += args[-1].reverse().body_paths
+            paths += params[-1].reverse().body_paths
         elif action.name in ['move_free', 'move_holding', 'pick']:
-            paths += args[-1].body_paths
+            paths += params[-1].body_paths
     print(paths)
     command = Command(paths)
-    #command.step()
+
+    if not args.viewer: # TODO: how to reenable the viewer
+        disconnect()
+        connect(use_gui=True)
+        load_world()
+    saved_world.restore()
+
+    input('Execute?')
     command.execute(time_step=0.05)
+    #command.step()
 
     wait_for_interrupt()
-    p.disconnect()
+    disconnect()
 
 if __name__ == '__main__':
     main()

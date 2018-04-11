@@ -676,41 +676,62 @@ def ray_collision():
 
 # Motion
 
-def sample_joints(body, joints):
-    values = []
-    for joint in joints:
-        limits = REVOLUTE_LIMITS if is_circular(body, joint) \
-            else get_joint_limits(body, joint)
-        values.append(np.random.uniform(*limits))
-    return tuple(values)
+def get_sample_fn(body, joints):
+    def fn():
+        values = []
+        for joint in joints:
+            limits = REVOLUTE_LIMITS if is_circular(body, joint) \
+                else get_joint_limits(body, joint)
+            values.append(np.random.uniform(*limits))
+        return tuple(values)
+    return fn
 
-def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kwargs):
-    assert len(joints) == len(end_conf)
-
-    sample_fn = lambda: sample_joints(body, joints)
-
-    def difference_fn(q2, q1):
+def get_difference_fn(body, joints):
+    def fn(q2, q1):
         difference = []
         for joint, value2, value1 in zip(joints, q2, q1):
             difference.append((value2 - value1) if not is_circular(body, joint)
                               else circular_difference(value2, value1))
         return tuple(difference)
+    return fn
 
+def get_distance_fn(body, joints, weights=None):
     # TODO: custom weights and step sizes
-    weights = 1*np.ones(len(joints))
-    def distance_fn(q1, q2):
+    if weights is None:
+        weights = 1*np.ones(len(joints))
+    difference_fn = get_difference_fn(body, joints)
+    def fn(q1, q2):
         diff = np.array(difference_fn(q2, q1))
         return np.sqrt(np.dot(weights, diff * diff))
+    return fn
 
-    resolutions = 0.05*np.ones(len(joints))
-    def extend_fn(q1, q2):
-        steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
-        num_steps = int(np.max(steps)) + 1
+def get_refine_fn(body, joints, num_steps=0):
+    difference_fn = get_difference_fn(body, joints)
+    num_steps = num_steps + 1
+    def fn(q1, q2):
         q = q1
         for i in range(num_steps):
             q = tuple((1. / (num_steps - i)) * np.array(difference_fn(q2, q)) + q)
             yield q
             # TODO: should wrap these joints
+    return fn
+
+def get_extend_fn(body, joints, resolutions=None):
+    if resolutions is None:
+        resolutions = 0.05*np.ones(len(joints))
+    difference_fn = get_difference_fn(body, joints)
+    def fn(q1, q2):
+        steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
+        refine_fn = get_refine_fn(body, joints, num_steps=int(np.max(steps)))
+        return refine_fn(q1, q2)
+    return fn
+
+def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kwargs):
+    assert len(joints) == len(end_conf)
+
+    sample_fn = get_sample_fn(body, joints)
+    distance_fn = get_distance_fn(body, joints)
+    extend_fn = get_extend_fn(body, joints)
 
     def collision_fn(q):
         if violates_limits(body, joints, q):
@@ -806,6 +827,17 @@ def sample_placement(top_body, bottom_body, max_attempts=50):
 GraspInfo = namedtuple('GraspInfo', ['get_grasps', 'approach_pose'])
 HoldingInfo = namedtuple('HoldingInfo', ['frame', 'grasp_pose', 'body'])
 
+def end_effector_from_body(body_pose, grasp_pose):
+    return multiply(body_pose, invert(grasp_pose))
+
+
+def body_from_end_effector(end_effector_pose, grasp_pose):
+    return multiply(end_effector_pose, grasp_pose)
+
+
+def approach_from_grasp(approach_pose, end_effector_pose):
+    return multiply(approach_pose, end_effector_pose)
+
 #####################################
 
 # Reachability
@@ -859,20 +891,9 @@ def control_joints(body, joints, positions):
                                 #velocityGains=[kv] * len(joints),)
                                 #forces=[])
 
+#####################################
 
-def end_effector_from_body(body_pose, grasp_pose):
-    return multiply(body_pose, invert(grasp_pose))
-
-
-def body_from_end_effector(end_effector_pose, grasp_pose):
-    return multiply(end_effector_pose, grasp_pose)
-
-
-def approach_from_grasp(approach_pose, end_effector_pose):
-    return multiply(approach_pose, end_effector_pose)
-
-
-class BodySaver(object):
+class BodySaver(object): # TODO: with statements
     def __init__(self, body, pose=None):
         if pose is None:
             pose = get_pose(body)
