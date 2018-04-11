@@ -147,6 +147,9 @@ def disable_gravity():
 def step_simulation():
     p.stepSimulation()
 
+def set_real_time(real_time=True):
+    p.setRealTimeSimulation(real_time)
+
 def update_state():
     for body in get_bodies():
         get_pose(body)
@@ -690,8 +693,8 @@ def get_difference_fn(body, joints):
     def fn(q2, q1):
         difference = []
         for joint, value2, value1 in zip(joints, q2, q1):
-            difference.append((value2 - value1) if not is_circular(body, joint)
-                              else circular_difference(value2, value1))
+            difference.append(circular_difference(value2, value1)
+                              if is_circular(body, joint) else (value2 - value1))
         return tuple(difference)
     return fn
 
@@ -725,6 +728,22 @@ def get_extend_fn(body, joints, resolutions=None):
         refine_fn = get_refine_fn(body, joints, num_steps=int(np.max(steps)))
         return refine_fn(q1, q2)
     return fn
+
+def sparsify_path(body, joints, path):
+    if len(path) <= 2:
+        return path
+    difference_fn = get_difference_fn(body, joints)
+    waypoints = [path[0]]
+    last_difference = difference_fn(waypoints[-1], path[1])
+    last_conf = path[1]
+    for q in path[2:]:
+        new_difference = difference_fn(waypoints[-1], q)
+        #if np.allclose(last_difference, new_difference, atol=1e-3, rtol=0):
+        #
+        #last_difference = new_difference
+        #last_conf = q
+        # TODO: test if a scaling of itself
+    return path
 
 def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kwargs):
     assert len(joints) == len(end_conf)
@@ -883,13 +902,20 @@ def control_joint(body, joint, value):
 
 def control_joints(body, joints, positions):
     # TODO: the whole PR2 seems to jitter
-    kp = 1.0
-    kv = 0.3
+    #kp = 1.0
+    #kv = 0.3
     return p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, targetPositions=positions,
                                 targetVelocities=[0.0] * len(joints)) #,
                                 #positionGains=[kp] * len(joints),
                                 #velocityGains=[kv] * len(joints),)
                                 #forces=[])
+
+def joint_controller(body, joints, target, max_time=None):
+    iteration = 0
+    while not np.allclose(get_joint_positions(body, joints), target, atol=1e-3, rtol=0):
+        control_joints(body, joints, target)
+        yield iteration
+        iteration += 1
 
 #####################################
 

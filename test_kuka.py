@@ -16,11 +16,11 @@ from ss.model.streams import GenStream, FnStream
 from pr2_utils import get_top_grasps, inverse_kinematics_helper
 from pybullet_utils import GraspInfo, link_from_name, WorldSaver
 from pybullet_utils import connect, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
-    BLOCK_URDF, get_configuration, get_link_pose, \
+    BLOCK_URDF, get_configuration, get_link_pose, get_refine_fn, \
     SINK_URDF, STOVE_URDF, load_model, wait_for_interrupt, is_placement, sample_placement, wait_for_duration, \
     set_joint_positions, get_body_name, disconnect, \
     get_movable_joints, DRAKE_IIWA_URDF, INF, plan_joint_motion, end_effector_from_body, \
-    body_from_end_effector, approach_from_grasp
+    body_from_end_effector, approach_from_grasp, joint_controller
 from pybullet_utils import get_bodies, input
 
 GRASP_INFO = {
@@ -123,6 +123,13 @@ class BodyPath(object):
             for grasp in self.grasps:
                 grasp.assign()
             yield i
+    def control(self): # TODO: real_time
+        # TODO: just waypoints
+        for values in self.path:
+            for _ in joint_controller(self.body, self.joints, values):
+                p.stepSimulation()
+                # time.sleep(0.01)
+
     # def full_path(self, q0=None):
     #     # TODO: could produce savers
     #     if q0 is None:
@@ -139,12 +146,12 @@ class BodyPath(object):
     #                 set_pose(self.tree, q, model_id, model_pose)
     #         new_path.append(q)
     #     return new_path
-    #def refine(self, num_steps=0):
-    #    refine_fn = get_refine_fn(self.positions, num_steps)
-    #    new_sequence = []
-    #    for v1, v2 in zip(self.sequence, self.sequence[1:]):
-    #        new_sequence += list(refine_fn(v1, v2))
-    #    return self.__class__(self.tree, self.positions, new_sequence, self.holding)
+    def refine(self, num_steps=0):
+        refine_fn = get_refine_fn(self.body, self.joints, num_steps)
+        refined_path = []
+        for v1, v2 in zip(self.path, self.path[1:]):
+            refined_path += list(refine_fn(v1, v2))
+        return self.__class__(self.body, refined_path, self.joints, self.grasps)
     def reverse(self):
         return self.__class__(self.body, self.path[::-1], self.joints, self.grasps)
     def __repr__(self):
@@ -177,11 +184,15 @@ class Command(object):
                 #time.sleep(time_step)
                 wait_for_duration(time_step)
 
+    def control(self): # TODO: real_time
+        for body_path in self.body_paths:
+            body_path.control()
+
     def refine(self, num_steps=0):
-        return self.__class__([partial_path.refine(num_steps) for partial_path in self.body_paths])
+        return self.__class__([body_path.refine(num_steps) for body_path in self.body_paths])
 
     def reverse(self):
-        return self.__class__([partial_path.reverse() for partial_path in reversed(self.body_paths)])
+        return self.__class__([body_path.reverse() for body_path in reversed(self.body_paths)])
 
     def __repr__(self):
         return 'c{}'.format(id(self) % 1000)
@@ -480,8 +491,13 @@ def main():
     saved_world.restore()
 
     input('Execute?')
-    command.execute(time_step=0.05)
+
+    command.control()
+    #command.refine(num_steps=10).execute(time_step=0.005)
     #command.step()
+
+    #dt = 1. / 240 # Bullet default
+    #p.setTimeStep(dt)
 
     wait_for_interrupt()
     disconnect()

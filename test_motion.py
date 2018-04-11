@@ -4,13 +4,13 @@ from __future__ import print_function
 
 import pybullet as p
 import time
-import numpy as np
 
-from pybullet_utils import set_base_values, joint_from_name, set_joint_position, \
-    set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, control_joints, \
-    enable_gravity, get_joint_positions, is_circular, get_joint_limits, input
 from pr2_utils import TOP_HOLDING_LEFT_ARM, ARM_JOINT_NAMES, TORSO_JOINT_NAME, \
-    REST_RIGHT_ARM, SIDE_HOLDING_LEFT_ARM, set_arm_conf, BASE_JOINT_NAMES
+    REST_RIGHT_ARM, SIDE_HOLDING_LEFT_ARM, BASE_JOINT_NAMES
+from pybullet_utils import set_base_values, joint_from_name, set_joint_position, \
+    set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
+    joint_controller
+
 
 def main():
     connect(use_gui=True)
@@ -80,8 +80,7 @@ def main():
     real_time = False
     enable_gravity()
     p.setRealTimeSimulation(real_time)
-    while not np.allclose(get_joint_positions(pr2, left_joints), arm_start, atol=1e-3):
-        control_joints(pr2, left_joints, arm_start)
+    for _ in joint_controller(pr2, left_joints, arm_start):
         if not real_time:
             p.stepSimulation()
             #time.sleep(0.01)
