@@ -14,14 +14,14 @@ from ss.model.problem import Problem
 from ss.model.streams import GenStream, FnStream
 
 from pr2_utils import get_top_grasps, inverse_kinematics_helper
-from pybullet_utils import GraspInfo, link_from_name, WorldSaver
-from pybullet_utils import connect, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
+from utils import GraspInfo, link_from_name, WorldSaver
+from utils import connect, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
     BLOCK_URDF, get_configuration, get_link_pose, get_refine_fn, \
     SINK_URDF, STOVE_URDF, load_model, wait_for_interrupt, is_placement, sample_placement, wait_for_duration, \
     set_joint_positions, get_body_name, disconnect, clone_body, JOINT_TYPES, get_data_path, \
     get_movable_joints, DRAKE_IIWA_URDF, INF, plan_joint_motion, end_effector_from_body, \
     body_from_end_effector, approach_from_grasp, joint_controller, get_constraints, grasp_constraint
-from pybullet_utils import get_bodies, input, enable_real_time, disable_real_time, enable_gravity
+from utils import get_bodies, input, enable_real_time, disable_real_time, enable_gravity
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),

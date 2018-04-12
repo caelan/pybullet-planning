@@ -3,7 +3,7 @@ import time
 import pstats
 import cProfile
 
-from pybullet_utils import connect, add_data_path, disconnect, get_pose, \
+from utils import connect, add_data_path, disconnect, get_pose, \
     update_state, link_from_name, step_simulation, is_placement, joints_from_names, get_joint_positions
 from problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
     cleaning_button_problem, cooking_button_problem

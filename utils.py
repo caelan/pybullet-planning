@@ -695,7 +695,7 @@ def collision_shape_from_data(data):
     #return p.createCollisionShapeArray()
 
 #import pybullet_envs
-import pybullet_utils # urdfEditor
+import utils # urdfEditor
 
 def clone_body(body, collision=False, visual=False):
     # TODO: names are not retained

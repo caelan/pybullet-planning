@@ -1,4 +1,4 @@
-from pybullet_utils import invert, multiply, get_body_name, set_pose, get_link_pose, link_from_name, \
+from utils import invert, multiply, get_body_name, set_pose, get_link_pose, link_from_name, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
     unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values
 from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \

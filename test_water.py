@@ -6,7 +6,7 @@ import pybullet as p
 import time
 import numpy as np
 
-from pybullet_utils import add_data_path, connect, enable_gravity, input, disconnect, create_sphere, set_point, Point, \
+from utils import add_data_path, connect, enable_gravity, input, disconnect, create_sphere, set_point, Point, \
     enable_real_time, dump_world, load_model, wait_for_interrupt, set_camera, stable_z, \
     set_color, get_lower_upper, wait_for_duration, simulate_for_duration
 

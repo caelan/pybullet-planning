@@ -3,7 +3,7 @@ import argparse
 import pybullet as p
 
 from pr2_utils import create_inverse_reachability, set_arm_conf, get_other_arm, arm_conf, REST_LEFT_ARM, get_carry_conf
-from pybullet_utils import create_box,  disconnect, add_data_path, connect
+from utils import create_box,  disconnect, add_data_path, connect
 
 def main():
     parser = argparse.ArgumentParser()  # Automatically includes help

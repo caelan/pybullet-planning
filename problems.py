@@ -1,5 +1,5 @@
 from collections import namedtuple
-from pybullet_utils import create_box, set_base_values, set_point, set_pose, get_pose, get_bodies, z_rotation
+from utils import create_box, set_base_values, set_point, set_pose, get_pose, get_bodies, z_rotation
 from pr2_utils import TOP_HOLDING_LEFT_ARM, set_arm_conf, REST_LEFT_ARM, REST_RIGHT_ARM, open_arm, \
     close_arm, get_carry_conf, arm_conf, get_other_arm
 import pybullet as p

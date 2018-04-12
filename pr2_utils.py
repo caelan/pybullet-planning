@@ -9,7 +9,7 @@ import time
 #####################################
 
 # PR2
-from pybullet_utils import get_joint_limits, multiply, get_max_velocity, get_movable_joints, \
+from utils import get_joint_limits, multiply, get_max_velocity, get_movable_joints, \
     get_link_pose, joint_from_name, link_from_name, set_joint_position, set_joint_positions, get_joint_positions, \
     get_min_limit, get_max_limit, quat_from_euler, get_joints, violates_limits, read_pickle, set_pose, point_from_pose, \
     sample_reachable_base, set_base_values, get_pose, sample_placement, invert, pairwise_collision, get_body_name, \

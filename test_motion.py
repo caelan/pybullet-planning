@@ -7,7 +7,7 @@ import time
 
 from pr2_utils import TOP_HOLDING_LEFT_ARM, ARM_JOINT_NAMES, TORSO_JOINT_NAME, \
     REST_RIGHT_ARM, SIDE_HOLDING_LEFT_ARM, BASE_JOINT_NAMES
-from pybullet_utils import set_base_values, joint_from_name, set_joint_position, \
+from utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
     joint_controller
 
