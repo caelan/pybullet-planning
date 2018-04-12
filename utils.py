@@ -22,8 +22,9 @@ from transformations import quaternion_from_matrix
 
 # https://stackoverflow.com/questions/21892989/what-is-the-good-python3-equivalent-for-auto-tuple-unpacking-in-lambda
 
-REVOLUTE_LIMITS = -np.pi, np.pi
 INF = np.inf
+PI = np.pi
+CIRCULAR_LIMITS = -PI, PI
 
 #####################################
 
@@ -459,7 +460,7 @@ def is_circular(body, joint):
 
 def get_joint_limits(body, joint):
     if is_circular(body, joint):
-        return REVOLUTE_LIMITS
+        return CIRCULAR_LIMITS
     joint_info = get_joint_info(body, joint)
     return joint_info.jointLowerLimit, joint_info.jointUpperLimit
 
@@ -914,11 +915,14 @@ def env_collision(body1):
             return True
     return False
 
+RayResult = namedtuple('RayResult', ['objectUniqueId', 'linkIndex',
+                                     'hit_fraction', 'hit_position', 'hit_normal'])
 
-def ray_collision():
-    # rayTestBatch
-    # rayTest
-    raise NotImplementedError()
+def ray_collision(rays):
+    ray_starts = [start for start, _ in rays]
+    ray_ends = [start for _, end in rays]
+    return [RayResult(*tup) for tup in p.rayTestBatch(ray_starts, ray_ends)]
+    #return RayResult(*p.rayTest(start, end))
 
 #####################################
 
@@ -928,7 +932,7 @@ def get_sample_fn(body, joints):
     def fn():
         values = []
         for joint in joints:
-            limits = REVOLUTE_LIMITS if is_circular(body, joint) \
+            limits = CIRCULAR_LIMITS if is_circular(body, joint) \
                 else get_joint_limits(body, joint)
             values.append(np.random.uniform(*limits))
         return tuple(values)
@@ -992,6 +996,8 @@ def sparsify_path(body, joints, path):
 
 def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kwargs):
     assert len(joints) == len(end_conf)
+    # TODO: just check moving bodies vs other bodies
+    # TODO: only need to check collisions for bodies that do not have a fixed relative transform
 
     sample_fn = get_sample_fn(body, joints)
     distance_fn = get_distance_fn(body, joints)
@@ -1015,7 +1021,7 @@ def plan_base_motion(body, end_conf, obstacles=None, direct=False, **kwargs):
     BASE_LIMITS = ([-2.5, -2.5, 0], [2.5, 2.5, 0])
     def sample_fn():
         x, y, _ = np.random.uniform(*BASE_LIMITS)
-        theta = np.random.uniform(*REVOLUTE_LIMITS)
+        theta = np.random.uniform(*CIRCULAR_LIMITS)
         return (x, y, theta)
 
     def difference_fn(q2, q1):
@@ -1071,7 +1077,7 @@ def is_placement(body, surface, epsilon=1e-2): # TODO: above / below
 def sample_placement(top_body, bottom_body, max_attempts=50):
     bottom_aabb = get_lower_upper(bottom_body)
     for _ in range(max_attempts):
-        theta = np.random.uniform(*REVOLUTE_LIMITS)
+        theta = np.random.uniform(*CIRCULAR_LIMITS)
         quat = z_rotation(theta)
         set_quat(top_body, quat)
         center, extent = get_center_extent(top_body)
@@ -1110,7 +1116,7 @@ def sample_reachable_base(robot, point, reachable_range=(0.25, 1.0), max_attempt
     for _ in range(max_attempts):
         radius = np.random.uniform(*reachable_range)
         x, y = radius*unit_from_theta(np.random.uniform(-np.pi, np.pi)) + point[:2]
-        yaw = np.random.uniform(*REVOLUTE_LIMITS)
+        yaw = np.random.uniform(*CIRCULAR_LIMITS)
         base_values = (x, y, yaw)
         set_base_values(robot, base_values)
         return base_values
@@ -1218,3 +1224,73 @@ class WorldSaver(object):
     def restore(self):
         for body_saver in self.body_savers:
             body_saver.restore()
+
+#####################################
+
+def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
+    (target_point, target_quat) = pose
+    movable_joints = get_movable_joints(robot)
+    for iterations in range(max_iterations):
+        # TODO: stop is no progress
+        # TODO: stop if collision or invalid joint limits
+        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, target_quat)
+        if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
+            return None
+        set_joint_positions(robot, movable_joints, kinematic_conf)
+        link_point, link_quat = get_link_pose(robot, link)
+        if np.allclose(link_point, target_point, atol=tolerance, rtol=0) and \
+                np.allclose(link_quat, target_quat, atol=tolerance, rtol=0):
+            break
+    else:
+        return None
+    if violates_limits(robot, movable_joints, kinematic_conf):
+        return None
+    return kinematic_conf
+
+def experimental_inverse_kinematics(robot, link, pose,
+                       null_space=False, max_iterations=200, tolerance=1e-3):
+    (point, quat) = pose
+    # https://github.com/bulletphysics/bullet3/blob/389d7aaa798e5564028ce75091a3eac6a5f76ea8/examples/SharedMemory/PhysicsClientC_API.cpp
+    # https://github.com/bulletphysics/bullet3/blob/c1ba04a5809f7831fa2dee684d6747951a5da602/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
+    joints = get_joints(robot) # Need to have all joints (although only movable returned)
+    movable_joints = get_movable_joints(robot)
+    current_conf = get_joint_positions(robot, joints)
+
+    # TODO: sample other values for the arm joints as the reference conf
+    min_limits = [get_joint_limits(robot, joint)[0] for joint in joints]
+    max_limits = [get_joint_limits(robot, joint)[1] for joint in joints]
+    #min_limits = current_conf
+    #max_limits = current_conf
+    #max_velocities = [get_max_velocity(robot, joint) for joint in joints] # Range of Jacobian
+    max_velocities = [10000]*len(joints)
+    # TODO: cannot have zero velocities
+    # TODO: larger definitely better for velocities
+    #damping = tuple(0.1*np.ones(len(joints)))
+
+    #t0 = time.time()
+    #kinematic_conf = get_joint_positions(robot, movable_joints)
+    for iterations in range(max_iterations): # 0.000863273143768 / iteration
+        # TODO: return none if no progress
+        if null_space:
+            kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat,
+                                                          lowerLimits=min_limits, upperLimits=max_limits,
+                                                          jointRanges=max_velocities, restPoses=current_conf,
+                                                          #jointDamping=damping,
+                                                         )
+        else:
+            kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat)
+        if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
+            return None
+        set_joint_positions(robot, movable_joints, kinematic_conf)
+        link_point, link_quat = get_link_pose(robot, link)
+        if np.allclose(link_point, point, atol=tolerance) and np.allclose(link_quat, quat, atol=tolerance):
+            #print iterations
+            break
+    else:
+        return None
+    if violates_limits(robot, movable_joints, kinematic_conf):
+        return None
+    #total_time = (time.time() - t0)
+    #print total_time
+    #print (time.time() - t0)/max_iterations
+    return kinematic_conf

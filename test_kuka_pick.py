@@ -2,17 +2,10 @@
 
 from __future__ import print_function
 
-from utils import GraspInfo, link_from_name, WorldSaver, enable_gravity
-from utils import connect, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
-    BLOCK_URDF, get_configuration, get_link_pose, get_refine_fn, \
-    SINK_URDF, STOVE_URDF, load_model, wait_for_interrupt, is_placement, sample_placement, wait_for_duration, \
-    set_joint_positions, get_body_name, disconnect, clone_body, JOINT_TYPES, get_data_path, \
-    get_movable_joints, DRAKE_IIWA_URDF, INF, plan_joint_motion, end_effector_from_body, \
-    body_from_end_effector, approach_from_grasp, joint_controller, get_constraints, grasp_constraint
-from utils import get_bodies, input, update_state, disable_real_time
 from kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, get_ik_fn, get_free_motion_gen, \
     get_holding_motion_gen
-
+from utils import WorldSaver, enable_gravity, connect, dump_world, set_pose, Pose, Point, set_default_camera, stable_z, \
+    BLOCK_URDF, load_model, wait_for_interrupt, disconnect, DRAKE_IIWA_URDF, input, update_state, disable_real_time
 
 def main():
     connect(use_gui=True)

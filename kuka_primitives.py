@@ -1,11 +1,12 @@
 import pybullet as p
 import time
 
-from pr2_utils import inverse_kinematics_helper, get_top_grasps
+from pr2_utils import get_top_grasps
 from utils import get_pose, set_pose, get_link_pose, body_from_end_effector, get_movable_joints, get_configuration, \
     set_joint_positions, get_constraints, grasp_constraint, enable_real_time, disable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
-    end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point
+    end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
+    inverse_kinematics, pairwise_collision
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
@@ -71,6 +72,10 @@ class BodyPath(object):
     def bodies(self):
         return set([self.body] + [grasp.body for grasp in self.grasps])
     def iterator(self):
+        # TODO: can still use constraints as a way of maintaining state
+        #if not get_constraints(): # TODO: only works for simulation through applying forces
+        #    for grasp in self.grasps:
+        #        grasp_constraint(grasp.body, grasp.robot, grasp.link)
         for i, configuration in enumerate(self.path):
             set_joint_positions(self.body, self.joints, configuration)
             for grasp in self.grasps:
@@ -187,22 +192,21 @@ def get_stable_gen(fixed=[]):
 
 
 def get_ik_fn(robot, fixed=[], teleport=False):
-    model_ids = ([robot] + fixed)
-    def fn(model, pose, grasp):
+    def fn(body, pose, grasp):
         gripper_pose = end_effector_from_body(pose.pose, grasp.grasp_pose)
         approach_pose = approach_from_grasp(grasp.approach_pose, gripper_pose)
-        q_approach = inverse_kinematics_helper(robot, grasp.link, approach_pose)
-        if (q_approach is None): # or are_colliding(tree, tree.doKinematics(q_approach), model_ids=model_ids):
+        q_approach = inverse_kinematics(robot, grasp.link, approach_pose)
+        if (q_approach is None) or any(pairwise_collision(robot, b) for b in fixed):
             return None
         conf = BodyConf(robot, q_approach)
-        q_grasp = inverse_kinematics_helper(robot, grasp.link, gripper_pose)
-        if (q_grasp is None): # or are_colliding(tree, tree.doKinematics(q_grasp), model_ids=model_ids):
+        q_grasp = inverse_kinematics(robot, grasp.link, gripper_pose)
+        if (q_grasp is None) or any(pairwise_collision(robot, b) for b in fixed):
             return None
         if teleport:
             path = [q_approach, q_grasp]
         else:
             conf.assign()
-            path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=[], direct=True)
+            path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=fixed, direct=True)
             if path is None:
                 raw_input('Approach motion failed')
                 return None
@@ -214,14 +218,13 @@ def get_ik_fn(robot, fixed=[], teleport=False):
 
 
 def get_free_motion_gen(robot, fixed=[], teleport=False):
-    model_ids = ([robot] + fixed)
     def fn(conf1, conf2):
         assert ((conf1.body == conf2.body) and (conf1.joints == conf2.joints))
         if teleport:
             path = [conf1.configuration, conf2.configuration]
         else:
             conf1.assign()
-            path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=[])
+            path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=fixed)
             if path is None:
                 raw_input('Free motion failed')
                 return None
@@ -231,7 +234,6 @@ def get_free_motion_gen(robot, fixed=[], teleport=False):
 
 
 def get_holding_motion_gen(robot, fixed=[], teleport=False):
-    model_ids = ([robot] + fixed)
     def fn(conf1, conf2, body, grasp):
         assert ((conf1.body == conf2.body) and (conf1.joints == conf2.joints))
         if teleport:
@@ -239,7 +241,7 @@ def get_holding_motion_gen(robot, fixed=[], teleport=False):
         else:
             # TODO: holding
             conf1.assign()
-            path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=[])
+            path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=fixed)
             if path is None:
                 raw_input('Holding motion failed')
                 return None

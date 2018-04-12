@@ -1,9 +1,10 @@
 from utils import invert, multiply, get_body_name, set_pose, get_link_pose, link_from_name, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
-    unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values
+    unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values, \
+    inverse_kinematics
 from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \
     get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
-    inverse_kinematics, inverse_kinematics_helper, uniform_pose_generator, \
+    uniform_pose_generator, \
     learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses
 from pr2_problems import get_fixed_bodies
 
@@ -196,12 +197,12 @@ def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False):
                 if any(pairwise_collision(robot, b) for b in fixed):
                     continue
 
-                approach_movable_conf = inverse_kinematics_helper(robot, link, approach_pose)
+                approach_movable_conf = inverse_kinematics(robot, link, approach_pose)
                 if (approach_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     continue
                 approach_conf = get_joint_positions(robot, joints)
 
-                grasp_movable_conf = inverse_kinematics_helper(robot, link, gripper_pose)
+                grasp_movable_conf = inverse_kinematics(robot, link, gripper_pose)
                 if (grasp_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     continue
                 grasp_conf = get_joint_positions(robot, joints)
@@ -252,12 +253,12 @@ def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
                 if any(pairwise_collision(robot, b) for b in fixed):
                     continue
 
-                approach_movable_conf = inverse_kinematics_helper(robot, link, approach_pose)
+                approach_movable_conf = inverse_kinematics(robot, link, approach_pose)
                 if (approach_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     continue
                 approach_conf = get_joint_positions(robot, joints)
 
-                gripper_movable_conf = inverse_kinematics_helper(robot, link, gripper_pose)
+                gripper_movable_conf = inverse_kinematics(robot, link, gripper_pose)
                 if (gripper_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     continue
                 grasp_conf = get_joint_positions(robot, joints)

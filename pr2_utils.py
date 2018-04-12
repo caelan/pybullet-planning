@@ -1,19 +1,18 @@
+import math
 import os
 import random
 
 import numpy as np
-import math
-import pybullet as p
-import time
-
-#####################################
 
 # PR2
-from utils import get_joint_limits, multiply, get_max_velocity, get_movable_joints, \
+from utils import multiply, get_movable_joints, \
     get_link_pose, joint_from_name, link_from_name, set_joint_position, set_joint_positions, get_joint_positions, \
-    get_min_limit, get_max_limit, quat_from_euler, get_joints, violates_limits, read_pickle, set_pose, point_from_pose, \
+    get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, point_from_pose, \
     sample_reachable_base, set_base_values, get_pose, sample_placement, invert, pairwise_collision, get_body_name, \
-    euler_from_quat, unit_point, unit_quat, unit_pose, get_center_extent, write_pickle, joints_from_names
+    euler_from_quat, unit_point, unit_quat, unit_pose, get_center_extent, write_pickle, joints_from_names, \
+    inverse_kinematics
+
+#####################################
 
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
@@ -189,62 +188,14 @@ GET_GRASPS = {
 
 #####################################
 
-def inverse_kinematics_helper(robot, link, pose,
-                              null_space=False, max_iterations=200, tolerance=1e-3):
-    (point, quat) = pose
-    # https://github.com/bulletphysics/bullet3/blob/389d7aaa798e5564028ce75091a3eac6a5f76ea8/examples/SharedMemory/PhysicsClientC_API.cpp
-    # https://github.com/bulletphysics/bullet3/blob/c1ba04a5809f7831fa2dee684d6747951a5da602/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
-    joints = get_joints(robot) # Need to have all joints (although only movable returned)
-    movable_joints = get_movable_joints(robot)
-    current_conf = get_joint_positions(robot, joints)
-
-    # TODO: sample other values for the arm joints as the reference conf
-    min_limits = [get_joint_limits(robot, joint)[0] for joint in joints]
-    max_limits = [get_joint_limits(robot, joint)[1] for joint in joints]
-    #min_limits = current_conf
-    #max_limits = current_conf
-    #max_velocities = [get_max_velocity(robot, joint) for joint in joints] # Range of Jacobian
-    max_velocities = [10000]*len(joints)
-    # TODO: cannot have zero velocities
-    # TODO: larger definitely better for velocities
-    #damping = tuple(0.1*np.ones(len(joints)))
-
-    #t0 = time.time()
-    kinematic_conf = get_joint_positions(robot, movable_joints)
-    for iterations in range(max_iterations): # 0.000863273143768 / iteration
-        # TODO: return none if no progress
-        if null_space:
-            kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat,
-                                                          lowerLimits=min_limits, upperLimits=max_limits,
-                                                          jointRanges=max_velocities, restPoses=current_conf,
-                                                          #jointDamping=damping,
-                                                  )
-        else:
-            kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat)
-        if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
-            return None
-        set_joint_positions(robot, movable_joints, kinematic_conf)
-        link_point, link_quat = get_link_pose(robot, link)
-        if np.allclose(link_point, point, atol=tolerance) and np.allclose(link_quat, quat, atol=tolerance):
-            #print iterations
-            break
-    else:
-        return None
-    if violates_limits(robot, movable_joints, kinematic_conf):
-        return None
-    #total_time = (time.time() - t0)
-    #print total_time
-    #print (time.time() - t0)/max_iterations
-    return kinematic_conf
-
-def inverse_kinematics(robot, target_pose):
+def pr2_inverse_kinematics(robot, target_pose):
     #left_joints = [joint_from_name(robot, name) for name in LEFT_JOINT_NAMES]
     #min_limits = [get_joint_limits(robot, joint)[0] if joint in left_joints else current_conf[i]
     #              for i, joint in enumerate(joints)]
     #max_limits = [get_joint_limits(robot, joint)[1] if joint in left_joints else current_conf[i]
     #              for i, joint in enumerate(joints)]
     link = link_from_name(robot, LEFT_ARM_LINK)
-    return inverse_kinematics_helper(robot, link, target_pose)
+    return inverse_kinematics(robot, link, target_pose)
 
 #####################################
 
@@ -294,7 +245,7 @@ def create_inverse_reachability(robot, body, table, arm, grasp_type, num_samples
         set_pose(robot, next(uniform_pose_generator(robot, gripper_pose)))
         if pairwise_collision(robot, table):
             continue
-        conf = inverse_kinematics_helper(robot, link, gripper_pose)
+        conf = inverse_kinematics(robot, link, gripper_pose)
         if (conf is None) or pairwise_collision(robot, table):
             continue
         gripper_from_base = multiply(invert(get_link_pose(robot, link)), get_pose(robot))
