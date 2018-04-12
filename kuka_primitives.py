@@ -3,10 +3,10 @@ import time
 
 from pr2_utils import get_top_grasps
 from utils import get_pose, set_pose, get_link_pose, body_from_end_effector, get_movable_joints, get_configuration, \
-    set_joint_positions, get_constraints, grasp_constraint, enable_real_time, disable_real_time, joint_controller, \
+    set_joint_positions, get_constraints, add_grasp_constraint, enable_real_time, disable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
-    inverse_kinematics, pairwise_collision
+    inverse_kinematics, pairwise_collision, remove_fixed_constraint
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
@@ -85,7 +85,7 @@ class BodyPath(object):
         # TODO: just waypoints
         if not get_constraints():
             for grasp in self.grasps:
-                grasp_constraint(grasp.body, grasp.robot, grasp.link)
+                add_grasp_constraint(grasp.body, grasp.robot, grasp.link)
         if real_time:
             enable_real_time()
         else:
@@ -123,9 +123,40 @@ class BodyPath(object):
         return self.__class__(self.body, refined_path, self.joints, self.grasps)
     def reverse(self):
         return self.__class__(self.body, self.path[::-1], self.joints, self.grasps)
-    def __repr__(self):
-        return 't{}'.format(id(self) % 1000)
 
+
+class Attach(object):
+    def __init__(self, body, robot, link):
+        self.body = body
+        self.robot = robot
+        self.link = link
+    def bodies(self):
+        return {self.body, self.robot}
+    def control(self, **kwargs):
+        # TODO: store the constraint_id?
+        add_grasp_constraint(self.body, self.robot, self.link)
+    def iterator(self, **kwargs):
+        return []
+    def refine(self, **kwargs):
+        return self
+    def reverse(self):
+        return Detach(self.body, self.robot, self.link)
+
+class Detach(object):
+    def __init__(self, body, robot, link):
+        self.body = body
+        self.robot = robot
+        self.link = link
+    def bodies(self):
+        return {self.body, self.robot}
+    def control(self, **kwargs):
+        remove_fixed_constraint(self.body, self.robot, self.link)
+    def iterator(self, **kwargs):
+        return []
+    def refine(self, **kwargs):
+        return self
+    def reverse(self):
+        return Attach(self.body, self.robot, self.link)
 
 class Command(object):
     def __init__(self, body_paths):

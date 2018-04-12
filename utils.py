@@ -17,10 +17,7 @@ except NameError:
 import numpy as np
 import pybullet as p
 import pickle
-from motion_planners.rrt_connect import birrt, direct_path
 from transformations import quaternion_from_matrix
-
-# https://stackoverflow.com/questions/21892989/what-is-the-good-python3-equivalent-for-auto-tuple-unpacking-in-lambda
 
 INF = np.inf
 PI = np.pi
@@ -293,14 +290,8 @@ def pose_from_base_values(base_values, default_pose):
 
 # Bodies
 
-def remove_body(body):
-    return p.removeBody(body)
-
-def get_num_bodies():
-    return p.getNumBodies()
-
 def get_bodies():
-    return list(range(get_num_bodies()))
+    return [p.getBodyUniqueId(i) for i in range(p.getNumBodies())]
 
 BodyInfo = namedtuple('BodyInfo', ['base_name', 'body_name'])
 
@@ -313,14 +304,14 @@ def get_base_name(body):
 def get_body_name(body):
     return get_body_info(body).body_name
 
-#def get_body_names():
-#    return map(get_body_name, get_bodies())
-
 def body_from_name(name):
-    for body in range(get_num_bodies()):
+    for body in get_bodies():
         if get_body_name(body) == name:
             return body
     raise ValueError(name)
+
+def remove_body(body):
+    return p.removeBody(body)
 
 def get_point(body):
     return p.getBasePositionAndOrientation(body)[0]
@@ -1011,6 +1002,7 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kw
             return env_collision(body)
         return any(pairwise_collision(body, obs) for obs in obstacles)
 
+    from motion_planners.rrt_connect import birrt, direct_path
     start_conf = get_joint_positions(body, joints)
     if direct:
         return direct_path(start_conf, end_conf, extend_fn, collision_fn)
@@ -1052,6 +1044,7 @@ def plan_base_motion(body, end_conf, obstacles=None, direct=False, **kwargs):
             return env_collision(body)
         return any(pairwise_collision(body, obs) for obs in obstacles)
 
+    from motion_planners.rrt_connect import birrt, direct_path
     start_conf = get_base_values(body)
     if direct:
         return direct_path(start_conf, end_conf, extend_fn, collision_fn)
@@ -1094,22 +1087,6 @@ def sample_placement(top_body, bottom_body, max_attempts=50):
 
 #####################################
 
-GraspInfo = namedtuple('GraspInfo', ['get_grasps', 'approach_pose'])
-HoldingInfo = namedtuple('HoldingInfo', ['frame', 'grasp_pose', 'body'])
-
-def end_effector_from_body(body_pose, grasp_pose):
-    return multiply(body_pose, invert(grasp_pose))
-
-
-def body_from_end_effector(end_effector_pose, grasp_pose):
-    return multiply(end_effector_pose, grasp_pose)
-
-
-def approach_from_grasp(approach_pose, end_effector_pose):
-    return multiply(approach_pose, end_effector_pose)
-
-#####################################
-
 # Reachability
 
 def sample_reachable_base(robot, point, reachable_range=(0.25, 1.0), max_attempts=50):
@@ -1125,10 +1102,14 @@ def sample_reachable_base(robot, point, reachable_range=(0.25, 1.0), max_attempt
 
 #####################################
 
-# Constraints
+# Constraints - applies forces when not satisfied
 
 def get_constraints():
-    return list(range(p.getNumConstraints()))
+    """
+    getConstraintUniqueId will take a serial index in range 0..getNumConstraints,  and reports the constraint unique id.
+    Note that the constraint unique ids may not be contiguous, since you may remove constraints.
+    """
+    return [p.getConstraintUniqueId(i) for i in range(p.getNumConstraints())]
 
 def remove_constraint(constraint):
     p.removeConstraint(constraint)
@@ -1141,13 +1122,15 @@ ConstraintInfo = namedtuple('ConstraintInfo', ['parentBodyUniqueId', 'parentJoin
 def get_constraint_info(constraint):
     return ConstraintInfo(*p.getConstraintInfo(constraint))
 
-def fixed_constraint(parent_body, link1, child_body, link2):
-    return p.createConstraint(parent_body, link1, child_body, link2,
-                              p.JOINT_FIXED, jointAxis=[0]*3,  # JOINT_FIXED
-                              parentFramePosition=[0]*3,
-                              childFramePosition=[0]*3)
+def get_fixed_constraints():
+    fixed_constraints = []
+    for constraint in get_constraints():
+        constraint_info = get_constraint_info(constraint)
+        if constraint_info.constraintType == p.JOINT_FIXED:
+            fixed_constraints.append(constraint)
+    return fixed_constraints
 
-def grasp_constraint(body, robot, robot_link):
+def add_grasp_constraint(body, robot, robot_link):
     body_link = BASE_LINK
     body_pose = get_pose(body)
     end_effector_pose = get_link_pose(robot, robot_link)
@@ -1168,10 +1151,42 @@ def grasp_constraint(body, robot, robot_link):
                               parentFrameOrientation=quat,
                               childFrameOrientation=unit_quat())
 
-def get_grasp_constraints():
-    pass
+def remove_fixed_constraint(body, robot, robot_link):
+    for constraint in get_fixed_constraints():
+        constraint_info = get_constraint_info(constraint)
+        if (body == body.childBodyUniqueId) and \
+                (BASE_LINK == constraint_info.childLinkIndex) and \
+                (robot == constraint_info.parentBodyUniqueId) and \
+                (robot_link == constraint_info.parentJointIndex):
+            remove_constraint(constraint)
 
+GraspInfo = namedtuple('GraspInfo', ['get_grasps', 'approach_pose'])
+AttachmentInfo = namedtuple('AttachmentInfo', ['body', 'grasp_pose', 'robot', 'link'])
 
+def body_from_end_effector(end_effector_pose, grasp_pose):
+    """
+    world_from_parent * parent_from_child = world_from_child
+    """
+    return multiply(end_effector_pose, grasp_pose)
+
+def end_effector_from_body(body_pose, grasp_pose):
+    """
+    world_from_child * (parent_from_child)^(-1) = world_from_parent
+    """
+    return multiply(body_pose, invert(grasp_pose))
+
+def approach_from_grasp(approach_pose, end_effector_pose):
+    return multiply(approach_pose, end_effector_pose)
+
+def get_grasp_pose(constraint):
+    """
+    Grasps are parent_from_child
+    """
+    constraint_info = get_constraint_info(constraint)
+    assert(constraint_info.constraintType == p.JOINT_FIXED)
+    joint_from_parent = (constraint_info.jointPivotInParent, constraint_info.jointFrameOrientationParent)
+    joint_from_child = (constraint_info.jointPivotInChild, constraint_info.jointFrameOrientationChild)
+    return multiply(invert(joint_from_parent), joint_from_child)
 
 #####################################
 
