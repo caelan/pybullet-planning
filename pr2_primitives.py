@@ -1,10 +1,9 @@
 from utils import invert, multiply, get_body_name, set_pose, get_link_pose, link_from_name, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
     unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values, \
-    inverse_kinematics
+    inverse_kinematics, uniform_pose_generator
 from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \
     get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
-    uniform_pose_generator, \
     learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses
 from pr2_problems import get_fixed_bodies
 

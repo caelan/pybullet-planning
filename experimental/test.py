@@ -4,7 +4,8 @@ import pybullet as p
 
 from pr2_utils import TOP_HOLDING_LEFT_ARM, LEFT_ARM_LINK, LEFT_JOINT_NAMES, RIGHT_JOINT_NAMES, TORSO_JOINT_NAME, \
     REST_RIGHT_ARM, \
-    load_inverse_reachability, create_inverse_reachability
+    load_inverse_reachability
+from create_ir_database import create_inverse_reachability
 from utils import get_joint_type, is_movable, get_joint_limits, create_box, get_max_velocity, get_num_joints, \
     get_movable_joints, get_joint_name, get_body_name, get_link_pose, joint_from_name, link_from_name, set_joint_position, \
     get_joint_position, \

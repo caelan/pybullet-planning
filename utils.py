@@ -907,18 +907,21 @@ ContactResult = namedtuple('ContactResult', ['contactFlag', 'bodyUniqueIdA', 'bo
 #def single_collision(body, max_distance=1e-3):
 #    return len(p.getClosestPoints(body, max_distance=max_distance)) != 0
 
-def pairwise_collision(body1, body2, max_distance=0.001): # 10000
+#MAX_DISTANCE = 1e-3
+MAX_DISTANCE = 0
+
+def pairwise_collision(body1, body2, max_distance=MAX_DISTANCE): # 10000
     # TODO: confirm that this doesn't just check the base link
     return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance)) != 0 # getContactPoints
 
 
-def pairwise_link_collision(body1, link1, body2, link2, max_distance=0.001): # 10000
+def pairwise_link_collision(body1, link1, body2, link2, max_distance=MAX_DISTANCE): # 10000
     return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
                                   linkIndexA=link1, linkIndexB=link2)) != 0 # getContactPoints
 
 def single_collision(body1, **kwargs):
     for body2 in get_bodies():
-        if (body1 != body2) and pairwise_collision(body1, body2):
+        if (body1 != body2) and pairwise_collision(body1, body2, **kwargs):
             return True
     return False
 
@@ -1053,7 +1056,7 @@ def get_moving_links(body, moving_joints):
         moving_links += get_link_descendants(body, link)
     return list(set(moving_links))
 
-def get_fixed_pairs(body, moving_joints):
+def get_moving_pairs(body, moving_joints):
     """
     Check all fixed and moving pairs
     Do not check all fixed and fixed pairs
@@ -1066,11 +1069,14 @@ def get_fixed_pairs(body, moving_joints):
         for j in range(i+1, len(moving_links)):
             link2 = moving_links[j]
             ancestors2 = set(get_joint_ancestors(body, link2)) & set(moving_joints)
-            if ancestors1 == ancestors2:
-                yield ancestors1, ancestors2
-                #print(link1, link2)
+            if ancestors1 != ancestors2:
+                #print(get_link_name(body, link1), ancestors1)
+                #print(get_link_name(body, link2), ancestors2)
+                #input('awefawef')
+                yield link1, link2
 
-def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[], direct=False, **kwargs):
+def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
+                      self_collisions=True, disabled_collisions=set(), direct=False, **kwargs):
     assert len(joints) == len(end_conf)
     moving_bodies = [body] + [attachment.child for attachment in attachments]
     sample_fn = get_sample_fn(body, joints)
@@ -1078,12 +1084,23 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[], di
     extend_fn = get_extend_fn(body, joints)
     # TODO: test self collision with the holding
 
-    moving_links = get_moving_links(body, joints)
-    fixed_links = list(set(get_links(body)) - set(moving_links))
-    check_link_pairs = list(product(moving_links, fixed_links)) + \
-                       list(combinations(moving_links, 2))
-    check_link_pairs = filter(lambda pair: not are_links_adjacent(body, *pair),
-                              check_link_pairs)
+    check_link_pairs = []
+    if self_collisions:
+        moving_links = get_moving_links(body, joints)
+        fixed_links = list(set(get_links(body)) - set(moving_links))
+        check_link_pairs = list(product(moving_links, fixed_links))
+        if True:
+            check_link_pairs += list(get_moving_pairs(body, joints))
+        else:
+            check_link_pairs += list(combinations(moving_links, 2))
+        check_link_pairs = filter(lambda pair: not are_links_adjacent(body, *pair), check_link_pairs)
+        check_link_pairs = filter(lambda pair: (pair not in disabled_collisions) and
+                                               (pair[::-1] not in disabled_collisions), check_link_pairs)
+
+    if obstacles is None:
+        obstacles = list(set(get_bodies()) - set(moving_bodies))
+    check_body_pairs = list(product(moving_bodies, obstacles)) #+ list(combinations(moving_bodies, 2))
+    # TODO: maybe prune the link adjacent to the robot
 
     # TODO: end-effector constraints
     def collision_fn(q):
@@ -1096,11 +1113,9 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[], di
         #    return True
         for link1, link2 in check_link_pairs:
             if pairwise_link_collision(body, link1, body, link2):
+                print(get_link_name(body, link1), get_link_name(body, link2))
                 return True
-        if obstacles is None:
-            return single_collision(body)
-        return any(pairwise_collision(mov, obs)
-                   for mov in moving_bodies for obs in obstacles)
+        return any(pairwise_collision(*pair) for pair in check_body_pairs)
 
     from motion_planners.rrt_connect import birrt, direct_path
     start_conf = get_joint_positions(body, joints)
@@ -1204,6 +1219,12 @@ def sample_reachable_base(robot, point, reachable_range=(0.25, 1.0), max_attempt
         return base_values
     return None
 
+def uniform_pose_generator(robot, gripper_pose, **kwargs):
+    point = point_from_pose(gripper_pose)
+    while True:
+        base_values = sample_reachable_base(robot, point)
+        set_base_values(robot, base_values)
+        yield get_pose(robot)
 
 #####################################
 
