@@ -10,7 +10,9 @@ from utils import connect, dump_world, get_pose, set_pose, Pose, Point, set_defa
     get_movable_joints, DRAKE_IIWA_URDF, INF, plan_joint_motion, end_effector_from_body, \
     body_from_end_effector, approach_from_grasp, joint_controller, get_constraints, grasp_constraint
 from utils import get_bodies, input, update_state, disable_real_time
-from test_kuka_ss import get_grasp_gen, get_ik_fn, get_free_motion_gen, get_holding_motion_gen, BodyPose, BodyConf, Command
+from kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, get_ik_fn, get_free_motion_gen, \
+    get_holding_motion_gen
+
 
 def main():
     connect(use_gui=True)
@@ -66,7 +68,7 @@ def main():
     #profile = "OpenRAVE"
     # ignore_link_pair
 
-    display = 'control' # control | execute | step
+    display = 'execute' # control | execute | step
     if display == 'control':
         enable_gravity()
         command.control(real_time=False)
