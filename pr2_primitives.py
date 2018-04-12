@@ -5,7 +5,7 @@ from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_con
     get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     inverse_kinematics, inverse_kinematics_helper, uniform_pose_generator, \
     learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses
-from problems import get_fixed_bodies
+from pr2_problems import get_fixed_bodies
 
 import pybullet as p
 import numpy as np

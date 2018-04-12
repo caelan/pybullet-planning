@@ -5,7 +5,7 @@ import cProfile
 
 from utils import connect, add_data_path, disconnect, get_pose, \
     update_state, link_from_name, step_simulation, is_placement, joints_from_names, get_joint_positions
-from problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
+from pr2_problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
     cleaning_button_problem, cooking_button_problem
 
 from ss.algorithms.dual_focused import dual_focused
