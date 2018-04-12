@@ -21,7 +21,7 @@ from pybullet_utils import connect, dump_world, get_pose, set_pose, Pose, Point,
     set_joint_positions, get_body_name, disconnect, clone_body, JOINT_TYPES, get_data_path, \
     get_movable_joints, DRAKE_IIWA_URDF, INF, plan_joint_motion, end_effector_from_body, \
     body_from_end_effector, approach_from_grasp, joint_controller, get_constraints, grasp_constraint
-from pybullet_utils import get_bodies, input
+from pybullet_utils import get_bodies, input, enable_real_time, disable_real_time, enable_gravity
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
@@ -73,7 +73,9 @@ rename_functions(locals())
 #######################################################
 
 class BodyPose(object):
-    def __init__(self, body, pose):
+    def __init__(self, body, pose=None):
+        if pose is None:
+            pose = get_pose(body)
         self.body = body
         self.pose = pose
     def assign(self):
@@ -98,9 +100,11 @@ class BodyGrasp(object):
         return 'g{}'.format(id(self) % 1000)
 
 class BodyConf(object):
-    def __init__(self, body, configuration, joints=None):
+    def __init__(self, body, configuration=None, joints=None):
         if joints is None:
             joints = get_movable_joints(body)
+        if configuration is None:
+            configuration = get_configuration(body)
         self.body = body
         self.joints = joints
         self.configuration = configuration
@@ -125,15 +129,23 @@ class BodyPath(object):
             for grasp in self.grasps:
                 grasp.assign()
             yield i
-    def control(self): # TODO: real_time
+    def control(self, real_time=False, dt=0):
         # TODO: just waypoints
         if not get_constraints():
             for grasp in self.grasps:
                 grasp_constraint(grasp.body, grasp.robot, grasp.link)
+        if real_time:
+            enable_real_time()
+        else:
+            disable_real_time()
         for values in self.path:
             for _ in joint_controller(self.body, self.joints, values):
-                p.stepSimulation()
-                # time.sleep(0.01)
+                if real_time:
+                    enable_gravity()
+                else:
+                    p.stepSimulation()
+                time.sleep(dt)
+        # TODO: could simulate step
 
     # def full_path(self, q0=None):
     #     # TODO: could produce savers
@@ -179,9 +191,9 @@ class Command(object):
         for i, body_path in enumerate(self.body_paths):
             for j in body_path.iterator():
                 msg = '{},{}) step?'.format(i, j)
-                #input(msg)
-                print(msg)
-                wait_for_interrupt()
+                input(msg)
+                #print(msg)
+                #wait_for_interrupt()
 
     def execute(self, time_step=0.05):
         for i, body_path in enumerate(self.body_paths):
@@ -189,9 +201,9 @@ class Command(object):
                 #time.sleep(time_step)
                 wait_for_duration(time_step)
 
-    def control(self): # TODO: real_time
+    def control(self, real_time=False, dt=0): # TODO: real_time
         for body_path in self.body_paths:
-            body_path.control()
+            body_path.control(real_time, dt)
 
     def refine(self, num_steps=0):
         return self.__class__([body_path.refine(num_steps) for body_path in self.body_paths])
@@ -229,16 +241,12 @@ def get_stable_gen(fixed=[]):
     return gen
 
 
-def get_ik_fn(robot, fixed=[], teleport=True):
+def get_ik_fn(robot, fixed=[], teleport=False):
     model_ids = ([robot] + fixed)
-    #gripper_id = get_body_from_name(tree, KUKA_TOOL_FRAME, robot).get_body_index()
     def fn(model, pose, grasp):
         gripper_pose = end_effector_from_body(pose.pose, grasp.grasp_pose)
         approach_pose = approach_from_grasp(grasp.approach_pose, gripper_pose)
-
-
         q_approach = inverse_kinematics_helper(robot, grasp.link, approach_pose)
-        print(q_approach)
         if (q_approach is None): # or are_colliding(tree, tree.doKinematics(q_approach), model_ids=model_ids):
             return None
         conf = BodyConf(robot, q_approach)
@@ -260,7 +268,7 @@ def get_ik_fn(robot, fixed=[], teleport=True):
     return fn
 
 
-def get_motion_gen(robot, fixed=[], teleport=True):
+def get_free_motion_gen(robot, fixed=[], teleport=False):
     model_ids = ([robot] + fixed)
     def fn(conf1, conf2):
         assert ((conf1.body == conf2.body) and (conf1.joints == conf2.joints))
@@ -277,7 +285,7 @@ def get_motion_gen(robot, fixed=[], teleport=True):
     return fn
 
 
-def get_holding_motion_gen(robot, fixed=[], teleport=True):
+def get_holding_motion_gen(robot, fixed=[], teleport=False):
     model_ids = ([robot] + fixed)
     def fn(conf1, conf2, body, grasp):
         assert ((conf1.body == conf2.body) and (conf1.joints == conf2.joints))
@@ -423,7 +431,7 @@ def ss_from_problem(robot, movable=[], bound='shared', teleport=False, movable_c
                  graph=[IsKin(O, P, G, Q, T), IsConf(Q), IsTraj(T)], bound=bound),
 
         FnStream(name='free_motion', inp=[Q, Q2], domain=[IsConf(Q), IsConf(Q2)],
-                 fn=get_motion_gen(robot, teleport=teleport), out=[T],
+                 fn=get_free_motion_gen(robot, teleport=teleport), out=[T],
                  graph=[IsFreeMotion(Q, Q2, T), IsTraj(T)], bound=bound),
 
         FnStream(name='holding_motion', inp=[Q, Q2, O, G], domain=[IsConf(Q), IsConf(Q2), IsGrasp(O, G)],

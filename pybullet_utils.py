@@ -3,6 +3,7 @@ from __future__ import print_function
 import sys
 import math
 import time
+import platform
 from collections import defaultdict, deque, namedtuple
 from itertools import product
 
@@ -45,6 +46,9 @@ STOVE_URDF = 'models/stove.urdf'
 #####################################
 
 # I/O
+
+def is_darwin(): # TODO: change loading accordingly
+    return platform.system() == 'Darwin' # platform.release()
 
 def write_pickle(filename, data):  # NOTE - cannot pickle lambda or nested functions
     with open(filename, 'wb') as f:
@@ -160,10 +164,17 @@ def disable_real_time():
     p.setRealTimeSimulation(0)
 
 def update_state():
-    for body in get_bodies():
-        get_pose(body)
-        for joint in get_joints(body):
-            get_joint_position(body, joint)
+    #disable_gravity()
+    step_simulation()
+    #for body in get_bodies():
+    #    for link in get_links(body):
+    #        # if set to 1 (or True), the Cartesian world position/orientation
+    #        # will be recomputed using forward kinematics.
+    #        get_link_state(body, link)
+    #for body in get_bodies():
+    #    get_pose(body)
+    #    for joint in get_joints(body):
+    #        get_joint_position(body, joint)
     #p.getKeyboardEvents()
     #p.getMouseEvents()
 
