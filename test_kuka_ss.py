@@ -92,10 +92,10 @@ def ss_from_problem(robot, movable=[], bound='shared', teleport=False, movable_c
     body = movable[0]
     goal_literals = [
         AtConf(conf),
-        Holding(body),
+        #Holding(body),
         #On(body, fixed[0]),
         #On(body, fixed[2]),
-        # Cleaned(body),
+        Cleaned(body),
         #Cooked(body),
     ]
 

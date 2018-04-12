@@ -1119,8 +1119,9 @@ ConstraintInfo = namedtuple('ConstraintInfo', ['parentBodyUniqueId', 'parentJoin
                                                'jointAxis', 'jointPivotInParent', 'jointPivotInChild',
                                                'jointFrameOrientationParent', 'jointFrameOrientationChild', 'maxAppliedForce'])
 
-def get_constraint_info(constraint):
-    return ConstraintInfo(*p.getConstraintInfo(constraint))
+def get_constraint_info(constraint): # getConstraintState
+    # TODO: four additional arguments
+    return ConstraintInfo(*p.getConstraintInfo(constraint)[:11])
 
 def get_fixed_constraints():
     fixed_constraints = []
@@ -1130,7 +1131,7 @@ def get_fixed_constraints():
             fixed_constraints.append(constraint)
     return fixed_constraints
 
-def add_grasp_constraint(body, robot, robot_link):
+def add_fixed_constraint(body, robot, robot_link):
     body_link = BASE_LINK
     body_pose = get_pose(body)
     end_effector_pose = get_link_pose(robot, robot_link)
@@ -1154,7 +1155,7 @@ def add_grasp_constraint(body, robot, robot_link):
 def remove_fixed_constraint(body, robot, robot_link):
     for constraint in get_fixed_constraints():
         constraint_info = get_constraint_info(constraint)
-        if (body == body.childBodyUniqueId) and \
+        if (body == constraint_info.childBodyUniqueId) and \
                 (BASE_LINK == constraint_info.childLinkIndex) and \
                 (robot == constraint_info.parentBodyUniqueId) and \
                 (robot_link == constraint_info.parentJointIndex):

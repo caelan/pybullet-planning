@@ -51,7 +51,6 @@ def main():
 
     saved_world.restore()
     update_state()
-    input('Execute?')
     # TODO: maybe some OpenRAVE links are disabled
     # http://openrave.org/docs/0.8.2/collada_robot_extensions/
 
@@ -61,10 +60,11 @@ def main():
     #profile = "OpenRAVE"
     # ignore_link_pair
 
-    display = 'execute' # control | execute | step
+    display = 'control' # control | execute | step
+    input('{}?'.format(display))
     if display == 'control':
         enable_gravity()
-        command.control(real_time=False)
+        command.control(real_time=False, dt=0)
     elif display == 'execute':
         command.refine(num_steps=10).execute(time_step=0.005)
     elif display == 'step':

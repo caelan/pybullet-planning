@@ -3,7 +3,7 @@ import time
 
 from pr2_utils import get_top_grasps
 from utils import get_pose, set_pose, get_link_pose, body_from_end_effector, get_movable_joints, get_configuration, \
-    set_joint_positions, get_constraints, add_grasp_constraint, enable_real_time, disable_real_time, joint_controller, \
+    set_joint_positions, get_constraints, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
     inverse_kinematics, pairwise_collision, remove_fixed_constraint
@@ -72,10 +72,6 @@ class BodyPath(object):
     def bodies(self):
         return set([self.body] + [grasp.body for grasp in self.grasps])
     def iterator(self):
-        # TODO: can still use constraints as a way of maintaining state
-        #if not get_constraints(): # TODO: only works for simulation through applying forces
-        #    for grasp in self.grasps:
-        #        grasp_constraint(grasp.body, grasp.robot, grasp.link)
         for i, configuration in enumerate(self.path):
             set_joint_positions(self.body, self.joints, configuration)
             for grasp in self.grasps:
@@ -83,38 +79,18 @@ class BodyPath(object):
             yield i
     def control(self, real_time=False, dt=0):
         # TODO: just waypoints
-        if not get_constraints():
-            for grasp in self.grasps:
-                add_grasp_constraint(grasp.body, grasp.robot, grasp.link)
         if real_time:
             enable_real_time()
         else:
             disable_real_time()
         for values in self.path:
             for _ in joint_controller(self.body, self.joints, values):
-                if real_time:
-                    enable_gravity()
-                else:
+                enable_gravity()
+                if not real_time:
                     p.stepSimulation()
                 time.sleep(dt)
-        # TODO: could simulate step
-
     # def full_path(self, q0=None):
-    #     # TODO: could produce savers
-    #     if q0 is None:
-    #         q0 = Conf(self.tree)
-    #     new_path = []
-    #     for values in self.sequence:
-    #         q = q0.copy()
-    #         q[self.positions] = values
-    #         if self.holding:  # TODO: cache this
-    #             kin_cache = self.tree.doKinematics(q)
-    #             for body_id, grasp_pose, model_id in self.holding:
-    #                 body_pose = get_world_pose(self.tree, kin_cache, body_id)
-    #                 model_pose = object_from_gripper(body_pose, grasp_pose)
-    #                 set_pose(self.tree, q, model_id, model_pose)
-    #         new_path.append(q)
-    #     return new_path
+    #     # TODO: could produce sequence of savers
     def refine(self, num_steps=0):
         refine_fn = get_refine_fn(self.body, self.joints, num_steps)
         refined_path = []
@@ -134,7 +110,7 @@ class Attach(object):
         return {self.body, self.robot}
     def control(self, **kwargs):
         # TODO: store the constraint_id?
-        add_grasp_constraint(self.body, self.robot, self.link)
+        add_fixed_constraint(self.body, self.robot, self.link)
     def iterator(self, **kwargs):
         return []
     def refine(self, **kwargs):
@@ -182,11 +158,11 @@ class Command(object):
         for i, body_path in enumerate(self.body_paths):
             for j in body_path.iterator():
                 #time.sleep(time_step)
-                wait_for_duration(time_step)
+                wait_for_duration(time_step=time_step)
 
     def control(self, real_time=False, dt=0): # TODO: real_time
         for body_path in self.body_paths:
-            body_path.control(real_time, dt)
+            body_path.control(real_time=real_time, dt=dt)
 
     def refine(self, num_steps=0):
         return self.__class__([body_path.refine(num_steps) for body_path in self.body_paths])
@@ -210,11 +186,11 @@ def get_grasp_gen(robot, grasp_name):
     return gen
 
 
-def get_stable_gen(fixed=[]):
+def get_stable_gen(fixed=[]): # TODO: continuous set of grasps
     def gen(body, surface):
         while True:
             pose = sample_placement(body, surface)
-            if pose is None:
+            if (pose is None) or any(pairwise_collision(body, b) for b in fixed):
                 continue
             body_pose = BodyPose(body, pose)
             yield (body_pose,)
@@ -242,6 +218,7 @@ def get_ik_fn(robot, fixed=[], teleport=False):
                 raw_input('Approach motion failed')
                 return None
         command = Command([BodyPath(robot, path),
+                           Attach(body, robot, grasp.link),
                            BodyPath(robot, path[::-1], grasps=[grasp])])
         return (conf, command)
         # TODO: holding collisions
