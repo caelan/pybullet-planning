@@ -22,7 +22,7 @@ def main():
     fixed = [floor] # TODO: get fixed objects
     grasp_gen = get_grasp_gen(robot, 'top')
     ik_fn = get_ik_fn(robot, fixed=fixed, teleport=teleport)
-    free_motion_fn = get_free_motion_gen(robot, fixed=fixed, teleport=teleport)
+    free_motion_fn = get_free_motion_gen(robot, fixed=([block] + fixed), teleport=teleport)
     holding_motion_fn = get_holding_motion_gen(robot, fixed=fixed, teleport=teleport)
 
     pose0 = BodyPose(block)
@@ -33,6 +33,7 @@ def main():
         if result1 is None:
             continue
         conf1, path2 = result1
+        pose0.assign()
         result2 = free_motion_fn(conf0, conf1)
         if result2 is None:
             continue

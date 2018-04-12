@@ -969,27 +969,28 @@ def get_extend_fn(body, joints, resolutions=None):
         return refine_fn(q1, q2)
     return fn
 
-def sparsify_path(body, joints, path):
-    if len(path) <= 2:
-        return path
-    difference_fn = get_difference_fn(body, joints)
-    waypoints = [path[0]]
-    last_difference = difference_fn(waypoints[-1], path[1])
-    last_conf = path[1]
-    for q in path[2:]:
-        new_difference = difference_fn(waypoints[-1], q)
-        #if np.allclose(last_difference, new_difference, atol=1e-3, rtol=0):
-        #
-        #last_difference = new_difference
-        #last_conf = q
-        # TODO: test if a scaling of itself
-    return path
+# def sparsify_path(body, joints, path):
+#     if len(path) <= 2:
+#         return path
+#     difference_fn = get_difference_fn(body, joints)
+#     waypoints = [path[0]]
+#     last_difference = difference_fn(waypoints[-1], path[1])
+#     last_conf = path[1]
+#     for q in path[2:]:
+#         new_difference = difference_fn(waypoints[-1], q)
+#         #if np.allclose(last_difference, new_difference, atol=1e-3, rtol=0):
+#         #
+#         #last_difference = new_difference
+#         #last_conf = q
+#         # TODO: test if a scaling of itself
+#     return path
 
-def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kwargs):
+def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[], direct=False, **kwargs):
     assert len(joints) == len(end_conf)
     # TODO: just check moving bodies vs other bodies
     # TODO: only need to check collisions for bodies that do not have a fixed relative transform
 
+    moving = [body] + [attachment.child for attachment in attachments]
     sample_fn = get_sample_fn(body, joints)
     distance_fn = get_distance_fn(body, joints)
     extend_fn = get_extend_fn(body, joints)
@@ -998,9 +999,11 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, direct=False, **kw
         if violates_limits(body, joints, q):
             return True
         set_joint_positions(body, joints, q)
+        for attachment in attachments:
+            attachment.assign()
         if obstacles is None:
             return env_collision(body)
-        return any(pairwise_collision(body, obs) for obs in obstacles)
+        return any(pairwise_collision(mov, obs) for mov in moving for obs in obstacles)
 
     from motion_planners.rrt_connect import birrt, direct_path
     start_conf = get_joint_positions(body, joints)
@@ -1161,8 +1164,26 @@ def remove_fixed_constraint(body, robot, robot_link):
                 (robot_link == constraint_info.parentJointIndex):
             remove_constraint(constraint)
 
+#####################################
+
+# Grasps
+
 GraspInfo = namedtuple('GraspInfo', ['get_grasps', 'approach_pose'])
-AttachmentInfo = namedtuple('AttachmentInfo', ['body', 'grasp_pose', 'robot', 'link'])
+
+class Attachment(object):
+    def __init__(self, parent, parent_link, grasp_pose, child):
+        self.parent = parent
+        self.parent_link = parent_link
+        self.grasp_pose = grasp_pose
+        self.child = child
+        #self.child_link = child_link # child_link=BASE_LINK
+    def assign(self):
+        parent_link_pose = get_link_pose(self.parent, self.parent_link)
+        child_pose = body_from_end_effector(parent_link_pose, self.grasp_pose)
+        set_pose(self.child, child_pose)
+        return child_pose
+    def __repr__(self):
+        return '{}({},{})'.format(self.__class__.__name__, self.parent, self.child)
 
 def body_from_end_effector(end_effector_pose, grasp_pose):
     """

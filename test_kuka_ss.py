@@ -60,7 +60,8 @@ rename_functions(locals())
 
 #######################################################
 
-def ss_from_problem(robot, movable=[], bound='shared', teleport=False, movable_collisions=False, grasp_name='top'):
+def ss_from_problem(robot, movable=[], bound='shared',
+                    teleport=False, movable_collisions=False, grasp_name='top'):
     #assert (not are_colliding(tree, kin_cache))
     rigid = [body for body in get_bodies() if body != robot]
     fixed = [body for body in rigid if body not in movable]
@@ -220,7 +221,7 @@ def main():
     saved_world = WorldSaver()
     dump_world()
 
-    ss_problem = ss_from_problem(robot, movable=[block], teleport=False, movable_collisions=False)
+    ss_problem = ss_from_problem(robot, movable=[block], teleport=False, movable_collisions=True)
     #ss_problem = ss_problem.debug_problem()
     #print(ss_problem)
 
