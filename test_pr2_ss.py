@@ -15,7 +15,7 @@ from ss.model.problem import Problem, get_length, get_cost
 from ss.model.operators import Action, Axiom
 from ss.model.streams import Stream, ListStream, GenStream, FnStream, TestStream
 
-from streams import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
+from pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
     get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, Trajectory
 from pr2_utils import ARM_LINK_NAMES, close_arm, ARM_JOINT_NAMES, get_arm_joints
 
