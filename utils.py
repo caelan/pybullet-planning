@@ -61,6 +61,8 @@ def read_pickle(filename):
 # Simulation
 
 def load_model(model_file, pose=None, fixed_base=True):
+    #p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
+    #p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
     add_data_path()
     if model_file.endswith('.urdf'):
         body = p.loadURDF(model_file, useFixedBase=fixed_base)
@@ -361,7 +363,9 @@ def dump_world():
                 is_circular(body, joint), get_joint_limits(body, joint)))
         print('Link id: {} | Name: {} | Mass: {}'.format(-1, get_base_name(body), get_mass(body)))
         for link in get_links(body):
-            print('Link id: {} | Name: {} | Mass: {}'.format(link, get_link_name(body, link), get_mass(body, link)))
+            print('Link id: {} | Name: {} | Parent: {} | Mass: {}'.format(
+                link, get_link_name(body, link), get_link_name(body, get_link_parent(body, link)),
+                get_mass(body, link)))
         print()
 
 #####################################
@@ -447,6 +451,8 @@ def joint_from_movable(body, index):
 
 def is_circular(body, joint):
     joint_info = get_joint_info(body, joint)
+    if joint_info.jointType == p.JOINT_FIXED:
+        return False
     return joint_info.jointUpperLimit < joint_info.jointLowerLimit
 
 def get_joint_limits(body, joint):
@@ -504,12 +510,18 @@ STATIC_MASS = 0
 get_links = get_joints
 
 def get_link_name(body, link):
+    if link == BASE_LINK:
+        return get_base_name(body)
     return get_joint_info(body, link).linkName
 
-def get_link_parent(body, joint):
-    return get_joint_info(body, joint).parentIndex
+def get_link_parent(body, link):
+    if link == BASE_LINK:
+        return None
+    return get_joint_info(body, link).parentIndex
 
 def link_from_name(body, name):
+    if name == get_base_name(body):
+        return BASE_LINK
     for link in get_joints(body):
         if get_link_name(body, link) == name:
             return link
@@ -535,6 +547,41 @@ def get_link_pose(body, link):
     link_state = get_link_state(body, link)
     return link_state.worldLinkFramePosition, link_state.worldLinkFrameOrientation
 
+def get_all_link_parents(body):
+    return {link: get_link_parent(body, link) for link in get_links(body)}
+
+def get_all_link_children(body):
+    children = {}
+    for child, parent in get_all_link_parents(body).items():
+        if parent not in children:
+            children[parent] = []
+        children[parent].append(child)
+    return children
+
+def get_link_children(body, link):
+    children = get_all_link_children(body)
+    return children.get(link, [])
+
+def get_link_ancestors(body, link):
+    parent = get_link_parent(body, link)
+    if parent is None:
+        return []
+    return get_link_ancestors(body, parent) + [parent]
+
+def get_joint_ancestors(body, link):
+    """
+    Movable joints that produce the position of the link
+    """
+    joint_ancestors = get_link_ancestors(body, link) + [link]
+    return filter(lambda j: is_movable(body, j), joint_ancestors)
+
+def get_link_descendants(body, link):
+    descendants = []
+    for child in get_link_children(body, link):
+        descendants.append(child)
+        descendants += get_link_descendants(body, child)
+    return descendants
+
 def get_adjacent_links(body):
     adjacent = set()
     for link in get_links(body):
@@ -543,9 +590,9 @@ def get_adjacent_links(body):
         #adjacent.add((parent, link))
     return adjacent
 
-
 def get_adjacent_fixed_links(body):
-    return filter(lambda item: not is_movable(body, item[0]), get_adjacent_links(body))
+    return filter(lambda item: not is_movable(body, item[0]),
+                  get_adjacent_links(body))
 
 
 def get_fixed_links(body):
@@ -850,20 +897,40 @@ def contact_collision():
     p.stepSimulation()
     return len(p.getContactPoints()) != 0
 
+ContactResult = namedtuple('ContactResult', ['contactFlag', 'bodyUniqueIdA', 'bodyUniqueIdB',
+                                         'linkIndexA', 'linkIndexB', 'positionOnA', 'positionOnB',
+                                         'contactNormalOnB', 'contactDistance', 'normalForce'])
+
+#def single_collision(body, max_distance=1e-3):
+#    return len(p.getClosestPoints(body, max_distance=max_distance)) != 0
 
 def pairwise_collision(body1, body2, max_distance=0.001): # 10000
-    return len(p.getClosestPoints(body1, body2, max_distance)) != 0 # getContactPoints
+    # TODO: confirm that this doesn't just check the base link
+    return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance)) != 0 # getContactPoints
 
 
 def pairwise_link_collision(body1, link1, body2, link2, max_distance=0.001): # 10000
-    return len(p.getClosestPoints(body1, body2, link1, link2, max_distance)) != 0 # getContactPoints
+    return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
+                                  linkIndexA=link1, linkIndexB=link2)) != 0 # getContactPoints
 
+def single_collision(body1, **kwargs):
+    for body2 in get_bodies():
+        if (body1 != body2) and pairwise_collision(body1, body2):
+            return True
+    return False
+
+def all_collision(**kwargs):
+    bodies = get_bodies()
+    for i in range(len(bodies)):
+        for j in range(i+1, len(bodies)):
+            if pairwise_collision(bodies[i], bodies[j], **kwargs):
+                return True
+    return False
 
 def get_contact_links(contact):
     _, body1, body2, link1, link2 = contact[:5]
     distance = contact[8]
     return (body1, link1), (body2, link2), distance
-
 
 def get_colliding_links(body, max_distance=-0.001):
     contacts = p.getClosestPoints(body, body, max_distance) # -1 is the base
@@ -889,22 +956,14 @@ def self_collision(body, max_distance=0):
     #print [(get_link_name(body, link1), get_link_name(body, link2), distance)
     #       for (link1, link2, distance) in colliding_not_adjacent]
     # TODO: could compute initially colliding links and discount those collisions
-
     return len(colliding_not_adjacent) != 0
 
-def filtered_self_collision(body, acceptable=tuple(), max_distance=0):
-    contacts = p.getClosestPoints(body, body, max_distance) # -1 is the base
-    for (_, link1), (_, link2), _ in map(get_contact_links, contacts):
-        if (link1 != link2) and (link1, link2) not in acceptable:
-            return True
-    return False
-
-def env_collision(body1):
-    for body2 in get_bodies():
-        if (body1 != body2) and pairwise_collision(body1, body2):
-        #if pairwise_collision(body1, body2):
-            return True
-    return False
+#def filtered_self_collision(body, acceptable=tuple(), max_distance=0):
+#    contacts = p.getClosestPoints(body, body, max_distance) # -1 is the base
+#    for (_, link1), (_, link2), _ in map(get_contact_links, contacts):
+#        if (link1 != link2) and (link1, link2) not in acceptable:
+#            return True
+#    return False
 
 RayResult = namedtuple('RayResult', ['objectUniqueId', 'linkIndex',
                                      'hit_fraction', 'hit_position', 'hit_normal'])
@@ -987,10 +1046,36 @@ def get_extend_fn(body, joints, resolutions=None):
 
 def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[], direct=False, **kwargs):
     assert len(joints) == len(end_conf)
-    # TODO: just check moving bodies vs other bodies
+    # TODO: just check moving_bodies bodies vs other bodies
     # TODO: only need to check collisions for bodies that do not have a fixed relative transform
+    # TODO: for all pairs of links, check whether common ancestor that can be moved
 
-    moving = [body] + [attachment.child for attachment in attachments]
+    # TODO: complain if initial or goal is infeasible
+
+    moving_links = []
+    for link in joints:
+        moving_links.append(link)
+        moving_links += get_link_descendants(body, link)
+    moving_links = list(set(moving_links))
+    fixed_links = list(set(get_links(body)) - set(moving_links))
+    print(moving_links)
+    print(fixed_links)
+    # Check all fixed and moving pairs
+    # Do not check all fixed and fixed pairs
+    # Check all moving pairs with a common
+
+    for i in range(len(moving_links)):
+        link1 = moving_links[i]
+        ancestors1 = get_link_ancestors(body, link1) + [link1]
+        for j in range(1, len(moving_links)):
+            link2 = moving_links[j]
+
+    #links = get_links(body)
+    #for i in range():
+    #    for link1 in get_links(body):
+
+
+    moving_bodies = [body] + [attachment.child for attachment in attachments]
     sample_fn = get_sample_fn(body, joints)
     distance_fn = get_distance_fn(body, joints)
     extend_fn = get_extend_fn(body, joints)
@@ -1002,8 +1087,8 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[], di
         for attachment in attachments:
             attachment.assign()
         if obstacles is None:
-            return env_collision(body)
-        return any(pairwise_collision(mov, obs) for mov in moving for obs in obstacles)
+            return all_collision(body)
+        return any(pairwise_collision(mov, obs) for mov in moving_bodies for obs in obstacles)
 
     from motion_planners.rrt_connect import birrt, direct_path
     start_conf = get_joint_positions(body, joints)
@@ -1044,7 +1129,7 @@ def plan_base_motion(body, end_conf, obstacles=None, direct=False, **kwargs):
     def collision_fn(q):
         set_base_values(body, q)
         if obstacles is None:
-            return env_collision(body)
+            return all_collision(body)
         return any(pairwise_collision(body, obs) for obs in obstacles)
 
     from motion_planners.rrt_connect import birrt, direct_path
