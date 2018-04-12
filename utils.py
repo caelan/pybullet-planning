@@ -5,7 +5,7 @@ import math
 import time
 import platform
 from collections import defaultdict, deque, namedtuple
-from itertools import product
+from itertools import product, combinations
 
 # from future_builtins import map, filter
 # from builtins import input # TODO - use future
@@ -569,11 +569,10 @@ def get_link_ancestors(body, link):
     return get_link_ancestors(body, parent) + [parent]
 
 def get_joint_ancestors(body, link):
-    """
-    Movable joints that produce the position of the link
-    """
-    joint_ancestors = get_link_ancestors(body, link) + [link]
-    return filter(lambda j: is_movable(body, j), joint_ancestors)
+    return get_link_ancestors(body, link) + [link]
+
+def get_movable_joint_ancestors(body, link):
+    return filter(lambda j: is_movable(body, j), get_joint_ancestors(body, link))
 
 def get_link_descendants(body, link):
     descendants = []
@@ -581,6 +580,10 @@ def get_link_descendants(body, link):
         descendants.append(child)
         descendants += get_link_descendants(body, child)
     return descendants
+
+def are_links_adjacent(body, link1, link2):
+    return (get_link_parent(body, link1) == link2) or \
+           (get_link_parent(body, link2) == link1)
 
 def get_adjacent_links(body):
     adjacent = set()
@@ -1044,79 +1047,93 @@ def get_extend_fn(body, joints, resolutions=None):
 #         # TODO: test if a scaling of itself
 #     return path
 
-def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[], direct=False, **kwargs):
-    assert len(joints) == len(end_conf)
-    # TODO: just check moving_bodies bodies vs other bodies
-    # TODO: only need to check collisions for bodies that do not have a fixed relative transform
-    # TODO: for all pairs of links, check whether common ancestor that can be moved
-
-    # TODO: complain if initial or goal is infeasible
-
-    moving_links = []
-    for link in joints:
-        moving_links.append(link)
+def get_moving_links(body, moving_joints):
+    moving_links = moving_joints[:]
+    for link in moving_joints:
         moving_links += get_link_descendants(body, link)
-    moving_links = list(set(moving_links))
-    fixed_links = list(set(get_links(body)) - set(moving_links))
-    print(moving_links)
-    print(fixed_links)
-    # Check all fixed and moving pairs
-    # Do not check all fixed and fixed pairs
-    # Check all moving pairs with a common
+    return list(set(moving_links))
 
+def get_fixed_pairs(body, moving_joints):
+    """
+    Check all fixed and moving pairs
+    Do not check all fixed and fixed pairs
+    Check all moving pairs with a common
+    """
+    moving_links = get_moving_links(body, moving_joints)
     for i in range(len(moving_links)):
         link1 = moving_links[i]
-        ancestors1 = get_link_ancestors(body, link1) + [link1]
-        for j in range(1, len(moving_links)):
+        ancestors1 = set(get_joint_ancestors(body, link1)) & set(moving_joints)
+        for j in range(i+1, len(moving_links)):
             link2 = moving_links[j]
+            ancestors2 = set(get_joint_ancestors(body, link2)) & set(moving_joints)
+            if ancestors1 == ancestors2:
+                yield ancestors1, ancestors2
+                #print(link1, link2)
 
-    #links = get_links(body)
-    #for i in range():
-    #    for link1 in get_links(body):
-
-
+def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[], direct=False, **kwargs):
+    assert len(joints) == len(end_conf)
     moving_bodies = [body] + [attachment.child for attachment in attachments]
     sample_fn = get_sample_fn(body, joints)
     distance_fn = get_distance_fn(body, joints)
     extend_fn = get_extend_fn(body, joints)
+    # TODO: test self collision with the holding
 
+    moving_links = get_moving_links(body, joints)
+    fixed_links = list(set(get_links(body)) - set(moving_links))
+    check_link_pairs = list(product(moving_links, fixed_links)) + \
+                       list(combinations(moving_links, 2))
+    check_link_pairs = filter(lambda pair: not are_links_adjacent(body, *pair),
+                              check_link_pairs)
+
+    # TODO: end-effector constraints
     def collision_fn(q):
         if violates_limits(body, joints, q):
             return True
         set_joint_positions(body, joints, q)
         for attachment in attachments:
             attachment.assign()
+        #if pairwise_collision(body, body):
+        #    return True
+        for link1, link2 in check_link_pairs:
+            if pairwise_link_collision(body, link1, body, link2):
+                return True
         if obstacles is None:
-            return all_collision(body)
-        return any(pairwise_collision(mov, obs) for mov in moving_bodies for obs in obstacles)
+            return single_collision(body)
+        return any(pairwise_collision(mov, obs)
+                   for mov in moving_bodies for obs in obstacles)
 
     from motion_planners.rrt_connect import birrt, direct_path
     start_conf = get_joint_positions(body, joints)
+    if collision_fn(start_conf):
+        print("Warning: initial configuration is in collision")
+        return None
+    if collision_fn(end_conf):
+        print("Warning: end configuration is in collision")
+        return None
     if direct:
         return direct_path(start_conf, end_conf, extend_fn, collision_fn)
     return birrt(start_conf, end_conf, distance_fn,
                  sample_fn, extend_fn, collision_fn, **kwargs)
 
-def plan_base_motion(body, end_conf, obstacles=None, direct=False, **kwargs):
-    BASE_LIMITS = ([-2.5, -2.5, 0], [2.5, 2.5, 0])
+def plan_base_motion(body, end_conf, obstacles=None, direct=False,
+                     base_limits=([-2.5, -2.5], [2.5, 2.5]),
+                     weights=1*np.ones(3),
+                     resolutions=0.05*np.ones(3),
+                     **kwargs):
     def sample_fn():
-        x, y, _ = np.random.uniform(*BASE_LIMITS)
+        x, y = np.random.uniform(*base_limits)
         theta = np.random.uniform(*CIRCULAR_LIMITS)
         return (x, y, theta)
 
     def difference_fn(q2, q1):
-        #return np.array(q2) - np.array(q1)
         dx, dy = np.array(q2[:2]) - np.array(q1[:2])
         dtheta = circular_difference(q2[2], q1[2])
         return (dx, dy, dtheta)
 
-    weights = 1*np.ones(3)
     def distance_fn(q1, q2):
         difference = np.array(difference_fn(q2, q1))
         return np.sqrt(np.dot(weights, difference * difference))
-        #return np.linalg.norm(np.array(q2) - np.array(q1))
 
-    resolutions = 0.05*np.ones(3)
     def extend_fn(q1, q2):
         steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
         n = int(np.max(steps)) + 1
@@ -1129,7 +1146,7 @@ def plan_base_motion(body, end_conf, obstacles=None, direct=False, **kwargs):
     def collision_fn(q):
         set_base_values(body, q)
         if obstacles is None:
-            return all_collision(body)
+            return single_collision(body)
         return any(pairwise_collision(body, obs) for obs in obstacles)
 
     from motion_planners.rrt_connect import birrt, direct_path
