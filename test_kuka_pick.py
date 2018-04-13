@@ -15,14 +15,14 @@ def main():
     #robot = load_model(KUKA_IIWA_URDF)
     robot = load_model(DRAKE_IIWA_URDF)
     #robot = load_model(DRAKE_IIWA_URDF)
-    #clone_body(robot, collision=False, visual=False)
+    clone_body(robot, collision=False, visual=False)
     #clone_skeleton(robot)
     floor = load_model('models/short_floor.urdf')
     block = load_model(BLOCK_URDF, fixed_base=False)
     set_pose(block, Pose(Point(y=0.5, z=stable_z(block, floor))))
     set_default_camera()
 
-    new_robot = clone_body_editor(robot)
+    #new_robot = clone_body_editor(robot)
     #save_body(robot, 'test.urdf')
 
     dump_world()

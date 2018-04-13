@@ -766,7 +766,7 @@ def clone_body_editor(body):
     editor = UrdfEditor()
     editor.initializeFromBulletBody(body, 0)
     #return editor.createMultiBody() # pybullet.error: createVisualShapeArray failed.
-    return body_from_editor(editor, base_shapes=True, link_shapes=True)
+    return body_from_editor(editor, base_shapes=False, link_shapes=False)
 
 def save_body(body, filename):
     from pybullet_utils.urdfEditor import UrdfEditor
@@ -782,6 +782,7 @@ def clone_body(body, collision=False, visual=False):
         collision_data = get_collision_data(body, link)
         if collision_data:
             assert (len(collision_data) == 1)
+            # TODO: can do CollisionArray
             return collision_shape_from_data(collision_data[0])
         return -1
 
@@ -814,19 +815,9 @@ def clone_body(body, collision=False, visual=False):
         orientations.append(joint_info.parentFrameOrn)
         inertial_positions.append(dynamics_info.local_inertial_pos)
         inertial_orientations.append(dynamics_info.local_inertial_orn)
-        parent_indices.append(joint_info.parentIndex)
+        parent_indices.append(joint_info.parentIndex + 1) # TODO: need the increment to work
         joint_types.append(joint_info.jointType)
         joint_axes.append(joint_info.jointAxis)
-    # print(masses,
-    # collision_shapes,
-    # visual_shapes,
-    # positions,
-    # orientations,
-    # inertial_positions,
-    # inertial_orientations,
-    # parent_indices,
-    # joint_types,
-    # joint_axes)
 
     base_dynamics_info = get_dynamics_info(body)
     return p.createMultiBody(baseMass=base_dynamics_info.mass,
@@ -845,8 +836,7 @@ def clone_body(body, collision=False, visual=False):
                              linkInertialFrameOrientations=inertial_orientations,
                              linkParentIndices=parent_indices,
                              linkJointTypes=joint_types,
-                             linkJointAxis=joint_axes,
-                             useMaximalCoordinates=0)
+                             linkJointAxis=joint_axes)
 
 def clone_skeleton(body):
     masses = []
@@ -1657,7 +1647,8 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
                               # basePosition=basePosition,
                               # baseOrientation=baseOrientation,
                               baseInertialFramePosition=base.urdf_inertial.origin_xyz,
-                              baseInertialFrameOrientation=base.urdf_inertial.origin_rpy,
+                              #baseInertialFrameOrientation=base.urdf_inertial.origin_rpy,
+                              baseInertialFrameOrientation=p.getQuaternionFromEuler(base.urdf_inertial.origin_rpy),
                               linkMasses=linkMasses,
                               linkCollisionShapeIndices=linkCollisionShapeIndices,
                               linkVisualShapeIndices=linkVisualShapeIndices,
