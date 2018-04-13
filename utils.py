@@ -766,7 +766,7 @@ def clone_body_editor(body):
     editor = UrdfEditor()
     editor.initializeFromBulletBody(body, 0)
     #return editor.createMultiBody() # pybullet.error: createVisualShapeArray failed.
-    return body_from_editor(editor)
+    return body_from_editor(editor, base_shapes=True, link_shapes=True)
 
 def save_body(body, filename):
     from pybullet_utils.urdfEditor import UrdfEditor
@@ -1545,20 +1545,17 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
     meshScaleArray = []
     basePositionsArray = []
     baseOrientationsArray = []
+    if base.urdf_collision_shapes and base_shapes:
+        for v in base.urdf_collision_shapes:
+            baseShapeTypeArray.append(v.geom_type)
+            baseHalfExtentsArray.append([0.5 * v.geom_extents[0], 0.5 * v.geom_extents[1], 0.5 * v.geom_extents[2]])
+            baseRadiusArray.append(v.geom_radius)
+            lengthsArray.append(v.geom_length)
+            fileNameArray.append(v.geom_meshfilename)
+            meshScaleArray.append(v.geom_meshscale)
+            basePositionsArray.append(v.origin_xyz)
+            baseOrientationsArray.append(p.getQuaternionFromEuler(v.origin_rpy))
 
-    for v in base.urdf_collision_shapes:
-        shapeType = v.geom_type
-        baseShapeTypeArray.append(shapeType)
-        baseHalfExtentsArray.append([0.5 * v.geom_extents[0], 0.5 * v.geom_extents[1], 0.5 * v.geom_extents[2]])
-        baseRadiusArray.append(v.geom_radius)
-        lengthsArray.append(v.geom_length)
-        fileNameArray.append(v.geom_meshfilename)
-        meshScaleArray.append(v.geom_meshscale)
-        basePositionsArray.append(v.origin_xyz)
-        orn = p.getQuaternionFromEuler(v.origin_rpy)
-        baseOrientationsArray.append(orn)
-
-    if (len(baseShapeTypeArray)) and base_shapes:
         baseCollisionShapeIndex = p.createCollisionShapeArray(shapeTypes=baseShapeTypeArray,
                                                               radii=baseRadiusArray,
                                                               halfExtents=baseHalfExtentsArray,
@@ -1594,19 +1591,12 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
     linkParentIndices = []
     linkJointTypes = []
     linkJointAxis = []
-
     for joint in editor.urdfJoints:
         link = joint.link
         linkMass = link.urdf_inertial.mass
         linkCollisionShapeIndex = -1
         linkVisualShapeIndex = -1
-        linkPosition = [0, 0, 0]
-        linkOrientation = [0, 0, 0]
-        linkInertialFramePosition = [0, 0, 0]
-        linkInertialFrameOrientation = [0, 0, 0]
         linkParentIndex = editor.linkNameToIndex[joint.parent_name]
-        linkJointType = joint.joint_type
-        linkJointAx = joint.joint_axis_xyz
         linkShapeTypeArray = []
         linkRadiusArray = []
         linkHalfExtentsArray = []
@@ -1615,18 +1605,17 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
         linkPositionsArray = []
         linkOrientationsArray = []
 
-        for v in link.urdf_collision_shapes:
-            shapeType = v.geom_type
-            linkShapeTypeArray.append(shapeType)
-            linkHalfExtentsArray.append([0.5 * v.geom_extents[0], 0.5 * v.geom_extents[1], 0.5 * v.geom_extents[2]])
-            linkRadiusArray.append(v.geom_radius)
-            lengthsArray.append(v.geom_length)
-            fileNameArray.append(v.geom_meshfilename)
-            linkMeshScaleArray.append(v.geom_meshscale)
-            linkPositionsArray.append(v.origin_xyz)
-            linkOrientationsArray.append(p.getQuaternionFromEuler(v.origin_rpy))
+        if link.urdf_collision_shapes and link_shapes:
+            for v in link.urdf_collision_shapes:
+                linkShapeTypeArray.append(v.geom_type)
+                linkHalfExtentsArray.append([0.5 * v.geom_extents[0], 0.5 * v.geom_extents[1], 0.5 * v.geom_extents[2]])
+                linkRadiusArray.append(v.geom_radius)
+                lengthsArray.append(v.geom_length)
+                fileNameArray.append(v.geom_meshfilename)
+                linkMeshScaleArray.append(v.geom_meshscale)
+                linkPositionsArray.append(v.origin_xyz)
+                linkOrientationsArray.append(p.getQuaternionFromEuler(v.origin_rpy))
 
-        if (len(linkShapeTypeArray)) and link_shapes:
             linkCollisionShapeIndex = p.createCollisionShapeArray(shapeTypes=linkShapeTypeArray,
                                                                   radii=linkRadiusArray,
                                                                   halfExtents=linkHalfExtentsArray,
@@ -1661,6 +1650,7 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
         linkParentIndices.append(linkParentIndex)
         linkJointTypes.append(joint.joint_type)
         linkJointAxis.append(joint.joint_axis_xyz)
+
     obUid = p.createMultiBody(baseMass, \
                               baseCollisionShapeIndex=baseCollisionShapeIndex,
                               baseVisualShapeIndex=baseVisualShapeIndex,
