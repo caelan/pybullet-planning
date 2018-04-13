@@ -231,7 +231,7 @@ def unit_point():
     return (0., 0., 0.)
 
 def unit_quat():
-    return quat_from_euler([0, 0, 0])
+    return quat_from_euler([0, 0, 0]) # [X,Y,Z,W]
 
 def unit_pose():
     return (unit_point(), unit_quat())
@@ -498,9 +498,7 @@ def get_joint_axis(body, joint):
 
 def get_joint_parent_frame(body, joint):
     joint_info = get_joint_info(body, joint)
-    point = joint_info.parentFramePos
-    euler = joint_info.parentFrameOrn
-    return (point, quat_from_euler(euler))
+    return joint_info.parentFramePos, joint_info.parentFrameOrn
 
 def violates_limit(body, joint, value):
     if not is_circular(body, joint):
@@ -563,7 +561,7 @@ def get_com_pose(body, link): # COM = center of mass
     link_state = get_link_state(body, link)
     return link_state.linkWorldPosition, link_state.linkWorldOrientation
 
-def get_inertial_pose(body, link):
+def get_link_inertial_pose(body, link):
     link_state = get_link_state(body, link)
     return link_state.localInertialFramePosition, link_state.localInertialFrameOrientation
 
@@ -656,6 +654,20 @@ def get_dynamics_info(body, link=BASE_LINK):
 
 def get_mass(body, link=BASE_LINK):
     return get_dynamics_info(body, link).mass
+
+def get_joint_inertial_pose(body, joint):
+    dynamics_info = get_dynamics_info(body, joint)
+    return dynamics_info.local_inertial_pos, dynamics_info.local_inertial_orn
+
+def get_local_link_pose(body, joint):
+    # https://github.com/bulletphysics/bullet3/blob/9c9ac6cba8118544808889664326fd6f06d9eeba/examples/pybullet/gym/pybullet_utils/urdfEditor.py#L169
+    parent_com = get_joint_parent_frame(body, joint)
+    tmp_pose = invert(multiply(get_joint_inertial_pose(body, joint), parent_com))
+    parent_joint = get_link_parent(body, joint)
+    parent_inertia = get_joint_inertial_pose(body, parent_joint)
+    _, orn = multiply(parent_inertia, tmp_pose)
+    pos, _ = multiply(parent_inertia, Pose(parent_com[0]))
+    return (pos, orn)
 
 #####################################
 
@@ -761,12 +773,13 @@ def collision_shape_from_data(data):
                                   collisionFrameOrientation=data.local_frame_pos)
     #return p.createCollisionShapeArray()
 
-def clone_body_editor(body):
+def clone_body_editor(body, shapes=True):
     from pybullet_utils.urdfEditor import UrdfEditor
     editor = UrdfEditor()
     editor.initializeFromBulletBody(body, 0)
     #return editor.createMultiBody() # pybullet.error: createVisualShapeArray failed.
-    return body_from_editor(editor, base_shapes=False, link_shapes=False)
+    # TODO: maybe the failure is because of relative paths?
+    return body_from_editor(editor, base_shapes=shapes, link_shapes=shapes)
 
 def save_body(body, filename):
     from pybullet_utils.urdfEditor import UrdfEditor
@@ -811,16 +824,43 @@ def clone_body(body, collision=False, visual=False):
         masses.append(dynamics_info.mass)
         collision_shapes.append(clone_collision_shape(link))
         visual_shapes.append(clone_visual_shape(link))
-        positions.append(joint_info.parentFramePos)
-        orientations.append(joint_info.parentFrameOrn)
+        #point, quat = invert((joint_info.parentFramePos, joint_info.parentFrameOrn))
+        #point, quat = (joint_info.parentFramePos, joint_info.parentFrameOrn)
+        point, quat = get_local_link_pose(body, link)
+        positions.append(point)
+        orientations.append(quat)
         inertial_positions.append(dynamics_info.local_inertial_pos)
         inertial_orientations.append(dynamics_info.local_inertial_orn)
         parent_indices.append(joint_info.parentIndex + 1) # TODO: need the increment to work
         joint_types.append(joint_info.jointType)
         joint_axes.append(joint_info.jointAxis)
+    # https://github.com/bulletphysics/bullet3/blob/9c9ac6cba8118544808889664326fd6f06d9eeba/examples/pybullet/gym/pybullet_utils/urdfEditor.py#L169
 
     base_dynamics_info = get_dynamics_info(body)
-    return p.createMultiBody(baseMass=base_dynamics_info.mass,
+
+    """
+    debug = [
+        base_dynamics_info.mass,
+        clone_collision_shape(),
+        clone_visual_shape(),
+        base_dynamics_info.local_inertial_pos,
+        base_dynamics_info.local_inertial_orn,
+        masses,
+        collision_shapes,
+        visual_shapes,
+        positions,
+        orientations,
+        inertial_positions,
+        inertial_orientations,
+        parent_indices,
+        joint_types,
+        joint_axes,
+    ]
+    for thing in debug:
+        print(thing)
+    print()
+    """
+    new_body = p.createMultiBody(baseMass=base_dynamics_info.mass,
                              baseCollisionShapeIndex=clone_collision_shape(),
                              baseVisualShapeIndex=clone_visual_shape(),
                              basePosition=get_point(body),
@@ -837,41 +877,8 @@ def clone_body(body, collision=False, visual=False):
                              linkParentIndices=parent_indices,
                              linkJointTypes=joint_types,
                              linkJointAxis=joint_axes)
-
-def clone_skeleton(body):
-    masses = []
-    collision_shapes = []
-    visual_shapes = []
-    positions = []
-    orientations = []
-    inertial_positions = []
-    inertial_orientations = []
-    parent_indices = []
-    joint_types = []
-    joint_axes = []
-    for link in get_links(body):
-        joint_info = get_joint_info(body, link)
-        masses.append(0)
-        collision_shapes.append(-1)
-        visual_shapes.append(-1)
-        positions.append(joint_info.parentFramePos)
-        orientations.append(joint_info.parentFrameOrn)
-        inertial_positions.append(unit_point())
-        inertial_orientations.append(unit_quat())
-        parent_indices.append(joint_info.parentIndex)
-        joint_types.append(joint_info.jointType)
-        joint_axes.append(joint_info.jointAxis)
-
-    return p.createMultiBody(baseMass=0,
-                             baseCollisionShapeIndex=-1, baseVisualShapeIndex=-1,
-                             basePosition=unit_point(), baseOrientation=unit_quat(),
-                             baseInertialFramePosition=unit_point(), baseInertialFrameOrientation=unit_quat(),
-                             linkMasses=masses,
-                             linkCollisionShapeIndices=collision_shapes, linkVisualShapeIndices=visual_shapes,
-                             linkPositions=positions, linkOrientations=orientations,
-                             linkInertialFramePositions=inertial_positions, linkInertialFrameOrientations=inertial_orientations,
-                             linkParentIndices=parent_indices,
-                             linkJointTypes=joint_types, linkJointAxis=joint_axes)
+    set_configuration(new_body, get_configuration(body))
+    return new_body
 
 def get_collision_data(body, link=BASE_LINK):
     return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link)]
@@ -1448,8 +1455,18 @@ class WorldSaver(object):
 #####################################
 
 def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
+    real_robot = robot
+    cloned_robot = clone_body(robot, visual=False, collision=False) # TODO: joint limits
+    #cloned_robot = clone_body_editor(robot, shapes=False) # TODO: joint limits
+    robot = cloned_robot
+    #print(get_configuration(real_robot), get_configuration(robot))
+    set_configuration(robot, get_configuration(real_robot))
+    set_pose(robot, get_pose(real_robot))
+    print(real_robot, robot)
+
     (target_point, target_quat) = pose
     movable_joints = get_movable_joints(robot)
+    print(movable_joints)
     for iterations in range(max_iterations):
         # TODO: stop is no progress
         # TODO: stop if collision or invalid joint limits
@@ -1463,7 +1480,9 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
             break
     else:
         return None
-    if violates_limits(robot, movable_joints, kinematic_conf):
+    remove_body(robot)
+    print(get_bodies())
+    if violates_limits(real_robot, movable_joints, kinematic_conf):
         return None
     return kinematic_conf
 
@@ -1519,7 +1538,7 @@ def experimental_inverse_kinematics(robot, link, pose,
 
 def body_from_editor(editor, base_shapes=True, link_shapes=True):
     basePosition = [0, 0, 0]
-    physicsClientId = 0
+    #physicsClientId = 0
     if (len(editor.urdfLinks) == 0):
         return -1
 
@@ -1640,6 +1659,29 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
         linkParentIndices.append(linkParentIndex)
         linkJointTypes.append(joint.joint_type)
         linkJointAxis.append(joint.joint_axis_xyz)
+
+    """
+    debug = [
+        baseMass,
+        baseCollisionShapeIndex,
+        baseVisualShapeIndex,
+        base.urdf_inertial.origin_xyz,
+        p.getQuaternionFromEuler(base.urdf_inertial.origin_rpy),
+        linkMasses,
+        linkCollisionShapeIndices,
+        linkVisualShapeIndices,
+        linkPositions,
+        linkOrientations,
+        linkInertialFramePositions,
+        linkInertialFrameOrientations,
+        linkParentIndices,
+        linkJointTypes,
+        linkJointAxis,
+    ]
+    for thing in debug:
+        print(thing)
+    print()
+    """
 
     obUid = p.createMultiBody(baseMass, \
                               baseCollisionShapeIndex=baseCollisionShapeIndex,

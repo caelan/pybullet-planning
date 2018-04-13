@@ -6,28 +6,23 @@ from kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, get_ik_f
     get_holding_motion_gen
 from utils import WorldSaver, enable_gravity, connect, dump_world, set_pose, Pose, Point, set_default_camera, stable_z, \
     BLOCK_URDF, load_model, wait_for_interrupt, disconnect, DRAKE_IIWA_URDF, input, update_state, \
-    disable_real_time, clone_body, clone_skeleton, KUKA_IIWA_URDF, clone_body_editor, save_body
-from pybullet_utils.urdfEditor import UrdfEditor
+    disable_real_time, clone_body, KUKA_IIWA_URDF, clone_body_editor, save_body
 
 def main():
     connect(use_gui=True)
     disable_real_time()
     #robot = load_model(KUKA_IIWA_URDF)
     robot = load_model(DRAKE_IIWA_URDF)
-    #robot = load_model(DRAKE_IIWA_URDF)
-    clone_body(robot, collision=False, visual=False)
-    #clone_skeleton(robot)
     floor = load_model('models/short_floor.urdf')
     block = load_model(BLOCK_URDF, fixed_base=False)
     set_pose(block, Pose(Point(y=0.5, z=stable_z(block, floor))))
     set_default_camera()
 
+    #clone_body(robot, collision=False, visual=False)
+    #clone_skeleton(robot)
     #new_robot = clone_body_editor(robot)
     #save_body(robot, 'test.urdf')
-
     dump_world()
-
-    return
 
     saved_world = WorldSaver()
     teleport = False

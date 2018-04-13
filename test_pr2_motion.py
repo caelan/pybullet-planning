@@ -10,7 +10,7 @@ from pr2_utils import TOP_HOLDING_LEFT_ARM, ARM_JOINT_NAMES, TORSO_JOINT_NAME, \
     load_srdf_collisions, load_dae_collisions, REST_LEFT_ARM, rightarm_from_leftarm
 from utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
-    joint_controller, dump_world, get_link_name, wait_for_interrupt
+    joint_controller, dump_world, get_link_name, wait_for_interrupt, clone_body, clone_body_editor
 
 def test_base_motion(pr2, base_start, base_goal):
     #disabled_collisions = get_disabled_collisions(pr2)
@@ -83,6 +83,10 @@ def main(use_pr2_drake=True):
         pr2 = p.loadURDF("models/drake/pr2_description/urdf/pr2_simplified.urdf", useFixedBase=True)
     else:
         pr2 = p.loadURDF("models/pr2_description/pr2.urdf", useFixedBase=False)
+
+    #new_pr2 = clone_body(pr2, visual=True, collision=True)
+    #new_pr2 = clone_body_editor(pr2, shapes=False)
+    #set_base_values(new_pr2, (2, 0, 0))
     dump_world()
     #print(load_srdf_collisions())
     #print(load_dae_collisions())
