@@ -4,7 +4,7 @@ import pstats
 import cProfile
 
 from utils import connect, add_data_path, disconnect, get_pose, \
-    update_state, link_from_name, step_simulation, is_placement, joints_from_names, get_joint_positions
+    update_state, link_from_name, step_simulation, is_placement, joints_from_names, get_joint_positions, input
 from pr2_problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
     cleaning_button_problem, cooking_button_problem
 
@@ -14,6 +14,7 @@ from ss.model.functions import Predicate, NonNegFunction, rename_functions, init
 from ss.model.problem import Problem, get_length, get_cost
 from ss.model.operators import Action, Axiom
 from ss.model.streams import Stream, ListStream, GenStream, FnStream, TestStream
+from ss.model.plan import print_plan
 
 from pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
     get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, Trajectory
@@ -73,7 +74,7 @@ IsConnected = Predicate([O, O2])
 rename_functions(locals())
 
 
-def ss_from_problem(problem, bound='shared', remote=False, movable_collisions=False):
+def ss_from_problem(problem, bound='shared', remote=False, teleport=False, movable_collisions=False):
     robot = problem.robot
 
     initial_bq = Pose(robot, get_pose(robot))
@@ -192,7 +193,7 @@ def ss_from_problem(problem, bound='shared', remote=False, movable_collisions=Fa
 
     streams = [
         FnStream(name='motion', inp=[BQ, BQ2], domain=[IsBConf(BQ), IsBConf(BQ2)],
-                 fn=get_motion_gen(problem), out=[BT],
+                 fn=get_motion_gen(problem, teleport=teleport), out=[BT],
                  graph=[IsMotion(BQ, BQ2, BT), IsBaseTraj(BT)], bound=bound),
 
         ListStream(name='grasp', inp=[O], domain=[IsMovable(O)], fn=get_grasp_gen(problem),
@@ -204,12 +205,12 @@ def ss_from_problem(problem, bound='shared', remote=False, movable_collisions=Fa
                graph=[IsPose(O, P), IsSupported(P, O2), POSE(P)], bound=bound),
 
         GenStream(name='ik_ir', inp=[A, O, P, G], domain=[IsArm(A), IsPose(O, P), IsGrasp(O, G)],
-                  fn=get_ik_ir_gen(problem), out=[BQ, AT],
+                  fn=get_ik_ir_gen(problem, teleport=teleport), out=[BQ, AT],
                   graph=[IsKin(A, O, P, G, BQ, AT), IsBConf(BQ), IsArmTraj(AT)],
                   bound=bound),
 
         GenStream(name='press', inp=[A, B], domain=[IsArm(A), IsButton(B)],
-                  fn=get_press_gen(problem), out=[BQ, AT],
+                  fn=get_press_gen(problem, teleport=teleport), out=[BQ, AT],
                   graph=[IsPress(A, B, BQ, AT), IsBConf(BQ), IsArmTraj(AT)],
                   bound=bound),
     ]
@@ -257,7 +258,7 @@ def post_process(problem, plan):
 def step_commands(commands, time_step=None, simulate=False):
     # update_state()
     if simulate: step_simulation()
-    raw_input('Begin?')
+    input('Begin?')
     attachments = {}
     for i, command in enumerate(commands):
         print i, command
@@ -275,7 +276,7 @@ def step_commands(commands, time_step=None, simulate=False):
                 # print attachments
                 if simulate: step_simulation()
                 if time_step is None:
-                    raw_input('Continue?')
+                    input('Continue?')
                 else:
                     time.sleep(time_step)
         elif type(command) in [Clean, Cook]:
@@ -298,7 +299,7 @@ def main(search='ff-astar', max_time=60, verbose=True):
     problem = problem_fn()
     state_id = p.saveState()
 
-    ss_problem = ss_from_problem(problem)
+    ss_problem = ss_from_problem(problem, remote=False, teleport=False)
     print ss_problem
     #ss_problem.dump()
 
@@ -317,11 +318,8 @@ def main(search='ff-astar', max_time=60, verbose=True):
     pr.disable()
     pstats.Stats(pr).sort_stats('tottime').print_stats(10) # tottime | cumtime
 
-    print 'Plan:', plan
-    print 'Solved:', plan is not None
-    print 'Length:', get_length(plan, evaluations)
-    print 'Cost:', get_cost(plan, evaluations)
     print 'Time:', time.time() - t0
+    print_plan(plan, evaluations)
     if (plan is None) or not args.display:
         disconnect()
         return
@@ -336,7 +334,7 @@ def main(search='ff-astar', max_time=60, verbose=True):
     commands = post_process(problem, plan)
     #step_commands(commands)
     step_commands(commands, time_step=0.01)
-    raw_input('Finish?')
+    input('Finish?')
     disconnect()
 
 

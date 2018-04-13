@@ -1118,7 +1118,7 @@ def get_extend_fn(body, joints, resolutions=None):
 #     return path
 
 def get_moving_links(body, moving_joints):
-    moving_links = moving_joints[:]
+    moving_links = list(moving_joints)
     for link in moving_joints:
         moving_links += get_link_descendants(body, link)
     return list(set(moving_links))
@@ -1456,17 +1456,17 @@ class WorldSaver(object):
 
 def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
     real_robot = robot
-    cloned_robot = clone_body(robot, visual=False, collision=False) # TODO: joint limits
+    #cloned_robot = clone_body(robot, visual=False, collision=False) # TODO: joint limits
     #cloned_robot = clone_body_editor(robot, shapes=False) # TODO: joint limits
-    robot = cloned_robot
+    #robot = cloned_robot
     #print(get_configuration(real_robot), get_configuration(robot))
-    set_configuration(robot, get_configuration(real_robot))
-    set_pose(robot, get_pose(real_robot))
-    print(real_robot, robot)
+    #set_configuration(robot, get_configuration(real_robot))
+    #set_pose(robot, get_pose(real_robot))
+    #print(real_robot, robot)
 
     (target_point, target_quat) = pose
     movable_joints = get_movable_joints(robot)
-    print(movable_joints)
+    #print(movable_joints)
     for iterations in range(max_iterations):
         # TODO: stop is no progress
         # TODO: stop if collision or invalid joint limits
@@ -1480,8 +1480,8 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
             break
     else:
         return None
-    remove_body(robot)
-    print(get_bodies())
+    #remove_body(robot)
+    #print(get_bodies())
     if violates_limits(real_robot, movable_joints, kinematic_conf):
         return None
     return kinematic_conf
