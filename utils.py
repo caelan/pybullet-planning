@@ -306,6 +306,13 @@ def get_base_name(body):
 def get_body_name(body):
     return get_body_info(body).body_name
 
+def has_body(name):
+    try:
+        body_from_name(name)
+    except ValueError:
+        return False
+    return True
+
 def body_from_name(name):
     for body in get_bodies():
         if get_body_name(body) == name:
@@ -413,6 +420,13 @@ def joint_from_name(body, name):
         if get_joint_name(body, joint) == name:
             return joint
     raise ValueError(body, name)
+
+def has_joint(body, name):
+    try:
+        joint_from_name(body, name)
+    except ValueError:
+        return False
+    return True
 
 def joints_from_names(body, names):
     return tuple(joint_from_name(body, name) for name in names)
@@ -526,6 +540,14 @@ def link_from_name(body, name):
         if get_link_name(body, link) == name:
             return link
     raise ValueError(body, name)
+
+
+def has_link(body, name):
+    try:
+        link_from_name(body, name)
+    except ValueError:
+        return False
+    return True
 
 LinkState = namedtuple('LinkState', ['linkWorldPosition', 'linkWorldOrientation',
                                      'localInertialFramePosition', 'localInertialFrameOrientation',

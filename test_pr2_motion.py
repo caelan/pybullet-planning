@@ -6,10 +6,11 @@ import pybullet as p
 import time
 
 from pr2_utils import TOP_HOLDING_LEFT_ARM, ARM_JOINT_NAMES, TORSO_JOINT_NAME, \
-    REST_RIGHT_ARM, SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, get_disabled_collisions
+    SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, get_disabled_collisions, \
+    load_srdf_collisions, load_dae_collisions, REST_LEFT_ARM, rightarm_from_leftarm
 from utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
-    joint_controller, dump_world, get_link_name
+    joint_controller, dump_world, get_link_name, wait_for_interrupt
 
 def test_base_motion(pr2, base_start, base_goal):
     #disabled_collisions = get_disabled_collisions(pr2)
@@ -68,12 +69,12 @@ def test_arm_control(pr2, left_joints, arm_start):
             p.stepSimulation()
         #time.sleep(0.01)
 
-def main(use_pr2_drake=False):
+def main(use_pr2_drake=True):
     connect(use_gui=True)
     add_data_path()
 
     plane = p.loadURDF("plane.urdf")
-    table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
+    #table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
     #table = p.loadURDF("table_square/table_square.urdf")
     #table = p.loadURDF("cube.urdf")
     #table = p.loadURDF("block.urdf")
@@ -83,26 +84,32 @@ def main(use_pr2_drake=False):
     else:
         pr2 = p.loadURDF("models/pr2_description/pr2.urdf", useFixedBase=False)
     dump_world()
+    #print(load_srdf_collisions())
+    #print(load_dae_collisions())
 
     base_start = (-2, -2, 0)
     base_goal = (2, 2, 0)
     arm_start = SIDE_HOLDING_LEFT_ARM
+    #arm_start = TOP_HOLDING_LEFT_ARM
+    #arm_start = REST_LEFT_ARM
+    arm_goal = TOP_HOLDING_LEFT_ARM
+    #arm_goal = SIDE_HOLDING_LEFT_ARM
 
     left_joints = [joint_from_name(pr2, name) for name in ARM_JOINT_NAMES['left']]
     right_joints = [joint_from_name(pr2, name) for name in ARM_JOINT_NAMES['right']]
     set_joint_positions(pr2, left_joints, arm_start)
-    set_joint_positions(pr2, right_joints, REST_RIGHT_ARM)
+    set_joint_positions(pr2, right_joints, rightarm_from_leftarm(REST_LEFT_ARM))
     set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT_NAME), 0.2)
     open_arm(pr2, 'left')
+    wait_for_interrupt()
 
     p.addUserDebugLine(base_start, base_goal, lineColorRGB=(1, 1, 0)) # addUserDebugText
     print(base_start, base_goal)
-    if use_pr2_drake:
-        test_drake_base_motion(pr2, base_start, base_goal)
-    else:
-        test_base_motion(pr2, base_start, base_goal)
+    #if use_pr2_drake:
+    #    test_drake_base_motion(pr2, base_start, base_goal)
+    #else:
+    #    test_base_motion(pr2, base_start, base_goal)
 
-    arm_goal = TOP_HOLDING_LEFT_ARM
     test_arm_motion(pr2, left_joints, arm_goal)
     #test_arm_control(pr2, left_joints, arm_start)
 
