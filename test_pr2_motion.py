@@ -69,7 +69,7 @@ def test_arm_control(pr2, left_joints, arm_start):
             p.stepSimulation()
         #time.sleep(0.01)
 
-def main(use_pr2_drake=True):
+def main(use_pr2_drake=False):
     connect(use_gui=True)
     add_data_path()
 
@@ -83,13 +83,17 @@ def main(use_pr2_drake=True):
         pr2 = p.loadURDF("models/drake/pr2_description/urdf/pr2_simplified.urdf", useFixedBase=True)
     else:
         pr2 = p.loadURDF("models/pr2_description/pr2.urdf", useFixedBase=False)
+    #dump_world()
+    #return
 
+    # TODO: j toggles frames, p prints timings, w is wire, a is boxes
     #new_pr2 = clone_body(pr2, visual=True, collision=True)
-    #new_pr2 = clone_body_editor(pr2, shapes=False)
-    #set_base_values(new_pr2, (2, 0, 0))
+    new_pr2 = clone_body_editor(pr2, visual=True, collision=True)
+    set_base_values(new_pr2, (2, 0, 0))
     dump_world()
     #print(load_srdf_collisions())
     #print(load_dae_collisions())
+    wait_for_interrupt()
 
     base_start = (-2, -2, 0)
     base_goal = (2, 2, 0)
@@ -105,7 +109,6 @@ def main(use_pr2_drake=True):
     set_joint_positions(pr2, right_joints, rightarm_from_leftarm(REST_LEFT_ARM))
     set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT_NAME), 0.2)
     open_arm(pr2, 'left')
-    wait_for_interrupt()
 
     p.addUserDebugLine(base_start, base_goal, lineColorRGB=(1, 1, 0)) # addUserDebugText
     print(base_start, base_goal)

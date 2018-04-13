@@ -289,7 +289,7 @@ def main(search='ff-astar', max_time=60, verbose=True):
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     parser.add_argument('-display', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = cooking_button_problem
+    problem_fn = holding_problem
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem
     # cleaning_button_problem | cooking_button_problem
 

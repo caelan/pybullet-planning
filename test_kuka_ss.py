@@ -96,8 +96,8 @@ def ss_from_problem(robot, movable=[], bound='shared',
         #Holding(body),
         #On(body, fixed[0]),
         #On(body, fixed[2]),
-        Cleaned(body),
-        #Cooked(body),
+        #Cleaned(body),
+        Cooked(body),
     ]
 
     PlacedCollision = Predicate([T, O, P], domain=[IsTraj(T), IsPose(O, P)],

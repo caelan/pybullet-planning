@@ -1,6 +1,7 @@
 import pybullet as p
 import time
 
+UNKNOWN_FILE = 'unknown_file'
 
 class UrdfInertial(object):
     def __init__(self):
@@ -32,7 +33,8 @@ class UrdfVisual(object):
         self.geom_type = p.GEOM_BOX
         self.geom_radius = 1
         self.geom_extents = [7, 8, 9]
-        self.geom_length = [10]
+        #self.geom_length = [10]
+        self.geom_length = 10
         self.geom_meshfilename = "meshfile"
         self.geom_meshscale = [1, 1, 1]
         self.material_rgba = [1, 0, 0, 1]
@@ -99,6 +101,8 @@ class UrdfEditor(object):
                     urdfVisual.geom_radius = v[3][0]
                 if (v[2] == p.GEOM_MESH):
                     urdfVisual.geom_meshfilename = v[4].decode("utf-8")
+                    if urdfVisual.geom_meshfilename == UNKNOWN_FILE:
+                        continue
                     urdfVisual.geom_meshscale = v[3]
                 if (v[2] == p.GEOM_CYLINDER):
                     urdfVisual.geom_length = v[3][0]
@@ -124,6 +128,8 @@ class UrdfEditor(object):
                 urdfCollision.geom_radius = v[3][0]
             if (v[2] == p.GEOM_MESH):
                 urdfCollision.geom_meshfilename = v[4].decode("utf-8")
+                if urdfCollision.geom_meshfilename == UNKNOWN_FILE:
+                    continue
                 urdfCollision.geom_meshscale = v[3]
             if (v[2] == p.GEOM_CYLINDER):
                 urdfCollision.geom_length = v[3][0]
@@ -369,6 +375,8 @@ class UrdfEditor(object):
         baseOrientationsArray = []
 
         for v in base.urdf_collision_shapes:
+            #if v.geom_meshfilename == UNKNOWN_FILE:
+            #    continue
             shapeType = v.geom_type
             baseShapeTypeArray.append(shapeType)
             baseHalfExtentsArray.append([0.5 * v.geom_extents[0], 0.5 * v.geom_extents[1], 0.5 * v.geom_extents[2]])
@@ -396,7 +404,8 @@ class UrdfEditor(object):
                                                         halfExtents=[[ext * 0.5 for ext in v.geom_extents] for v in
                                                                      urdfVisuals],
                                                         radii=[v.geom_radius for v in urdfVisuals],
-                                                        lengths=[v.geom_length[0] for v in urdfVisuals],
+                                                        #lengths=[v.geom_length[0] for v in urdfVisuals],
+                                                        lengths=[v.geom_length for v in urdfVisuals],
                                                         fileNames=[v.geom_meshfilename for v in urdfVisuals],
                                                         meshScales=[v.geom_meshscale for v in urdfVisuals],
                                                         rgbaColors=[v.material_rgba for v in urdfVisuals],
@@ -431,6 +440,8 @@ class UrdfEditor(object):
             linkOrientationsArray = []
 
             for v in link.urdf_collision_shapes:
+                #if v.geom_meshfilename == UNKNOWN_FILE:
+                #    continue
                 shapeType = v.geom_type
                 linkShapeTypeArray.append(shapeType)
                 linkHalfExtentsArray.append([0.5 * v.geom_extents[0], 0.5 * v.geom_extents[1], 0.5 * v.geom_extents[2]])
@@ -457,7 +468,8 @@ class UrdfEditor(object):
                                                                 halfExtents=[[ext * 0.5 for ext in v.geom_extents] for v
                                                                              in urdfVisuals],
                                                                 radii=[v.geom_radius for v in urdfVisuals],
-                                                                lengths=[v.geom_length[0] for v in urdfVisuals],
+                                                                #lengths=[v.geom_length[0] for v in urdfVisuals],
+                                                                lengths=[v.geom_length for v in urdfVisuals],
                                                                 fileNames=[v.geom_meshfilename for v in urdfVisuals],
                                                                 meshScales=[v.geom_meshscale for v in urdfVisuals],
                                                                 rgbaColors=[v.material_rgba for v in urdfVisuals],
@@ -482,7 +494,7 @@ class UrdfEditor(object):
                                   baseVisualShapeIndex=baseVisualShapeIndex,
                                   basePosition=basePosition,
                                   baseInertialFramePosition=base.urdf_inertial.origin_xyz,
-                                  baseInertialFrameOrientation=base.urdf_inertial.origin_rpy,
+                                  baseInertialFrameOrientation=p.getQuaternionFromEuler(base.urdf_inertial.origin_rpy),
                                   linkMasses=linkMasses,
                                   linkCollisionShapeIndices=linkCollisionShapeIndices,
                                   linkVisualShapeIndices=linkVisualShapeIndices,

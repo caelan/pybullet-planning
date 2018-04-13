@@ -63,6 +63,7 @@ def read_pickle(filename):
 def load_model(model_file, pose=None, fixed_base=True):
     #p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
     #p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
+    # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
     add_data_path()
     if model_file.endswith('.urdf'):
         body = p.loadURDF(model_file, useFixedBase=fixed_base)
@@ -372,6 +373,8 @@ def dump_body(body):
         print('Link id: {} | Name: {} | Parent: {} | Mass: {}'.format(
             link, get_link_name(body, link), get_link_name(body, get_link_parent(body, link)),
             get_mass(body, link)))
+        #print(map(get_data_geometry, get_visual_data(body, link)))
+        #print(map(get_data_geometry, get_collision_data(body, link)))
 
 def dump_world():
     for body in get_bodies():
@@ -383,13 +386,13 @@ def dump_world():
 # Joints
 
 JOINT_TYPES = {
-    p.JOINT_REVOLUTE: 'revolute',
-    p.JOINT_PRISMATIC: 'prismatic',
-    p.JOINT_FIXED: 'fixed',
-    p.JOINT_SPHERICAL: 'spherical',
-    p.JOINT_PLANAR: 'planar',
-    p.JOINT_POINT2POINT: 'point2point',
-    p.JOINT_GEAR: 'gear',
+    p.JOINT_REVOLUTE: 'revolute', # 0
+    p.JOINT_PRISMATIC: 'prismatic', # 1
+    p.JOINT_SPHERICAL: 'spherical', # 2
+    p.JOINT_PLANAR: 'planar', # 3
+    p.JOINT_FIXED: 'fixed', # 4
+    p.JOINT_POINT2POINT: 'point2point', # 5
+    p.JOINT_GEAR: 'gear', # 6
 }
 
 def get_num_joints(body):
@@ -566,6 +569,8 @@ def get_link_inertial_pose(body, link):
     return link_state.localInertialFramePosition, link_state.localInertialFrameOrientation
 
 def get_link_pose(body, link):
+    if link == BASE_LINK:
+        return get_pose(body)
     # if set to 1 (or True), the Cartesian world position/orientation will be recomputed using forward kinematics.
     link_state = get_link_state(body, link)
     return link_state.worldLinkFramePosition, link_state.worldLinkFrameOrientation
@@ -660,11 +665,18 @@ def get_joint_inertial_pose(body, joint):
     return dynamics_info.local_inertial_pos, dynamics_info.local_inertial_orn
 
 def get_local_link_pose(body, joint):
+    parent_joint = get_link_parent(body, joint)
+
+    #world_child = get_link_pose(body, joint)
+    #world_parent = get_link_pose(body, parent_joint)
+    ##return multiply(invert(world_parent), world_child)
+    #return multiply(world_child, invert(world_parent))
+
     # https://github.com/bulletphysics/bullet3/blob/9c9ac6cba8118544808889664326fd6f06d9eeba/examples/pybullet/gym/pybullet_utils/urdfEditor.py#L169
     parent_com = get_joint_parent_frame(body, joint)
     tmp_pose = invert(multiply(get_joint_inertial_pose(body, joint), parent_com))
-    parent_joint = get_link_parent(body, joint)
     parent_inertia = get_joint_inertial_pose(body, parent_joint)
+    #return multiply(parent_inertia, tmp_pose)
     _, orn = multiply(parent_inertia, tmp_pose)
     pos, _ = multiply(parent_inertia, Pose(parent_com[0]))
     return (pos, orn)
@@ -674,12 +686,12 @@ def get_local_link_pose(body, joint):
 # Shapes
 
 SHAPE_TYPES = {
-    p.GEOM_SPHERE: 'sphere',
-    p.GEOM_BOX: 'box',
-    p.GEOM_CAPSULE: 'capsule',
-    p.GEOM_CYLINDER: 'cylinder',
-    p.GEOM_PLANE: 'plane',
-    p.GEOM_MESH: 'mesh',
+    p.GEOM_SPHERE: 'sphere', # 2
+    p.GEOM_BOX: 'box', # 3
+    p.GEOM_CYLINDER: 'cylinder', # 4
+    p.GEOM_MESH: 'mesh', # 5
+    p.GEOM_PLANE: 'plane',  # 6
+    p.GEOM_CAPSULE: 'capsule',  # 7
 }
 
 def create_box(w, l, h, mass=STATIC_MASS, color=(1, 0, 0, 1)):
@@ -741,17 +753,22 @@ VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
                                                  'rgbaColor'])
 
 def visual_shape_from_data(data):
+    if (data.visualGeometryType == p.GEOM_MESH) and (data.meshAssetFileName == 'unknown_file'):
+        return -1
+    # visualFramePosition: translational offset of the visual shape with respect to the link
+    # visualFrameOrientation: rotational offset (quaternion x,y,z,w) of the visual shape with respect to the link frame
     return p.createVisualShape(shapeType=data.visualGeometryType,
-                                  radius=get_data_radius(data.visualGeometryType, data.dimensions),
-                                  halfExtents=get_data_extents(data.visualGeometryType, data.dimensions),
-                                  length=get_data_height(data.visualGeometryType, data.dimensions),
+                                  radius=get_data_radius(data),
+                                  halfExtents=np.array(get_data_extents(data))/2,
+                                  #halfExtents=get_data_extents(data),
+                                  length=get_data_height(data),
                                   fileName=data.meshAssetFileName,
-                                  meshScale=get_data_scale(data.visualGeometryType, data.dimensions),
-                                  planeNormal=get_data_normal(data.visualGeometryType, data.dimensions),
-                                   rgbaColor=data.rgbaColor,
-                                #specularColor=,
-                                   visualFramePosition=data.localVisualFrame_position,
-                                   visualFrameOrientation=data.localVisualFrame_orientation)
+                                  meshScale=get_data_scale(data),
+                                  planeNormal=get_data_normal(data),
+                                  rgbaColor=data.rgbaColor,
+                                  #specularColor=,
+                                  visualFramePosition=data.localVisualFrame_position,
+                                  visualFrameOrientation=data.localVisualFrame_orientation)
 
 def get_visual_data(body, link=BASE_LINK):
     visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body)]
@@ -762,33 +779,44 @@ CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'link
                                                        'local_frame_pos', 'local_frame_orn'])
 
 def collision_shape_from_data(data):
+    if (data.geometry_type == p.GEOM_MESH) and (data.filename == 'unknown_file'):
+        return -1
     return p.createCollisionShape(shapeType=data.geometry_type,
-                                  radius=get_data_radius(data.geometry_type, data.dimensions),
-                                  halfExtents=get_data_extents(data.geometry_type, data.dimensions),
-                                  height=get_data_height(data.geometry_type, data.dimensions),
+                                  radius=get_data_radius(data),
+                                 # halfExtents=get_data_extents(data.geometry_type, data.dimensions),
+                                  halfExtents=np.array(get_data_extents(data)) / 2,
+                                  height=get_data_height(data),
                                   fileName=data.filename,
-                                  meshScale=get_data_scale(data.geometry_type, data.dimensions),
-                                  planeNormal=get_data_normal(data.geometry_type, data.dimensions),
+                                  meshScale=get_data_scale(data),
+                                  planeNormal=get_data_normal(data),
                                   collisionFramePosition=data.local_frame_pos,
                                   collisionFrameOrientation=data.local_frame_pos)
     #return p.createCollisionShapeArray()
 
-def clone_body_editor(body, shapes=True):
-    from pybullet_utils.urdfEditor import UrdfEditor
+def clone_body_editor(body, collision=True, visual=True):
+    #from pybullet_utils.urdfEditor import UrdfEditor
+    from urdfEditor import UrdfEditor
     editor = UrdfEditor()
     editor.initializeFromBulletBody(body, 0)
     #return editor.createMultiBody() # pybullet.error: createVisualShapeArray failed.
     # TODO: maybe the failure is because of relative paths?
-    return body_from_editor(editor, base_shapes=shapes, link_shapes=shapes)
+    #return body_from_editor(editor, collision=collision, visual=visual)
+    filename = 'temp.urdf'
+    editor.saveUrdf(filename)
+    return load_model(filename)
+    # TODO: problem with collision is that URDF editor is storing mesh when it should be geom
+    # example: fl_caster_l_wheel_link # <mesh filename="unknown_file"/>
 
 def save_body(body, filename):
-    from pybullet_utils.urdfEditor import UrdfEditor
+    #from pybullet_utils.urdfEditor import UrdfEditor
+    from urdfEditor import UrdfEditor
     editor = UrdfEditor()
     editor.initializeFromBulletBody(body, 0)
     editor.saveUrdf(filename)
 
 def clone_body(body, collision=False, visual=False):
     # TODO: names are not retained
+    # TODO: error with createMultiBody link poses on PR2
     def clone_collision_shape(link=BASE_LINK):
         if not collision:
             return -1
@@ -808,13 +836,18 @@ def clone_body(body, collision=False, visual=False):
             return visual_shape_from_data(visual_data[0])
         return -1
 
+    # localVisualFrame_position: position of local visual frame, relative to link/joint frame
+    # localVisualFrame orientation: orientation of local visual frame relative to link/joint frame
+    # parentFramePos: joint position in parent frame
+    # parentFrameOrn: joint orientation in parent frame
+
     masses = []
     collision_shapes = []
     visual_shapes = []
-    positions = []
-    orientations = []
-    inertial_positions = []
-    inertial_orientations = []
+    positions = [] # list of local link positions, with respect to parent
+    orientations = [] # list of local link orientations, w.r.t. parent
+    inertial_positions = [] # list of local inertial frame pos. in link frame
+    inertial_orientations = [] # list of local inertial frame orn. in link frame
     parent_indices = []
     joint_types = []
     joint_axes = []
@@ -837,29 +870,6 @@ def clone_body(body, collision=False, visual=False):
     # https://github.com/bulletphysics/bullet3/blob/9c9ac6cba8118544808889664326fd6f06d9eeba/examples/pybullet/gym/pybullet_utils/urdfEditor.py#L169
 
     base_dynamics_info = get_dynamics_info(body)
-
-    """
-    debug = [
-        base_dynamics_info.mass,
-        clone_collision_shape(),
-        clone_visual_shape(),
-        base_dynamics_info.local_inertial_pos,
-        base_dynamics_info.local_inertial_orn,
-        masses,
-        collision_shapes,
-        visual_shapes,
-        positions,
-        orientations,
-        inertial_positions,
-        inertial_orientations,
-        parent_indices,
-        joint_types,
-        joint_axes,
-    ]
-    for thing in debug:
-        print(thing)
-    print()
-    """
     new_body = p.createMultiBody(baseMass=base_dynamics_info.mass,
                              baseCollisionShapeIndex=clone_collision_shape(),
                              baseVisualShapeIndex=clone_visual_shape(),
@@ -883,7 +893,13 @@ def clone_body(body, collision=False, visual=False):
 def get_collision_data(body, link=BASE_LINK):
     return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link)]
 
-def get_data_extents(geometry_type, dimensions):
+def get_data_type(data):
+    return data.geometry_type if isinstance(data, CollisionShapeData) else data.visualGeometryType
+
+def get_data_filename(data):
+    return data.filename if isinstance(data, CollisionShapeData) else data.meshAssetFileName
+
+def get_data_extents(data):
     """
     depends on geometry type:
     for GEOM_BOX: extents,
@@ -892,31 +908,57 @@ def get_data_extents(geometry_type, dimensions):
     For GEOM_MESH, dimensions is the scaling factor.
     :return:
     """
+    geometry_type = get_data_type(data)
+    dimensions = data.dimensions
     if geometry_type == p.GEOM_BOX:
         return dimensions
     return [1, 1, 1]
 
-def get_data_radius(geometry_type, dimensions):
+def get_data_radius(data):
+    geometry_type = get_data_type(data)
+    dimensions = data.dimensions
     if geometry_type == p.GEOM_SPHERE:
         return dimensions[0]
     if geometry_type in (p.GEOM_SPHERE, p.GEOM_CAPSULE):
         return dimensions[1]
     return 0.5
 
-def get_data_height(geometry_type, dimensions):
+def get_data_height(data):
+    geometry_type = get_data_type(data)
+    dimensions = data.dimensions
     if geometry_type in (p.GEOM_SPHERE, p.GEOM_CAPSULE):
         return dimensions[0]
     return 1
 
-def get_data_scale(geometry_type, dimensions):
+def get_data_scale(data):
+    geometry_type = get_data_type(data)
+    dimensions = data.dimensions
     if geometry_type == p.GEOM_MESH:
         return dimensions
     return [1, 1, 1]
 
-def get_data_normal(geometry_type, dimensions):
+def get_data_normal(data):
+    geometry_type = get_data_type(data)
+    dimensions = data.dimensions
     if geometry_type == p.GEOM_PLANE:
         return dimensions
     return [0, 0, 1]
+
+def get_data_geometry(data):
+    geometry_type = get_data_type(data)
+    if geometry_type == p.GEOM_SPHERE:
+        parameters = [get_data_radius(data)]
+    elif geometry_type == p.GEOM_BOX:
+        parameters = [get_data_extents(data)]
+    elif geometry_type in (p.GEOM_CYLINDER, p.GEOM_CAPSULE):
+        parameters = [get_data_height(data), get_data_radius(data)]
+    elif geometry_type == p.GEOM_MESH:
+        parameters = [get_data_filename(data), get_data_scale(data)]
+    elif geometry_type == p.GEOM_PLANE:
+        parameters = [get_data_extents(data)]
+    else:
+        raise ValueError(geometry_type)
+    return SHAPE_TYPES[geometry_type], parameters
 
 def set_color(body, color, link=BASE_LINK, shape_index=-1):
     """
@@ -1479,6 +1521,7 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
                 np.allclose(link_quat, target_quat, atol=tolerance, rtol=0):
             break
     else:
+        #remove_body(robot)
         return None
     #remove_body(robot)
     #print(get_bodies())
@@ -1536,11 +1579,11 @@ def experimental_inverse_kinematics(robot, link, pose,
 
 #####
 
-def body_from_editor(editor, base_shapes=True, link_shapes=True):
-    basePosition = [0, 0, 0]
-    #physicsClientId = 0
+def body_from_editor(editor, collision=True, visual=True):
+    #basePosition = [0, 0, 0]
+    #baseOrientation = unit_quat()
     if (len(editor.urdfLinks) == 0):
-        return -1
+        return None
 
     base = editor.urdfLinks[0]  # assume link[0] is base
     baseMass = base.urdf_inertial.mass
@@ -1554,7 +1597,7 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
     meshScaleArray = []
     basePositionsArray = []
     baseOrientationsArray = []
-    if base.urdf_collision_shapes and base_shapes:
+    if base.urdf_collision_shapes and collision:
         for v in base.urdf_collision_shapes:
             baseShapeTypeArray.append(v.geom_type)
             baseHalfExtentsArray.append([0.5 * v.geom_extents[0], 0.5 * v.geom_extents[1], 0.5 * v.geom_extents[2]])
@@ -1564,7 +1607,6 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
             meshScaleArray.append(v.geom_meshscale)
             basePositionsArray.append(v.origin_xyz)
             baseOrientationsArray.append(p.getQuaternionFromEuler(v.origin_rpy))
-
         baseCollisionShapeIndex = p.createCollisionShapeArray(shapeTypes=baseShapeTypeArray,
                                                               radii=baseRadiusArray,
                                                               halfExtents=baseHalfExtentsArray,
@@ -1572,10 +1614,9 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
                                                               fileNames=fileNameArray,
                                                               meshScales=meshScaleArray,
                                                               collisionFramePositions=basePositionsArray,
-                                                              collisionFrameOrientations=baseOrientationsArray, )
-        # physicsClientId=physicsClientId)
+                                                              collisionFrameOrientations=baseOrientationsArray)
 
-
+    if base.urdf_collision_shapes and visual:
         urdfVisuals = base.urdf_visual_shapes
         baseVisualShapeIndex = p.createVisualShapeArray(shapeTypes=[v.geom_type for v in urdfVisuals],
                                                         halfExtents=[[ext * 0.5 for ext in v.geom_extents] for v in
@@ -1586,8 +1627,7 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
                                                         meshScales=[v.geom_meshscale for v in urdfVisuals],
                                                         rgbaColors=[v.material_rgba for v in urdfVisuals],
                                                         visualFramePositions=[v.origin_xyz for v in urdfVisuals],
-                                                        visualFrameOrientations=[v.origin_rpy for v in urdfVisuals], )
-        # physicsClientId=physicsClientId)
+                                                        visualFrameOrientations=[v.origin_rpy for v in urdfVisuals])
 
     linkMasses = []
     linkCollisionShapeIndices = []
@@ -1614,7 +1654,7 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
         linkPositionsArray = []
         linkOrientationsArray = []
 
-        if link.urdf_collision_shapes and link_shapes:
+        if link.urdf_collision_shapes and collision:
             for v in link.urdf_collision_shapes:
                 linkShapeTypeArray.append(v.geom_type)
                 linkHalfExtentsArray.append([0.5 * v.geom_extents[0], 0.5 * v.geom_extents[1], 0.5 * v.geom_extents[2]])
@@ -1624,7 +1664,6 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
                 linkMeshScaleArray.append(v.geom_meshscale)
                 linkPositionsArray.append(v.origin_xyz)
                 linkOrientationsArray.append(p.getQuaternionFromEuler(v.origin_rpy))
-
             linkCollisionShapeIndex = p.createCollisionShapeArray(shapeTypes=linkShapeTypeArray,
                                                                   radii=linkRadiusArray,
                                                                   halfExtents=linkHalfExtentsArray,
@@ -1632,10 +1671,11 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
                                                                   fileNames=fileNameArray,
                                                                   meshScales=linkMeshScaleArray,
                                                                   collisionFramePositions=linkPositionsArray,
-                                                                  collisionFrameOrientations=linkOrientationsArray, )
-            # physicsClientId=physicsClientId)
+                                                                  collisionFrameOrientations=linkOrientationsArray)
 
+        if link.urdf_visual_shapes and visual:
             urdfVisuals = link.urdf_visual_shapes
+            # TODO: bug in geom_length where the default is [[10]]
             linkVisualShapeIndex = p.createVisualShapeArray(shapeTypes=[v.geom_type for v in urdfVisuals],
                                                             halfExtents=[[ext * 0.5 for ext in v.geom_extents] for v in
                                                                          urdfVisuals],
@@ -1646,8 +1686,7 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
                                                             rgbaColors=[v.material_rgba for v in urdfVisuals],
                                                             visualFramePositions=[v.origin_xyz for v in urdfVisuals],
                                                             visualFrameOrientations=[v.origin_rpy for v in
-                                                                                     urdfVisuals], )
-            # physicsClientId=physicsClientId)
+                                                                                     urdfVisuals])
 
         linkMasses.append(linkMass)
         linkCollisionShapeIndices.append(linkCollisionShapeIndex)
@@ -1660,30 +1699,7 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
         linkJointTypes.append(joint.joint_type)
         linkJointAxis.append(joint.joint_axis_xyz)
 
-    """
-    debug = [
-        baseMass,
-        baseCollisionShapeIndex,
-        baseVisualShapeIndex,
-        base.urdf_inertial.origin_xyz,
-        p.getQuaternionFromEuler(base.urdf_inertial.origin_rpy),
-        linkMasses,
-        linkCollisionShapeIndices,
-        linkVisualShapeIndices,
-        linkPositions,
-        linkOrientations,
-        linkInertialFramePositions,
-        linkInertialFrameOrientations,
-        linkParentIndices,
-        linkJointTypes,
-        linkJointAxis,
-    ]
-    for thing in debug:
-        print(thing)
-    print()
-    """
-
-    obUid = p.createMultiBody(baseMass, \
+    return p.createMultiBody(baseMass, \
                               baseCollisionShapeIndex=baseCollisionShapeIndex,
                               baseVisualShapeIndex=baseVisualShapeIndex,
                               # basePosition=basePosition,
@@ -1700,6 +1716,4 @@ def body_from_editor(editor, base_shapes=True, link_shapes=True):
                               linkInertialFrameOrientations=linkInertialFrameOrientations,
                               linkParentIndices=linkParentIndices,
                               linkJointTypes=linkJointTypes,
-                              linkJointAxis=linkJointAxis, )
-    # physicsClientId=physicsClientId)
-    return obUid
+                              linkJointAxis=linkJointAxis)

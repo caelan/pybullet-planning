@@ -34,6 +34,7 @@ def get_fixed_bodies(problem):
 
 def create_pr2(fixed_torso=True, fixed_base=True):
     pr2_path = "models/pr2_description/pr2_fixed_torso.urdf" if fixed_torso else "models/pr2_description/pr2.urdf"
+    #pr2_path = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
     return p.loadURDF(pr2_path, useFixedBase=fixed_base) # Fixed base ensures the robot doesn't fall over
 
 def create_floor():
