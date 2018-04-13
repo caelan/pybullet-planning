@@ -17,6 +17,7 @@ except NameError:
 import numpy as np
 import pybullet as p
 import pickle
+import os
 from transformations import quaternion_from_matrix
 
 INF = np.inf
@@ -373,6 +374,7 @@ def dump_body(body):
         print('Link id: {} | Name: {} | Parent: {} | Mass: {}'.format(
             link, get_link_name(body, link), get_link_name(body, get_link_parent(body, link)),
             get_mass(body, link)))
+        #print(get_joint_parent_frame(body, link))
         #print(map(get_data_geometry, get_visual_data(body, link)))
         #print(map(get_data_geometry, get_collision_data(body, link)))
 
@@ -798,12 +800,14 @@ def clone_body_editor(body, collision=True, visual=True):
     from urdfEditor import UrdfEditor
     editor = UrdfEditor()
     editor.initializeFromBulletBody(body, 0)
-    #return editor.createMultiBody() # pybullet.error: createVisualShapeArray failed.
-    # TODO: maybe the failure is because of relative paths?
+    return editor.createMultiBody() # pybullet.error: createVisualShapeArray failed.
+    # TODO: failure is because broken mesh files
     #return body_from_editor(editor, collision=collision, visual=visual)
     filename = 'temp.urdf'
     editor.saveUrdf(filename)
-    return load_model(filename)
+    new_body = load_model(filename)
+    os.remove(filename)
+    return new_body
     # TODO: problem with collision is that URDF editor is storing mesh when it should be geom
     # example: fl_caster_l_wheel_link # <mesh filename="unknown_file"/>
 
@@ -1579,6 +1583,7 @@ def experimental_inverse_kinematics(robot, link, pose,
 
 #####
 
+"""
 def body_from_editor(editor, collision=True, visual=True):
     #basePosition = [0, 0, 0]
     #baseOrientation = unit_quat()
@@ -1717,3 +1722,4 @@ def body_from_editor(editor, collision=True, visual=True):
                               linkParentIndices=linkParentIndices,
                               linkJointTypes=linkJointTypes,
                               linkJointAxis=linkJointAxis)
+"""

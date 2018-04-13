@@ -10,7 +10,8 @@ from pr2_utils import TOP_HOLDING_LEFT_ARM, ARM_JOINT_NAMES, TORSO_JOINT_NAME, \
     load_srdf_collisions, load_dae_collisions, REST_LEFT_ARM, rightarm_from_leftarm
 from utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
-    joint_controller, dump_world, get_link_name, wait_for_interrupt, clone_body, clone_body_editor
+    joint_controller, dump_world, get_link_name, wait_for_interrupt, clone_body, clone_body_editor, \
+    get_links, get_joint_parent_frame, euler_from_quat, get_joint_inertial_pose, get_joint_info, get_link_pose
 
 def test_base_motion(pr2, base_start, base_goal):
     #disabled_collisions = get_disabled_collisions(pr2)
@@ -89,10 +90,33 @@ def main(use_pr2_drake=False):
     # TODO: j toggles frames, p prints timings, w is wire, a is boxes
     #new_pr2 = clone_body(pr2, visual=True, collision=True)
     new_pr2 = clone_body_editor(pr2, visual=True, collision=True)
-    set_base_values(new_pr2, (2, 0, 0))
+    #set_base_values(new_pr2, (2, 0, 0))
     dump_world()
     #print(load_srdf_collisions())
     #print(load_dae_collisions())
+
+    # TODO: some unimportant quats are off for both URDF and other
+
+    # TODO: maybe all the frames are actually correct when I load things this way?
+    import numpy as np
+    for link in get_links(pr2):
+        pose1 = get_link_pose(pr2, link)
+        pose2 = get_link_pose(new_pr2, link)
+        #pose1 = get_joint_parent_frame(pr2, link)
+        #pose2 = get_joint_parent_frame(new_pr2, link)
+        #pose1 = get_joint_inertial_pose(pr2, link) # Inertia is fine
+        #pose2 = get_joint_inertial_pose(new_pr2, link)
+        if not np.allclose(pose1[0], pose2[0], rtol=0, atol=1e-3):
+            print('Point', get_link_name(pr2, link), link, pose1[0], pose2[0])
+        if not np.allclose(euler_from_quat(pose1[1]), euler_from_quat(pose2[1]), rtol=0, atol=1e-3):
+            print('Quat', get_link_name(pr2, link), link, euler_from_quat(pose1[1]), euler_from_quat(pose2[1]))
+        joint_info1 = get_joint_info(pr2, link)
+        joint_info2 = get_joint_info(new_pr2, link)
+        # TODO: the axis is off for some of these
+        if not np.allclose(joint_info1.jointAxis, joint_info2.jointAxis, rtol=0, atol=1e-3):
+            print('Axis', get_link_name(pr2, link), link, joint_info1.jointAxis, joint_info2.jointAxis)
+
+
     wait_for_interrupt()
 
     base_start = (-2, -2, 0)

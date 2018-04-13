@@ -86,8 +86,7 @@ class UrdfEditor(object):
         urdfLink.urdf_inertial.inertia_xxyyzz = dyn[2]
         # todo
         urdfLink.urdf_inertial.origin_xyz = dyn[3]
-        rpy = p.getEulerFromQuaternion(dyn[4])
-        urdfLink.urdf_inertial.origin_rpy = rpy
+        urdfLink.urdf_inertial.origin_rpy = p.getEulerFromQuaternion(dyn[4])
 
         visualShapes = p.getVisualShapeData(bodyUid, physicsClientId=physicsClientId)
         matIndex = 0
@@ -137,8 +136,7 @@ class UrdfEditor(object):
             if (v[2] == p.GEOM_CAPSULE):
                 urdfCollision.geom_length = v[3][0]
                 urdfCollision.geom_radius = v[3][1]
-            pos, orn = p.multiplyTransforms(dyn[3], dyn[4], \
-                                            v[5], v[6])
+            pos, orn = p.multiplyTransforms(dyn[3], dyn[4], v[5], v[6])
             urdfCollision.origin_xyz = pos
             urdfCollision.origin_rpy = p.getEulerFromQuaternion(orn)
             urdfLink.urdf_collision_shapes.append(urdfCollision)
@@ -385,8 +383,7 @@ class UrdfEditor(object):
             fileNameArray.append(v.geom_meshfilename)
             meshScaleArray.append(v.geom_meshscale)
             basePositionsArray.append(v.origin_xyz)
-            orn = p.getQuaternionFromEuler(v.origin_rpy)
-            baseOrientationsArray.append(orn)
+            baseOrientationsArray.append(p.getQuaternionFromEuler(v.origin_rpy))
 
         if (len(baseShapeTypeArray)):
             baseCollisionShapeIndex = p.createCollisionShapeArray(shapeTypes=baseShapeTypeArray,
@@ -410,7 +407,7 @@ class UrdfEditor(object):
                                                         meshScales=[v.geom_meshscale for v in urdfVisuals],
                                                         rgbaColors=[v.material_rgba for v in urdfVisuals],
                                                         visualFramePositions=[v.origin_xyz for v in urdfVisuals],
-                                                        visualFrameOrientations=[v.origin_rpy for v in urdfVisuals],
+                                                        visualFrameOrientations=[p.getQuaternionFromEuler(v.origin_rpy) for v in urdfVisuals],
                                                         physicsClientId=physicsClientId)
 
         linkMasses = []
@@ -475,7 +472,7 @@ class UrdfEditor(object):
                                                                 rgbaColors=[v.material_rgba for v in urdfVisuals],
                                                                 visualFramePositions=[v.origin_xyz for v in
                                                                                       urdfVisuals],
-                                                                visualFrameOrientations=[v.origin_rpy for v in
+                                                                visualFrameOrientations=[p.getQuaternionFromEuler(v.origin_rpy) for v in
                                                                                          urdfVisuals],
                                                                 physicsClientId=physicsClientId)
 
