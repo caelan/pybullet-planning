@@ -289,7 +289,7 @@ def main(search='ff-astar', max_time=60, verbose=True):
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     parser.add_argument('-display', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = holding_problem
+    problem_fn = cleaning_problem
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem
     # cleaning_button_problem | cooking_button_problem
 
@@ -299,7 +299,7 @@ def main(search='ff-astar', max_time=60, verbose=True):
     problem = problem_fn()
     state_id = p.saveState()
 
-    ss_problem = ss_from_problem(problem, remote=False, teleport=False)
+    ss_problem = ss_from_problem(problem, remote=True, teleport=False)
     print ss_problem
     #ss_problem.dump()
 

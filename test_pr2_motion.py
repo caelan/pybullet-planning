@@ -119,12 +119,27 @@ def debug(pr2):
     wait_for_interrupt()
     # TODO: the drake one has a large out-of-place cylinder as well
 
+def debug2(pr2):
+    first_joint_name = PR2_GROUPS['left_arm'][0]
+    first_joint = joint_from_name(pr2, first_joint_name)
+    parent_joint = get_link_parent(pr2, first_joint)
+    print(get_link_name(pr2, parent_joint), parent_joint, first_joint_name, first_joint)
+    print(get_link_descendants(pr2, first_joint))
+    #new_pr2 = clone_body(pr2, visual=True, collision=False)
+
+    links = [first_joint] + get_link_descendants(pr2, first_joint)
+    new_pr2 = clone_body(pr2, links=links, collision=False)
+    dump_world()
+    set_base_values(pr2, (-2, 0, 0))
+    wait_for_interrupt()
+    # TODO: least common ancestor
+
 def main(use_pr2_drake=False):
     connect(use_gui=True)
     add_data_path()
 
     plane = p.loadURDF("plane.urdf")
-    #table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
+    table = p.loadURDF("table/table.urdf", 0, 0, 0, 0, 0, 0.707107, 0.707107)
     #table = p.loadURDF("table_square/table_square.urdf")
     #table = p.loadURDF("cube.urdf")
     #table = p.loadURDF("block.urdf")
@@ -134,18 +149,9 @@ def main(use_pr2_drake=False):
     else:
         pr2 = p.loadURDF("models/pr2_description/pr2.urdf", useFixedBase=False)
     #dump_world()
-
-
-    first_joint_name = PR2_GROUPS['left_arm'][0]
-    first_joint = joint_from_name(pr2, first_joint_name)
-    parent_joint = get_link_parent(pr2, first_joint)
-    print(get_link_name(pr2, parent_joint), parent_joint, first_joint_name, first_joint)
-    print(get_link_descendants(pr2, first_joint))
-
-
     #debug(pr2)
+    #debug2(pr2)
     #return
-
 
     base_start = (-2, -2, 0)
     base_goal = (2, 2, 0)
@@ -164,13 +170,13 @@ def main(use_pr2_drake=False):
 
     p.addUserDebugLine(base_start, base_goal, lineColorRGB=(1, 1, 0)) # addUserDebugText
     print(base_start, base_goal)
-    #if use_pr2_drake:
-    #    test_drake_base_motion(pr2, base_start, base_goal)
-    #else:
-    #    test_base_motion(pr2, base_start, base_goal)
+    if use_pr2_drake:
+        test_drake_base_motion(pr2, base_start, base_goal)
+    else:
+        test_base_motion(pr2, base_start, base_goal)
 
     test_arm_motion(pr2, left_joints, arm_goal)
-    #test_arm_control(pr2, left_joints, arm_start)
+    test_arm_control(pr2, left_joints, arm_start)
 
     input('Finish?')
     p.disconnect()

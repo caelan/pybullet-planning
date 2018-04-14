@@ -1,7 +1,7 @@
 from utils import invert, multiply, get_body_name, set_pose, get_link_pose, link_from_name, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
     unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values, \
-    inverse_kinematics, uniform_pose_generator
+    inverse_kinematics, uniform_pose_generator, selective_inverse_kinematics
 from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \
     get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses
@@ -195,7 +195,8 @@ def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False):
                 if any(pairwise_collision(robot, b) for b in fixed):
                     continue
 
-                approach_movable_conf = inverse_kinematics(robot, link, approach_pose)
+                approach_movable_conf = selective_inverse_kinematics(robot, joints[0], link, approach_pose)
+                #approach_movable_conf = inverse_kinematics(robot, link, approach_pose)
                 if (approach_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     continue
                 approach_conf = get_joint_positions(robot, joints)

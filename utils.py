@@ -459,6 +459,10 @@ def get_configuration(body):
 def set_configuration(body, values):
     set_joint_positions(body, get_movable_joints(body), values)
 
+def get_full_configuration(body):
+    # Cannot alter fixed joints
+    return get_joint_positions(body, get_joints(body))
+
 def get_joint_type(body, joint):
     return get_joint_info(body, joint).jointType
 
@@ -853,7 +857,7 @@ def save_body(body, filename):
     editor.initializeFromBulletBody(body, 0)
     editor.saveUrdf(filename)
 
-def clone_visual_shape(body, link=BASE_LINK):
+def clone_visual_shape(body, link):
     if not has_gui():
         return -1
     visual_data = get_visual_data(body, link)
@@ -862,7 +866,7 @@ def clone_visual_shape(body, link=BASE_LINK):
         return visual_shape_from_data(visual_data[0])
     return -1
 
-def clone_collision_shape(body, link=BASE_LINK):
+def clone_collision_shape(body, link):
     collision_data = get_collision_data(body, link)
     if collision_data:
         assert (len(collision_data) == 1)
@@ -870,13 +874,20 @@ def clone_collision_shape(body, link=BASE_LINK):
         return collision_shape_from_data(collision_data[0], body, link)
     return -1
 
-def clone_body(body, collision=False, visual=False):
+def clone_body(body, links=None, collision=True, visual=True):
     # TODO: names are not retained
     # TODO: error with createMultiBody link poses on PR2
     # localVisualFrame_position: position of local visual frame, relative to link/joint frame
     # localVisualFrame orientation: orientation of local visual frame relative to link/joint frame
     # parentFramePos: joint position in parent frame
     # parentFrameOrn: joint orientation in parent frame
+    if links is None:
+        links = get_links(body)
+    movable_joints = [joint for joint in links if is_movable(body, joint)]
+    new_from_original = {}
+    #base_link = BASE_LINK
+    base_link = get_link_parent(body, links[0])
+    new_from_original[base_link] = -1
 
     masses = []
     collision_shapes = []
@@ -888,28 +899,30 @@ def clone_body(body, collision=False, visual=False):
     parent_indices = []
     joint_types = []
     joint_axes = []
-    for link in get_links(body):
+    for i, link in enumerate(links):
+        new_from_original[link] = i
         joint_info = get_joint_info(body, link)
         dynamics_info = get_dynamics_info(body, link)
         masses.append(dynamics_info.mass)
         collision_shapes.append(clone_collision_shape(body, link) if collision else -1)
-        visual_shapes.append(clone_visual_shape(link) if visual else -1)
+        visual_shapes.append(clone_visual_shape(body, link) if visual else -1)
         point, quat = get_local_link_pose(body, link)
         positions.append(point)
         orientations.append(quat)
         inertial_positions.append(dynamics_info.local_inertial_pos)
         inertial_orientations.append(dynamics_info.local_inertial_orn)
-        parent_indices.append(joint_info.parentIndex + 1) # TODO: need the increment to work
+        parent_indices.append(new_from_original[joint_info.parentIndex] + 1) # TODO: need the increment to work
         joint_types.append(joint_info.jointType)
         joint_axes.append(joint_info.jointAxis)
     # https://github.com/bulletphysics/bullet3/blob/9c9ac6cba8118544808889664326fd6f06d9eeba/examples/pybullet/gym/pybullet_utils/urdfEditor.py#L169
 
-    base_dynamics_info = get_dynamics_info(body)
+    base_dynamics_info = get_dynamics_info(body, base_link)
+    base_point, base_quat = get_link_pose(body, base_link)
     new_body = p.createMultiBody(baseMass=base_dynamics_info.mass,
-                             baseCollisionShapeIndex=clone_collision_shape(body) if collision else -1,
-                             baseVisualShapeIndex=clone_visual_shape(body) if visual else -1,
-                             basePosition=get_point(body),
-                             baseOrientation=get_quat(body),
+                             baseCollisionShapeIndex=clone_collision_shape(body, base_link) if collision else -1,
+                             baseVisualShapeIndex=clone_visual_shape(body, base_link) if visual else -1,
+                             basePosition=base_point,
+                             baseOrientation=base_quat,
                              baseInertialFramePosition=base_dynamics_info.local_inertial_pos,
                              baseInertialFrameOrientation=base_dynamics_info.local_inertial_orn,
                              linkMasses=masses,
@@ -922,7 +935,7 @@ def clone_body(body, collision=False, visual=False):
                              linkParentIndices=parent_indices,
                              linkJointTypes=joint_types,
                              linkJointAxis=joint_axes)
-    set_configuration(new_body, get_configuration(body))
+    set_configuration(new_body, get_joint_positions(body, movable_joints))
     return new_body
 
 def get_collision_data(body, link=BASE_LINK):
@@ -1533,17 +1546,8 @@ class WorldSaver(object):
 
 def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
     real_robot = robot
-    #cloned_robot = clone_body(robot, visual=False, collision=False) # TODO: joint limits
-    #cloned_robot = clone_body_editor(robot, shapes=False) # TODO: joint limits
-    #robot = cloned_robot
-    #print(get_configuration(real_robot), get_configuration(robot))
-    #set_configuration(robot, get_configuration(real_robot))
-    #set_pose(robot, get_pose(real_robot))
-    #print(real_robot, robot)
-
     (target_point, target_quat) = pose
     movable_joints = get_movable_joints(robot)
-    #print(movable_joints)
     for iterations in range(max_iterations):
         # TODO: stop is no progress
         # TODO: stop if collision or invalid joint limits
@@ -1556,11 +1560,59 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
                 np.allclose(link_quat, target_quat, atol=tolerance, rtol=0):
             break
     else:
-        #remove_body(robot)
         return None
-    #remove_body(robot)
-    #print(get_bodies())
-    if violates_limits(real_robot, movable_joints, kinematic_conf):
+    if violates_limits(robot, movable_joints, kinematic_conf):
+        return None
+    return kinematic_conf
+
+def selective_inverse_kinematics(robot, first_joint, target_link, target_pose, max_iterations=200, tolerance=1e-3):
+    #real_robot = robot
+    #cloned_robot = clone_body(robot, visual=False, collision=False) # TODO: joint limits
+    #cloned_robot = clone_body_editor(robot, shapes=False) # TODO: joint limits
+    #robot = cloned_robot
+    #print(get_configuration(real_robot), get_configuration(robot))
+    #set_configuration(robot, get_configuration(real_robot))
+    #set_pose(robot, get_pose(real_robot))
+    #print(real_robot, robot)
+    # TODO: fix stationary joints
+    # TODO: pass in set of movable joints and take least common ancestor
+
+    target_link_name = get_link_name(robot, target_link)
+    #parent_joint = get_link_parent(robot, first_joint)
+    selected_links = [first_joint] + get_link_descendants(robot, first_joint)
+    selected_movable_joints = [joint for joint in selected_links if is_movable(robot, joint)]
+    selected_link_names = [get_link_name(robot, l) for l in selected_links]
+    assert(target_link_name in selected_link_names)
+    selected_target_link = selected_link_names.index(target_link_name)
+
+    assert(target_link in selected_links)
+    selected_target_link = selected_links.index(target_link)
+
+    print(selected_link_names)
+    subrobot = clone_body(robot, links=selected_links, visual=False, collision=False)
+    #dump_body(subrobot)
+
+    (target_point, target_quat) = target_pose
+    sub_movable_joints = get_movable_joints(subrobot)
+    for _ in range(max_iterations):
+        sub_kinematic_conf = p.calculateInverseKinematics(subrobot, selected_target_link,
+                                                      target_point, target_quat)
+        if (sub_kinematic_conf is None) or any(map(math.isnan, sub_kinematic_conf)):
+            remove_body(subrobot)
+            return None
+        set_joint_positions(subrobot, sub_movable_joints, sub_kinematic_conf)
+        link_point, link_quat = get_link_pose(subrobot, selected_target_link)
+        if np.allclose(link_point, target_point, atol=tolerance, rtol=0) and \
+                np.allclose(link_quat, target_quat, atol=tolerance, rtol=0):
+            break
+    else:
+        remove_body(subrobot)
+        return None
+    remove_body(subrobot)
+
+    set_joint_positions(robot, selected_movable_joints, sub_kinematic_conf)
+    kinematic_conf = get_configuration(robot)
+    if violates_limits(robot, get_movable_joints(robot), kinematic_conf):
         return None
     return kinematic_conf
 
