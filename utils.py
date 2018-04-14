@@ -1565,50 +1565,33 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
         return None
     return kinematic_conf
 
-def selective_inverse_kinematics(robot, first_joint, target_link, target_pose, max_iterations=200, tolerance=1e-3):
-    #real_robot = robot
-    #cloned_robot = clone_body(robot, visual=False, collision=False) # TODO: joint limits
-    #cloned_robot = clone_body_editor(robot, shapes=False) # TODO: joint limits
-    #robot = cloned_robot
-    #print(get_configuration(real_robot), get_configuration(robot))
-    #set_configuration(robot, get_configuration(real_robot))
-    #set_pose(robot, get_pose(real_robot))
-    #print(real_robot, robot)
+def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_iterations=200, tolerance=1e-3):
     # TODO: fix stationary joints
     # TODO: pass in set of movable joints and take least common ancestor
 
-    target_link_name = get_link_name(robot, target_link)
-    #parent_joint = get_link_parent(robot, first_joint)
     selected_links = [first_joint] + get_link_descendants(robot, first_joint)
     selected_movable_joints = [joint for joint in selected_links if is_movable(robot, joint)]
-    selected_link_names = [get_link_name(robot, l) for l in selected_links]
-    assert(target_link_name in selected_link_names)
-    selected_target_link = selected_link_names.index(target_link_name)
-
     assert(target_link in selected_links)
     selected_target_link = selected_links.index(target_link)
-
-    print(selected_link_names)
-    subrobot = clone_body(robot, links=selected_links, visual=False, collision=False)
-    #dump_body(subrobot)
+    sub_robot = clone_body(robot, links=selected_links, visual=False, collision=False) # TODO: joint limits
 
     (target_point, target_quat) = target_pose
-    sub_movable_joints = get_movable_joints(subrobot)
+    sub_movable_joints = get_movable_joints(sub_robot)
     for _ in range(max_iterations):
-        sub_kinematic_conf = p.calculateInverseKinematics(subrobot, selected_target_link,
+        sub_kinematic_conf = p.calculateInverseKinematics(sub_robot, selected_target_link,
                                                       target_point, target_quat)
         if (sub_kinematic_conf is None) or any(map(math.isnan, sub_kinematic_conf)):
-            remove_body(subrobot)
+            remove_body(sub_robot)
             return None
-        set_joint_positions(subrobot, sub_movable_joints, sub_kinematic_conf)
-        link_point, link_quat = get_link_pose(subrobot, selected_target_link)
+        set_joint_positions(sub_robot, sub_movable_joints, sub_kinematic_conf)
+        link_point, link_quat = get_link_pose(sub_robot, selected_target_link)
         if np.allclose(link_point, target_point, atol=tolerance, rtol=0) and \
                 np.allclose(link_quat, target_quat, atol=tolerance, rtol=0):
             break
     else:
-        remove_body(subrobot)
+        remove_body(sub_robot)
         return None
-    remove_body(subrobot)
+    remove_body(sub_robot)
 
     set_joint_positions(robot, selected_movable_joints, sub_kinematic_conf)
     kinematic_conf = get_configuration(robot)

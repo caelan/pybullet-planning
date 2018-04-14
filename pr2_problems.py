@@ -1,7 +1,7 @@
 from collections import namedtuple
-from utils import create_box, set_base_values, set_point, set_pose, get_pose, get_bodies, z_rotation
+from utils import create_box, set_base_values, set_point, set_pose, get_pose, get_bodies, z_rotation, set_joint_positions
 from pr2_utils import TOP_HOLDING_LEFT_ARM, set_arm_conf, REST_LEFT_ARM, REST_RIGHT_ARM, open_arm, \
-    close_arm, get_carry_conf, arm_conf, get_other_arm
+    close_arm, get_carry_conf, arm_conf, get_other_arm, PR2_GROUPS, set_group_conf
 import pybullet as p
 import numpy as np
 
@@ -32,10 +32,14 @@ def get_fixed_bodies(problem):
     movable = [problem.robot] + list(problem.movable)
     return filter(lambda b: b not in movable, get_bodies())
 
-def create_pr2(fixed_torso=True, fixed_base=True):
-    pr2_path = "models/pr2_description/pr2_fixed_torso.urdf" if fixed_torso else "models/pr2_description/pr2.urdf"
-    #pr2_path = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
-    return p.loadURDF(pr2_path, useFixedBase=fixed_base) # Fixed base ensures the robot doesn't fall over
+def create_pr2(use_drake=True, fixed_base=True):
+    if use_drake:
+        pr2_path = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
+    else:
+        pr2_path = "models/pr2_description/pr2.urdf"
+    pr2 = p.loadURDF(pr2_path, useFixedBase=fixed_base) # Fixed base ensures the robot doesn't fall over
+    set_group_conf(pr2, 'torso', [0.2])
+    return pr2
 
 def create_floor():
     return p.loadURDF("plane.urdf")
@@ -153,7 +157,7 @@ def cleaning_button_problem(arm='left', grasp_type='top'):
     other_arm = get_other_arm(arm)
     initial_conf = get_carry_conf(arm, grasp_type)
 
-    pr2 = create_pr2(fixed_torso=True)
+    pr2 = create_pr2()
     set_arm_conf(pr2, arm, initial_conf)
     open_arm(pr2, arm)
     set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))
@@ -177,7 +181,7 @@ def cooking_button_problem(arm='left', grasp_type='top'):
     other_arm = get_other_arm(arm)
     initial_conf = get_carry_conf(arm, grasp_type)
 
-    pr2 = create_pr2(fixed_torso=True)
+    pr2 = create_pr2()
     set_arm_conf(pr2, arm, initial_conf)
     open_arm(pr2, arm)
     set_arm_conf(pr2, other_arm, arm_conf(other_arm, REST_LEFT_ARM))

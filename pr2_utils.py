@@ -178,6 +178,12 @@ def get_gripper_link(robot, arm):
 #    #pose = get_link_pose(robot, link_from_name(robot, LEFT_TOOL_NAME))
 #    return pose
 
+def get_group_conf(robot, group):
+    return get_joint_positions(robot, joints_from_names(robot, PR2_GROUPS[group]))
+
+def set_group_conf(robot, group, positions):
+    set_joint_positions(robot, joints_from_names(robot, PR2_GROUPS[group]), positions)
+
 def open_arm(robot, arm):  # TODO: these are mirrored on the pr2
     gripper_name = '{}_gripper'.format(arm)
     for name in PR2_GROUPS[gripper_name]:
