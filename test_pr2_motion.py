@@ -12,7 +12,8 @@ from utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
     joint_controller, dump_world, get_link_name, wait_for_interrupt, clone_body, clone_body_editor, \
     get_links, get_joint_parent_frame, euler_from_quat, get_joint_inertial_pose, get_joint_info, \
-    get_link_pose, VisualShapeData, get_visual_data
+    get_link_pose, VisualShapeData, get_visual_data, get_link_parent, link_from_name, \
+    get_link_ancestors, get_link_children, get_link_descendants
 
 def test_base_motion(pr2, base_start, base_goal):
     #disabled_collisions = get_disabled_collisions(pr2)
@@ -133,6 +134,14 @@ def main(use_pr2_drake=False):
     else:
         pr2 = p.loadURDF("models/pr2_description/pr2.urdf", useFixedBase=False)
     #dump_world()
+
+
+    first_joint_name = PR2_GROUPS['left_arm'][0]
+    first_joint = joint_from_name(pr2, first_joint_name)
+    parent_joint = get_link_parent(pr2, first_joint)
+    print(get_link_name(pr2, parent_joint), parent_joint, first_joint_name, first_joint)
+    print(get_link_descendants(pr2, first_joint))
+
 
     #debug(pr2)
     #return

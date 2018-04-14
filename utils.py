@@ -763,7 +763,7 @@ def visual_shape_from_data(data):
     pose = (data.localVisualFrame_position, data.localVisualFrame_orientation)
     inertial_pose = get_joint_inertial_pose(data.objectUniqueId, data.linkIndex)
 
-    pose = multiply(invert(inertial_pose), pose)
+    pose = multiply(invert(inertial_pose), pose) # Correct
     #pose = multiply(inertial_pose, pose)
     #pose = multiply(pose, inertial_pose)
     #pose = multiply(pose, invert(inertial_pose))
@@ -853,28 +853,26 @@ def save_body(body, filename):
     editor.initializeFromBulletBody(body, 0)
     editor.saveUrdf(filename)
 
+def clone_visual_shape(body, link=BASE_LINK):
+    if not has_gui():
+        return -1
+    visual_data = get_visual_data(body, link)
+    if visual_data:
+        assert (len(visual_data) == 1)
+        return visual_shape_from_data(visual_data[0])
+    return -1
+
+def clone_collision_shape(body, link=BASE_LINK):
+    collision_data = get_collision_data(body, link)
+    if collision_data:
+        assert (len(collision_data) == 1)
+        # TODO: can do CollisionArray
+        return collision_shape_from_data(collision_data[0], body, link)
+    return -1
+
 def clone_body(body, collision=False, visual=False):
     # TODO: names are not retained
     # TODO: error with createMultiBody link poses on PR2
-    def clone_collision_shape(link=BASE_LINK):
-        if not collision:
-            return -1
-        collision_data = get_collision_data(body, link)
-        if collision_data:
-            assert (len(collision_data) == 1)
-            # TODO: can do CollisionArray
-            return collision_shape_from_data(collision_data[0], body, link)
-        return -1
-
-    def clone_visual_shape(link=BASE_LINK):
-        if not visual or not has_gui():
-            return -1
-        visual_data = get_visual_data(body, link)
-        if visual_data:
-            assert (len(visual_data) == 1)
-            return visual_shape_from_data(visual_data[0])
-        return -1
-
     # localVisualFrame_position: position of local visual frame, relative to link/joint frame
     # localVisualFrame orientation: orientation of local visual frame relative to link/joint frame
     # parentFramePos: joint position in parent frame
@@ -894,13 +892,9 @@ def clone_body(body, collision=False, visual=False):
         joint_info = get_joint_info(body, link)
         dynamics_info = get_dynamics_info(body, link)
         masses.append(dynamics_info.mass)
-        collision_shapes.append(clone_collision_shape(link))
-        visual_shapes.append(clone_visual_shape(link))
-
-        parent_pose = get_joint_parent_frame(body, link) # Incorrect
-        local_pose = get_local_link_pose(body, link) # Correct
-        #point, quat = parent_pose
-        point, quat = local_pose
+        collision_shapes.append(clone_collision_shape(body, link) if collision else -1)
+        visual_shapes.append(clone_visual_shape(link) if visual else -1)
+        point, quat = get_local_link_pose(body, link)
         positions.append(point)
         orientations.append(quat)
         inertial_positions.append(dynamics_info.local_inertial_pos)
@@ -912,8 +906,8 @@ def clone_body(body, collision=False, visual=False):
 
     base_dynamics_info = get_dynamics_info(body)
     new_body = p.createMultiBody(baseMass=base_dynamics_info.mass,
-                             baseCollisionShapeIndex=clone_collision_shape(),
-                             baseVisualShapeIndex=clone_visual_shape(),
+                             baseCollisionShapeIndex=clone_collision_shape(body) if collision else -1,
+                             baseVisualShapeIndex=clone_visual_shape(body) if visual else -1,
                              basePosition=get_point(body),
                              baseOrientation=get_quat(body),
                              baseInertialFramePosition=base_dynamics_info.local_inertial_pos,
@@ -1619,6 +1613,8 @@ def experimental_inverse_kinematics(robot, link, pose,
     return kinematic_conf
 
 #####
+
+#####################################
 
 """
 def body_from_editor(editor, collision=True, visual=True):
