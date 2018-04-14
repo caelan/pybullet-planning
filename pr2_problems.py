@@ -107,7 +107,7 @@ def create_kitchen(w=.5, h=.7):
     table = create_box(w, w, h, color=(.75, .75, .75, 1))
     set_point(table, (2, 0, h/2))
 
-    cabbage = create_box(.07, .07, .1, color=(0, 1, 0, 1))
+    cabbage = create_box(.07, .07, .1, mass=0.01, color=(0, 1, 0, 1))
     set_point(cabbage, (2, 0, h + .1/2))
 
     sink = create_box(w, w, h, color=(.25, .25, .75, 1))

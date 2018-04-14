@@ -200,6 +200,7 @@ def close_arm(robot, arm):
 
 # GRASP_LENGTH = 0.04
 GRASP_LENGTH = 0.
+#GRASP_LENGTH = -0.01
 MAX_GRASP_WIDTH = 0.07
 
 

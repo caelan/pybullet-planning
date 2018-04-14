@@ -1515,11 +1515,23 @@ def control_joints(body, joints, positions):
                                 #forces=[])
 
 def joint_controller(body, joints, target, max_time=None):
+    assert(len(joints) == len(target))
     iteration = 0
     while not np.allclose(get_joint_positions(body, joints), target, atol=1e-3, rtol=0):
         control_joints(body, joints, target)
         yield iteration
         iteration += 1
+
+def joint_controller_hold(body, joints, target, max_time=None):
+    """
+    Keeps other joints in place
+    """
+    movable_joints = get_movable_joints(body)
+    movable_from_original = {o: m for m, o in enumerate(movable_joints)}
+    conf = list(get_joint_positions(body, movable_joints))
+    for joint, value in zip(joints, target):
+        conf[movable_from_original[joint]] = value
+    return joint_controller(body, movable_joints, conf)
 
 #####################################
 

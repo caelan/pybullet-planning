@@ -284,6 +284,12 @@ def step_commands(commands, time_step=None, simulate=False):
         else:
             raise ValueError(command)
 
+def control_commands(commands):
+    input('Control?')
+    for i, command in enumerate(commands):
+        print i, command
+        command.control()
+
 def main(search='ff-astar', max_time=60, verbose=True):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
@@ -333,7 +339,8 @@ def main(search='ff-astar', max_time=60, verbose=True):
 
     commands = post_process(problem, plan)
     #step_commands(commands)
-    step_commands(commands, time_step=0.01)
+    #step_commands(commands, time_step=0.01)
+    control_commands(commands)
     input('Finish?')
     disconnect()
 

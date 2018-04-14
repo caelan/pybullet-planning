@@ -1,7 +1,8 @@
 from utils import invert, multiply, get_body_name, set_pose, get_link_pose, link_from_name, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
     unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values, \
-    inverse_kinematics, uniform_pose_generator, sub_inverse_kinematics
+    inverse_kinematics, uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, \
+    remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold
 from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \
     get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses
@@ -10,6 +11,7 @@ from pr2_problems import get_fixed_bodies
 import pybullet as p
 import numpy as np
 import random
+import time
 
 class Pose(object):
     #def __init__(self, position, orientation):
@@ -43,6 +45,9 @@ class Conf(object):
     def __repr__(self):
         return 'q{}'.format(id(self) % 1000)
 
+def conf_from_pose(pose):
+    return Conf(pose.body, range(3), base_values_from_pose(pose.value))
+
 class Trajectory(object):
     def __init__(self, path):
         self.path = tuple(path)
@@ -56,6 +61,20 @@ class Trajectory(object):
     #        #p.stepSimulation()
     #        update_state()
     #        raw_input('Continue?')
+    def control(self, real_time=False, dt=0):
+        # TODO: just waypoints
+        if real_time:
+            enable_real_time()
+        else:
+            disable_real_time()
+        for conf in self.path:
+            if isinstance(conf, Pose):
+                conf = conf_from_pose(conf)
+            for _ in joint_controller_hold(conf.body, conf.joints, conf.values):
+                enable_gravity()
+                if not real_time:
+                    p.stepSimulation()
+                time.sleep(dt)
     def reverse(self):
         return Trajectory(reversed(self.path))
     def __repr__(self):
@@ -67,12 +86,15 @@ class Attach(object):
         self.arm = arm
         self.grasp = grasp
         self.body = body
+        self.link = link_from_name(self.robot, ARM_LINK_NAMES[self.arm])
     def step(self):
-        link = link_from_name(self.robot, ARM_LINK_NAMES[self.arm])
+        link = link_from_name(self.robot, self.link)
         gripper_pose = get_link_pose(self.robot, link)
         body_pose = multiply(gripper_pose, self.grasp.value)
         set_pose(self.body, body_pose)
         close_arm(self.robot, self.arm)
+    def control(self):
+        add_fixed_constraint(self.body, self.robot, self.link)
     def __repr__(self):
         return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
                                      self.arm, get_body_name(self.body))
@@ -82,8 +104,11 @@ class Detach(object):
         self.robot = robot
         self.arm = arm
         self.body = body
+        self.link = link_from_name(self.robot, ARM_LINK_NAMES[self.arm])
     def step(self):
         open_arm(self.robot, self.arm)
+    def control(self):
+        remove_fixed_constraint(self.body, self.robot, self.link)
     def __repr__(self):
         return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
                                      self.arm, get_body_name(self.body))
@@ -94,7 +119,8 @@ class Clean(object):
     def step(self):
         p.addUserDebugText('Cleaned', textPosition=(0, 0, .25), textColorRGB=(0,0,1), #textSize=1,
                            lifeTime=0, parentObjectUniqueId=self.body)
-        p.setDebugObjectColor(self.body, 0, objectDebugColorRGB=(0,0,1))
+        #p.setDebugObjectColor(self.body, 0, objectDebugColorRGB=(0,0,1))
+    control = step
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.body)
 
@@ -109,6 +135,7 @@ class Cook(object):
         p.addUserDebugText('Cooked', textPosition=(0, 0, .5), textColorRGB=(1,0,0), #textSize=1,
                            lifeTime=0, parentObjectUniqueId=self.body)
         #p.setDebugObjectColor(self.body, 0, objectDebugColorRGB=(1,0,0))
+    control = step
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.body)
 
