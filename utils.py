@@ -678,7 +678,7 @@ def get_local_link_pose(body, joint):
     parent_com = get_joint_parent_frame(body, joint)
     tmp_pose = invert(multiply(get_joint_inertial_pose(body, joint), parent_com))
     parent_inertia = get_joint_inertial_pose(body, parent_joint)
-    #return multiply(parent_inertia, tmp_pose)
+    #return multiply(parent_inertia, tmp_pose) # TODO: why is this wrong...
     _, orn = multiply(parent_inertia, tmp_pose)
     pos, _ = multiply(parent_inertia, Pose(parent_com[0]))
     return (pos, orn)
@@ -759,6 +759,35 @@ def visual_shape_from_data(data):
         return -1
     # visualFramePosition: translational offset of the visual shape with respect to the link
     # visualFrameOrientation: rotational offset (quaternion x,y,z,w) of the visual shape with respect to the link frame
+
+    pose = (data.localVisualFrame_position, data.localVisualFrame_orientation)
+    inertial_pose = get_joint_inertial_pose(data.objectUniqueId, data.linkIndex)
+
+    pose = multiply(invert(inertial_pose), pose)
+    #pose = multiply(inertial_pose, pose)
+    #pose = multiply(pose, inertial_pose)
+    #pose = multiply(pose, invert(inertial_pose))
+
+    """
+    if data.linkIndex != BASE_LINK:
+        # parent_from_joint
+        print(data.objectUniqueId, data.linkIndex)
+        old_pose = get_joint_parent_frame(data.objectUniqueId, data.linkIndex)  # Incorrect
+        new_pose = get_local_link_pose(data.objectUniqueId, data.linkIndex)  # Correct
+
+        # parent1_from_joint * joint_from_visual = parent2_from_joint * X
+        # parent2_from_joint^-1 * parent1_from_joint * joint_from_visual
+        # parent1_from_parent2 * ?joint_from_visual?
+        #pose = multiply(invert(new_pose), old_pose, pose)
+        #pose = multiply(invert(old_pose), new_pose, pose)
+        #pose = multiply(pose, invert(new_pose), old_pose)
+        #pose = multiply(pose, invert(old_pose), new_pose)
+        #pose = multiply(pose, new_pose, invert(old_pose))
+        pose = Pose(Point(x=5)) # TODO: so this is actually taken into account
+        print(pose)
+    """
+
+    point, quat = pose
     return p.createVisualShape(shapeType=data.visualGeometryType,
                                   radius=get_data_radius(data),
                                   halfExtents=np.array(get_data_extents(data))/2,
@@ -769,20 +798,26 @@ def visual_shape_from_data(data):
                                   planeNormal=get_data_normal(data),
                                   rgbaColor=data.rgbaColor,
                                   #specularColor=,
-                                  visualFramePosition=data.localVisualFrame_position,
-                                  visualFrameOrientation=data.localVisualFrame_orientation)
+                                  visualFramePosition=point,
+                                  visualFrameOrientation=quat)
 
 def get_visual_data(body, link=BASE_LINK):
     visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body)]
     return filter(lambda d: d.linkIndex == link, visual_data)
 
+# object_unique_id and linkIndex seem to be noise
 CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'linkIndex',
                                                        'geometry_type', 'dimensions', 'filename',
                                                        'local_frame_pos', 'local_frame_orn'])
 
-def collision_shape_from_data(data):
+def collision_shape_from_data(data, body, link):
     if (data.geometry_type == p.GEOM_MESH) and (data.filename == 'unknown_file'):
         return -1
+    pose = (data.local_frame_pos, data.local_frame_orn)
+    #print(body, link, data.object_unique_id, data.linkIndex)
+    pose = multiply(invert(get_joint_inertial_pose(body, link)), pose)
+    point, quat = pose
+    # TODO: the visual data seems affected by the collision data
     return p.createCollisionShape(shapeType=data.geometry_type,
                                   radius=get_data_radius(data),
                                  # halfExtents=get_data_extents(data.geometry_type, data.dimensions),
@@ -791,8 +826,8 @@ def collision_shape_from_data(data):
                                   fileName=data.filename,
                                   meshScale=get_data_scale(data),
                                   planeNormal=get_data_normal(data),
-                                  collisionFramePosition=data.local_frame_pos,
-                                  collisionFrameOrientation=data.local_frame_pos)
+                                  collisionFramePosition=point,
+                                  collisionFrameOrientation=quat)
     #return p.createCollisionShapeArray()
 
 def clone_body_editor(body, collision=True, visual=True):
@@ -828,7 +863,7 @@ def clone_body(body, collision=False, visual=False):
         if collision_data:
             assert (len(collision_data) == 1)
             # TODO: can do CollisionArray
-            return collision_shape_from_data(collision_data[0])
+            return collision_shape_from_data(collision_data[0], body, link)
         return -1
 
     def clone_visual_shape(link=BASE_LINK):
@@ -861,9 +896,11 @@ def clone_body(body, collision=False, visual=False):
         masses.append(dynamics_info.mass)
         collision_shapes.append(clone_collision_shape(link))
         visual_shapes.append(clone_visual_shape(link))
-        #point, quat = invert((joint_info.parentFramePos, joint_info.parentFrameOrn))
-        #point, quat = (joint_info.parentFramePos, joint_info.parentFrameOrn)
-        point, quat = get_local_link_pose(body, link)
+
+        parent_pose = get_joint_parent_frame(body, link) # Incorrect
+        local_pose = get_local_link_pose(body, link) # Correct
+        #point, quat = parent_pose
+        point, quat = local_pose
         positions.append(point)
         orientations.append(quat)
         inertial_positions.append(dynamics_info.local_inertial_pos)
