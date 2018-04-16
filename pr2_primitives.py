@@ -2,10 +2,11 @@ from utils import invert, multiply, get_body_name, set_pose, get_link_pose, link
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
     unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values, \
     inverse_kinematics, uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, \
-    remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold
+    remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
+    get_max_limit
 from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \
     get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
-    learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses
+    learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses, PR2_GROUPS, joints_from_names
 from pr2_problems import get_fixed_bodies
 
 import pybullet as p
@@ -95,6 +96,18 @@ class Attach(object):
         close_arm(self.robot, self.arm)
     def control(self):
         add_fixed_constraint(self.body, self.robot, self.link)
+        return
+        pass
+        gripper_name = '{}_arm'.format(self.arm)
+        joints = joints_from_names(self.robot, PR2_GROUPS[gripper_name])
+        values = [get_max_limit(self.robot, joint) for joint in joints]
+        raw_input('Pause')
+        for _ in joint_controller_hold(self.robot, joints, values):
+            enable_gravity()
+            p.stepSimulation()
+            #if not real_time:
+            #    p.stepSimulation()
+            #time.sleep(dt)
     def __repr__(self):
         return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
                                      self.arm, get_body_name(self.body))

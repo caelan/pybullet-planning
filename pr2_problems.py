@@ -37,7 +37,12 @@ def create_pr2(use_drake=True, fixed_base=True):
         pr2_path = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
     else:
         pr2_path = "models/pr2_description/pr2.urdf"
-    pr2 = p.loadURDF(pr2_path, useFixedBase=fixed_base) # Fixed base ensures the robot doesn't fall over
+    flags = 0 # by default, Bullet disables self-collision
+    #flags = p.URDF_USE_INERTIA_FROM_FILE
+    #flags = p.URDF_USE_SELF_COLLISION
+    #flags = p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
+    #flags = p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
+    pr2 = p.loadURDF(pr2_path, useFixedBase=fixed_base, flags=flags) # Fixed base ensures the robot doesn't fall over
     set_group_conf(pr2, 'torso', [0.2])
     return pr2
 
@@ -107,7 +112,10 @@ def create_kitchen(w=.5, h=.7):
     table = create_box(w, w, h, color=(.75, .75, .75, 1))
     set_point(table, (2, 0, h/2))
 
-    cabbage = create_box(.07, .07, .1, mass=0.01, color=(0, 1, 0, 1))
+    mass = 1
+    #mass = 0.01
+    #mass = 1e-6
+    cabbage = create_box(.07, .07, .1, mass=mass, color=(0, 1, 0, 1))
     set_point(cabbage, (2, 0, h + .1/2))
 
     sink = create_box(w, w, h, color=(.25, .25, .75, 1))

@@ -2121,22 +2121,20 @@
       <origin rpy="0 0 0" xyz="0.03598 0.01730 -0.00164"/>
       <inertia ixx="0.00007756198" ixy="0.00000149095" ixz="-0.00000983385" iyy="0.00019708305" iyz="-0.00000306125" izz="0.00018105446"/>
     </inertial>
-    <!--
-      <visual>
+    <!--<visual>
         <origin xyz="${0.0914942479/2.0} 0 0" rpy="0 0 0.0541224233" />
         <geometry>
           <box size="${0.0914942479} 0.005 0.005" />
         </geometry>
         <material name="Green" />
-      </visual>
--->
-    <collision group="non_gripper">
+      </visual>-->
+    <!--collision group="non_gripper">
       <origin rpy="0 0 0.0541224233" xyz="0.04574712395 0 0"/>
       <geometry>
         <box size="0.0914942479 0.005 0.005"/>
       </geometry>
       <verbose value="Yes"/>
-    </collision>
+    </collision-->
   </link>
   <link name="r_gripper_r_parallel_link">
     <inertial>
@@ -2144,22 +2142,20 @@
       <origin rpy="0 0 0" xyz="0.03576 -0.01736 -0.00095"/>
       <inertia ixx="0.00007738410" ixy="-0.00000209309" ixz="-0.00000836228" iyy="0.00019847383" iyz="0.00000246110" izz="0.00018106988"/>
     </inertial>
-    <!--
-      <visual>
+    <!--<visual>
         <origin xyz="${0.0914942479/2.0} 0 0" rpy="0 0 -0.0541224233" />
         <geometry>
           <box size="${0.0914942479} 0.005 0.005" />
         </geometry>
         <material name="Green" />
-      </visual>
--->
-    <collision group="non_gripper">
+      </visual>-->
+    <!--collision group="non_gripper">
       <origin rpy="0 0 -0.0541224233" xyz="0.04574712395 0 0"/>
       <geometry>
         <box size="0.0914942479 0.005 0.005"/>
       </geometry>
       <verbose value="Yes"/>
-    </collision>
+    </collision-->
   </link>
   <joint name="r_gripper_l_finger_tip_joint" type="revolute">
     <axis xyz="0 0 -1"/>
@@ -3054,22 +3050,20 @@
       <origin rpy="0 0 0" xyz="0.03598 0.01730 -0.00164"/>
       <inertia ixx="0.00007756198" ixy="0.00000149095" ixz="-0.00000983385" iyy="0.00019708305" iyz="-0.00000306125" izz="0.00018105446"/>
     </inertial>
-    <!--
-      <visual>
+    <!--<visual>
         <origin xyz="${0.0914942479/2.0} 0 0" rpy="0 0 0.0541224233" />
         <geometry>
           <box size="${0.0914942479} 0.005 0.005" />
         </geometry>
         <material name="Green" />
-      </visual>
--->
-    <collision group="non_gripper">
+      </visual>-->
+    <!--collision group="non_gripper">
       <origin rpy="0 0 0.0541224233" xyz="0.04574712395 0 0"/>
       <geometry>
         <box size="0.0914942479 0.005 0.005"/>
       </geometry>
       <verbose value="Yes"/>
-    </collision>
+    </collision-->
   </link>
   <link name="l_gripper_r_parallel_link">
     <inertial>
@@ -3077,22 +3071,20 @@
       <origin rpy="0 0 0" xyz="0.03576 -0.01736 -0.00095"/>
       <inertia ixx="0.00007738410" ixy="-0.00000209309" ixz="-0.00000836228" iyy="0.00019847383" iyz="0.00000246110" izz="0.00018106988"/>
     </inertial>
-    <!--
-      <visual>
+    <!--<visual>
         <origin xyz="${0.0914942479/2.0} 0 0" rpy="0 0 -0.0541224233" />
         <geometry>
           <box size="${0.0914942479} 0.005 0.005" />
         </geometry>
         <material name="Green" />
-      </visual>
--->
-    <collision group="non_gripper">
+      </visual>-->
+    <!--collision group="non_gripper">
       <origin rpy="0 0 -0.0541224233" xyz="0.04574712395 0 0"/>
       <geometry>
         <box size="0.0914942479 0.005 0.005"/>
       </geometry>
       <verbose value="Yes"/>
-    </collision>
+    </collision-->
   </link>
   <joint name="l_gripper_l_finger_tip_joint" type="revolute">
     <axis xyz="0 0 -1"/>

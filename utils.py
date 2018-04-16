@@ -439,8 +439,17 @@ def has_joint(body, name):
 def joints_from_names(body, names):
     return tuple(joint_from_name(body, name) for name in names)
 
+JointState = namedtuple('JointState', ['jointPosition', 'jointVelocity',
+                                     'jointReactionForces', 'appliedJointMotorTorque'])
+
+def get_joint_state(body, joint):
+    return JointState(*p.getJointState(body, joint))
+
 def get_joint_position(body, joint):
-    return p.getJointState(body, joint)[0]
+    return get_joint_state(body, joint).jointPosition
+
+def get_joint_torque(body, joint):
+    return get_joint_state(body, joint).appliedJointMotorTorque
 
 def get_joint_positions(body, joints=None):
     return tuple(get_joint_position(body, joint) for joint in joints)

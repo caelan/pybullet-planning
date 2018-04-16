@@ -3,7 +3,7 @@ import time
 import pstats
 import cProfile
 
-from utils import connect, add_data_path, disconnect, get_pose, \
+from utils import connect, add_data_path, disconnect, get_pose, wait_for_interrupt, dump_world, \
     update_state, link_from_name, step_simulation, is_placement, joints_from_names, get_joint_positions, input
 from pr2_problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
     cleaning_button_problem, cooking_button_problem
@@ -340,6 +340,8 @@ def main(search='ff-astar', max_time=60, verbose=True):
     commands = post_process(problem, plan)
     #step_commands(commands)
     #step_commands(commands, time_step=0.01)
+    dump_world()
+    wait_for_interrupt()
     control_commands(commands)
     input('Finish?')
     disconnect()
