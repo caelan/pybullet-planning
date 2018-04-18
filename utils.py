@@ -93,6 +93,9 @@ def simulate_for_duration(duration, dt=0):
         time.sleep(dt)
 
 def wait_for_interrupt(max_time=np.inf):
+    """
+    Hold Ctrl to move the camera as well as zoom
+    """
     print('Press Ctrl-C to continue')
     try:
         wait_for_duration(max_time)
@@ -504,6 +507,9 @@ def get_max_limit(body, joint):
 
 def get_max_velocity(body, joint):
     return get_joint_info(body, joint).jointMaxVelocity
+
+def get_max_force(body, joint):
+    return get_joint_info(body, joint).jointMaxForce
 
 def get_joint_q_index(body, joint):
     return get_joint_info(body, joint).qIndex
@@ -1423,7 +1429,7 @@ def get_fixed_constraints():
             fixed_constraints.append(constraint)
     return fixed_constraints
 
-def add_fixed_constraint(body, robot, robot_link):
+def add_fixed_constraint(body, robot, robot_link, max_force=None):
     body_link = BASE_LINK
     body_pose = get_pose(body)
     end_effector_pose = get_link_pose(robot, robot_link)
@@ -1437,12 +1443,15 @@ def add_fixed_constraint(body, robot, robot_link):
     #                          childFramePosition=point,
     #                          parentFrameOrientation=unit_quat(),
     #                          childFrameOrientation=quat)
-    return p.createConstraint(robot, robot_link, body, body_link, # Both seem to work
+    constraint = p.createConstraint(robot, robot_link, body, body_link, # Both seem to work
                               p.JOINT_FIXED, jointAxis=unit_point(),
                               parentFramePosition=point,
                               childFramePosition=unit_point(),
                               parentFrameOrientation=quat,
                               childFrameOrientation=unit_quat())
+    if max_force is not None:
+        p.changeConstraint(constraint, maxForce=max_force)
+    return constraint
 
 def remove_fixed_constraint(body, robot, robot_link):
     for constraint in get_fixed_constraints():
@@ -1504,24 +1513,28 @@ def get_grasp_pose(constraint):
 # Control
 
 def control_joint(body, joint, value):
-    max_force = 5
     return p.setJointMotorControl2(bodyUniqueId=body,
                             jointIndex=joint,
                             controlMode=p.POSITION_CONTROL,
                             targetPosition=value,
                             targetVelocity=0,
-                            force=max_force)
+                            maxVelocity=get_max_velocity(body, joint),
+                            force=get_max_force(body, joint))
 
 
 def control_joints(body, joints, positions):
     # TODO: the whole PR2 seems to jitter
     #kp = 1.0
     #kv = 0.3
-    return p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, targetPositions=positions,
-                                targetVelocities=[0.0] * len(joints)) #,
-                                #positionGains=[kp] * len(joints),
-                                #velocityGains=[kv] * len(joints),)
-                                #forces=[])
+    #forces = [get_max_force(body, joint) for joint in joints]
+    #forces = [5000]*len(joints)
+    #forces = [20000]*len(joints)
+    return p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL,
+                                       targetPositions=positions,
+                                        targetVelocities=[0.0] * len(joints)) #,
+                                        #positionGains=[kp] * len(joints),
+                                        #velocityGains=[kv] * len(joints),)
+                                        #forces=forces)
 
 def joint_controller(body, joints, target, max_time=None):
     assert(len(joints) == len(target))
