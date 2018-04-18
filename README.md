@@ -1,7 +1,8 @@
 # ss-pybullet
 STRIPStream + pybullet
 
-![Alt text](images/test.png?raw=true "Title")
+<!--![Alt text](images/test.png?raw=true "Title")-->
+<img src="images/pr2.png" height="300">&emsp;<img src="images/kuka.png" height="300">
 
 
 ## Installation
