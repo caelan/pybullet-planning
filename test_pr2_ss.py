@@ -340,8 +340,22 @@ def main(search='ff-astar', max_time=60, verbose=True):
     commands = post_process(problem, plan)
     #step_commands(commands)
     #step_commands(commands, time_step=0.01)
-    dump_world()
-    wait_for_interrupt()
+    #dump_world()
+    #wait_for_interrupt()
+
+    """
+    from pr2_utils import PR2_GROUPS
+    from utils import get_min_limit, get_max_limit, joint_controller_hold, enable_gravity
+    joints = joints_from_names(problem.robot, PR2_GROUPS['left_gripper'])
+    values = [get_min_limit(problem.robot, joint) for joint in joints]
+    for _ in joint_controller_hold(problem.robot, joints, values):
+        enable_gravity()
+        p.stepSimulation()
+        # if not real_time:
+        #    p.stepSimulation()
+        # time.sleep(dt)
+    """
+
     control_commands(commands)
     input('Finish?')
     disconnect()

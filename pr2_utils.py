@@ -198,8 +198,8 @@ def close_arm(robot, arm):
         set_joint_position(robot, joint, get_min_limit(robot, joint))
 
 
-GRASP_LENGTH = 0.04
-#GRASP_LENGTH = 0.
+#GRASP_LENGTH = 0.04
+GRASP_LENGTH = 0.
 #GRASP_LENGTH = -0.01
 MAX_GRASP_WIDTH = 0.07
 

@@ -1,5 +1,6 @@
 from collections import namedtuple
-from utils import create_box, set_base_values, set_point, set_pose, get_pose, get_bodies, z_rotation, set_joint_positions
+from utils import create_box, set_base_values, set_point, set_pose, get_pose, get_bodies, z_rotation, \
+    set_joint_positions, load_model, BLOCK_URDF
 from pr2_utils import TOP_HOLDING_LEFT_ARM, set_arm_conf, REST_LEFT_ARM, REST_RIGHT_ARM, open_arm, \
     close_arm, get_carry_conf, arm_conf, get_other_arm, PR2_GROUPS, set_group_conf
 import pybullet as p
@@ -115,7 +116,8 @@ def create_kitchen(w=.5, h=.7):
     mass = 1
     #mass = 0.01
     #mass = 1e-6
-    cabbage = create_box(.07, .07, .1, mass=mass, color=(0, 1, 0, 1))
+    #cabbage = create_box(.07, .07, .1, mass=mass, color=(0, 1, 0, 1))
+    cabbage = load_model(BLOCK_URDF, fixed_base=False)
     set_point(cabbage, (2, 0, h + .1/2))
 
     sink = create_box(w, w, h, color=(.25, .25, .75, 1))
