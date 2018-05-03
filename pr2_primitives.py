@@ -82,6 +82,7 @@ class Trajectory(object):
         return 't{}'.format(id(self) % 1000)
 
 class Attach(object):
+    vacuum = True
     def __init__(self, robot, arm, grasp, body):
         self.robot = robot
         self.arm = arm
@@ -89,29 +90,28 @@ class Attach(object):
         self.body = body
         self.link = link_from_name(self.robot, ARM_LINK_NAMES[self.arm])
     def step(self):
-        link = link_from_name(self.robot, self.link)
-        gripper_pose = get_link_pose(self.robot, link)
+        gripper_pose = get_link_pose(self.robot, self.link)
         body_pose = multiply(gripper_pose, self.grasp.value)
         set_pose(self.body, body_pose)
         close_arm(self.robot, self.arm)
     def control(self):
-        #raw_input('Start?')
-        #add_fixed_constraint(self.body, self.robot, self.link)
-        #add_fixed_constraint(self.body, self.robot, self.link, max_force=1) # Less force makes it easier to pick
-        #for _ in range(10):
-        #    p.stepSimulation()
-        #return
-
-        gripper_name = '{}_gripper'.format(self.arm)
-        joints = joints_from_names(self.robot, PR2_GROUPS[gripper_name])
-        #values = [get_max_limit(self.robot, joint) for joint in joints] # Open
-        values = [get_min_limit(self.robot, joint) for joint in joints] # Closed
-        for _ in joint_controller_hold(self.robot, joints, values):
-            enable_gravity()
-            p.stepSimulation()
-            #if not real_time:
+        if self.vacuum:
+            #add_fixed_constraint(self.body, self.robot, self.link)
+            add_fixed_constraint(self.body, self.robot, self.link, max_force=1) # Less force makes it easier to pick
+            #for _ in range(10):
             #    p.stepSimulation()
-            #time.sleep(dt)
+        else:
+            # TODO: the gripper doesn't quite work yet
+            gripper_name = '{}_gripper'.format(self.arm)
+            joints = joints_from_names(self.robot, PR2_GROUPS[gripper_name])
+            #values = [get_max_limit(self.robot, joint) for joint in joints] # Open
+            values = [get_min_limit(self.robot, joint) for joint in joints] # Closed
+            for _ in joint_controller_hold(self.robot, joints, values):
+                enable_gravity()
+                p.stepSimulation()
+                #if not real_time:
+                #    p.stepSimulation()
+                #time.sleep(dt)
     def __repr__(self):
         return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
                                      self.arm, get_body_name(self.body))

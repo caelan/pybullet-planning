@@ -116,8 +116,8 @@ def create_kitchen(w=.5, h=.7):
     mass = 1
     #mass = 0.01
     #mass = 1e-6
-    #cabbage = create_box(.07, .07, .1, mass=mass, color=(0, 1, 0, 1))
-    cabbage = load_model(BLOCK_URDF, fixed_base=False)
+    cabbage = create_box(.07, .07, .1, mass=mass, color=(0, 1, 0, 1))
+    #cabbage = load_model(BLOCK_URDF, fixed_base=False)
     set_point(cabbage, (2, 0, h + .1/2))
 
     sink = create_box(w, w, h, color=(.25, .25, .75, 1))

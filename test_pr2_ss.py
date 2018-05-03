@@ -3,7 +3,7 @@ import time
 import pstats
 import cProfile
 
-from utils import connect, add_data_path, disconnect, get_pose, wait_for_interrupt, dump_world, \
+from utils import connect, add_data_path, disconnect, get_pose, enable_gravity, wait_for_interrupt, dump_world, \
     update_state, link_from_name, step_simulation, is_placement, joints_from_names, get_joint_positions, input
 from pr2_problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
     cleaning_button_problem, cooking_button_problem
@@ -290,12 +290,24 @@ def control_commands(commands):
         print i, command
         command.control()
 
+def close_gripper_test(problem):
+    from pr2_utils import PR2_GROUPS
+    from utils import get_min_limit, joint_controller_hold, enable_gravity
+    joints = joints_from_names(problem.robot, PR2_GROUPS['left_gripper'])
+    values = [get_min_limit(problem.robot, joint) for joint in joints]
+    for _ in joint_controller_hold(problem.robot, joints, values):
+        enable_gravity()
+        p.stepSimulation()
+        # if not real_time:
+        #    p.stepSimulation()
+        # time.sleep(dt)
+
 def main(search='ff-astar', max_time=60, verbose=True):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
     parser.add_argument('-display', action='store_true', help='enable viewer.')
     args = parser.parse_args()
-    problem_fn = cleaning_problem
+    problem_fn = cooking_problem
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem
     # cleaning_button_problem | cooking_button_problem
 
@@ -338,25 +350,12 @@ def main(search='ff-astar', max_time=60, verbose=True):
         problem = problem_fn()  # TODO: way of doing this without reloading?
 
     commands = post_process(problem, plan)
+    enable_gravity()
     #step_commands(commands)
-    #step_commands(commands, time_step=0.01)
+    step_commands(commands, time_step=0.01)
+    #control_commands(commands)
     #dump_world()
     #wait_for_interrupt()
-
-    """
-    from pr2_utils import PR2_GROUPS
-    from utils import get_min_limit, get_max_limit, joint_controller_hold, enable_gravity
-    joints = joints_from_names(problem.robot, PR2_GROUPS['left_gripper'])
-    values = [get_min_limit(problem.robot, joint) for joint in joints]
-    for _ in joint_controller_hold(problem.robot, joints, values):
-        enable_gravity()
-        p.stepSimulation()
-        # if not real_time:
-        #    p.stepSimulation()
-        # time.sleep(dt)
-    """
-
-    control_commands(commands)
     input('Finish?')
     disconnect()
 

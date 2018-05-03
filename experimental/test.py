@@ -307,6 +307,252 @@ def main():
 
     # createConstraint
 
+def get_contact_links(contact):
+    _, body1, body2, link1, link2 = contact[:5]
+    distance = contact[8]
+    return (body1, link1), (body2, link2), distance
+
+def get_colliding_links(body, max_distance=-0.001):
+    contacts = p.getClosestPoints(body, body, max_distance) # -1 is the base
+    colliding = set()
+    for (_, link1), (_, link2), _ in map(get_contact_links, contacts):
+        colliding.update([(link1, link2), (link2, link1)])
+    return colliding
+
+def get_safe_colliding_links(body):
+    return get_adjacent_links(body) | get_fixed_links(body)
+
+def self_collision(body, max_distance=0):
+    # GetNonAdjacentLinks | GetAdjacentLinks
+    contacts = p.getClosestPoints(body, body, max_distance) # -1 is the base
+    #print contacts
+    adjacent = get_safe_colliding_links(body)
+    #print fixed
+    #print sorted(get_adjacent_links(body))
+    colliding_not_adjacent = {(link1, link2, distance) for (_, link1), (_, link2), distance in map(get_contact_links, contacts)
+           if (link1 != link2) and ((link1, link2) not in adjacent) and ((link2, link1) not in adjacent)}
+    colliding_not_adjacent = list(colliding_not_adjacent)
+    #print colliding_not_adjacent
+    #print [(get_link_name(body, link1), get_link_name(body, link2), distance)
+    #       for (link1, link2, distance) in colliding_not_adjacent]
+    # TODO: could compute initially colliding links and discount those collisions
+    return len(colliding_not_adjacent) != 0
+
+#def filtered_self_collision(body, acceptable=tuple(), max_distance=0):
+#    contacts = p.getClosestPoints(body, body, max_distance) # -1 is the base
+#    for (_, link1), (_, link2), _ in map(get_contact_links, contacts):
+#        if (link1 != link2) and (link1, link2) not in acceptable:
+#            return True
+#    return False
+
+"""
+if data.linkIndex != BASE_LINK:
+    # parent_from_joint
+    print(data.objectUniqueId, data.linkIndex)
+    old_pose = get_joint_parent_frame(data.objectUniqueId, data.linkIndex)  # Incorrect
+    new_pose = get_local_link_pose(data.objectUniqueId, data.linkIndex)  # Correct
+
+    # parent1_from_joint * joint_from_visual = parent2_from_joint * X
+    # parent2_from_joint^-1 * parent1_from_joint * joint_from_visual
+    # parent1_from_parent2 * ?joint_from_visual?
+    #pose = multiply(invert(new_pose), old_pose, pose)
+    #pose = multiply(invert(old_pose), new_pose, pose)
+    #pose = multiply(pose, invert(new_pose), old_pose)
+    #pose = multiply(pose, invert(old_pose), new_pose)
+    #pose = multiply(pose, new_pose, invert(old_pose))
+    pose = Pose(Point(x=5)) # TODO: so this is actually taken into account
+    print(pose)
+"""
+
+def experimental_inverse_kinematics(robot, link, pose,
+                       null_space=False, max_iterations=200, tolerance=1e-3):
+    (point, quat) = pose
+    # https://github.com/bulletphysics/bullet3/blob/389d7aaa798e5564028ce75091a3eac6a5f76ea8/examples/SharedMemory/PhysicsClientC_API.cpp
+    # https://github.com/bulletphysics/bullet3/blob/c1ba04a5809f7831fa2dee684d6747951a5da602/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
+    joints = get_joints(robot) # Need to have all joints (although only movable returned)
+    movable_joints = get_movable_joints(robot)
+    current_conf = get_joint_positions(robot, joints)
+
+    # TODO: sample other values for the arm joints as the reference conf
+    min_limits = [get_joint_limits(robot, joint)[0] for joint in joints]
+    max_limits = [get_joint_limits(robot, joint)[1] for joint in joints]
+    #min_limits = current_conf
+    #max_limits = current_conf
+    #max_velocities = [get_max_velocity(robot, joint) for joint in joints] # Range of Jacobian
+    max_velocities = [10000]*len(joints)
+    # TODO: cannot have zero velocities
+    # TODO: larger definitely better for velocities
+    #damping = tuple(0.1*np.ones(len(joints)))
+
+    #t0 = time.time()
+    #kinematic_conf = get_joint_positions(robot, movable_joints)
+    for iterations in range(max_iterations): # 0.000863273143768 / iteration
+        # TODO: return none if no progress
+        if null_space:
+            kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat,
+                                                          lowerLimits=min_limits, upperLimits=max_limits,
+                                                          jointRanges=max_velocities, restPoses=current_conf,
+                                                          #jointDamping=damping,
+                                                         )
+        else:
+            kinematic_conf = p.calculateInverseKinematics(robot, link, point, quat)
+        if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
+            return None
+        set_joint_positions(robot, movable_joints, kinematic_conf)
+        link_point, link_quat = get_link_pose(robot, link)
+        if np.allclose(link_point, point, atol=tolerance) and np.allclose(link_quat, quat, atol=tolerance):
+            #print iterations
+            break
+    else:
+        return None
+    if violates_limits(robot, movable_joints, kinematic_conf):
+        return None
+    #total_time = (time.time() - t0)
+    #print total_time
+    #print (time.time() - t0)/max_iterations
+    return kinematic_conf
+
+"""
+def body_from_editor(editor, collision=True, visual=True):
+    #basePosition = [0, 0, 0]
+    #baseOrientation = unit_quat()
+    if (len(editor.urdfLinks) == 0):
+        return None
+
+    base = editor.urdfLinks[0]  # assume link[0] is base
+    baseMass = base.urdf_inertial.mass
+    baseCollisionShapeIndex = -1
+    baseVisualShapeIndex = -1
+    baseShapeTypeArray = []
+    baseRadiusArray = []
+    baseHalfExtentsArray = []
+    lengthsArray = []
+    fileNameArray = []
+    meshScaleArray = []
+    basePositionsArray = []
+    baseOrientationsArray = []
+    if base.urdf_collision_shapes and collision:
+        for v in base.urdf_collision_shapes:
+            baseShapeTypeArray.append(v.geom_type)
+            baseHalfExtentsArray.append([0.5 * v.geom_extents[0], 0.5 * v.geom_extents[1], 0.5 * v.geom_extents[2]])
+            baseRadiusArray.append(v.geom_radius)
+            lengthsArray.append(v.geom_length)
+            fileNameArray.append(v.geom_meshfilename)
+            meshScaleArray.append(v.geom_meshscale)
+            basePositionsArray.append(v.origin_xyz)
+            baseOrientationsArray.append(p.getQuaternionFromEuler(v.origin_rpy))
+        baseCollisionShapeIndex = p.createCollisionShapeArray(shapeTypes=baseShapeTypeArray,
+                                                              radii=baseRadiusArray,
+                                                              halfExtents=baseHalfExtentsArray,
+                                                              lengths=lengthsArray,
+                                                              fileNames=fileNameArray,
+                                                              meshScales=meshScaleArray,
+                                                              collisionFramePositions=basePositionsArray,
+                                                              collisionFrameOrientations=baseOrientationsArray)
+
+    if base.urdf_collision_shapes and visual:
+        urdfVisuals = base.urdf_visual_shapes
+        baseVisualShapeIndex = p.createVisualShapeArray(shapeTypes=[v.geom_type for v in urdfVisuals],
+                                                        halfExtents=[[ext * 0.5 for ext in v.geom_extents] for v in
+                                                                     urdfVisuals],
+                                                        radii=[v.geom_radius for v in urdfVisuals],
+                                                        lengths=[v.geom_length[0] for v in urdfVisuals],
+                                                        fileNames=[v.geom_meshfilename for v in urdfVisuals],
+                                                        meshScales=[v.geom_meshscale for v in urdfVisuals],
+                                                        rgbaColors=[v.material_rgba for v in urdfVisuals],
+                                                        visualFramePositions=[v.origin_xyz for v in urdfVisuals],
+                                                        visualFrameOrientations=[v.origin_rpy for v in urdfVisuals])
+
+    linkMasses = []
+    linkCollisionShapeIndices = []
+    linkVisualShapeIndices = []
+    linkPositions = []
+    linkOrientations = []
+    linkMeshScaleArray = []
+    linkInertialFramePositions = []
+    linkInertialFrameOrientations = []
+    linkParentIndices = []
+    linkJointTypes = []
+    linkJointAxis = []
+    for joint in editor.urdfJoints:
+        link = joint.link
+        linkMass = link.urdf_inertial.mass
+        linkCollisionShapeIndex = -1
+        linkVisualShapeIndex = -1
+        linkParentIndex = editor.linkNameToIndex[joint.parent_name]
+        linkShapeTypeArray = []
+        linkRadiusArray = []
+        linkHalfExtentsArray = []
+        lengthsArray = []
+        fileNameArray = []
+        linkPositionsArray = []
+        linkOrientationsArray = []
+
+        if link.urdf_collision_shapes and collision:
+            for v in link.urdf_collision_shapes:
+                linkShapeTypeArray.append(v.geom_type)
+                linkHalfExtentsArray.append([0.5 * v.geom_extents[0], 0.5 * v.geom_extents[1], 0.5 * v.geom_extents[2]])
+                linkRadiusArray.append(v.geom_radius)
+                lengthsArray.append(v.geom_length)
+                fileNameArray.append(v.geom_meshfilename)
+                linkMeshScaleArray.append(v.geom_meshscale)
+                linkPositionsArray.append(v.origin_xyz)
+                linkOrientationsArray.append(p.getQuaternionFromEuler(v.origin_rpy))
+            linkCollisionShapeIndex = p.createCollisionShapeArray(shapeTypes=linkShapeTypeArray,
+                                                                  radii=linkRadiusArray,
+                                                                  halfExtents=linkHalfExtentsArray,
+                                                                  lengths=lengthsArray,
+                                                                  fileNames=fileNameArray,
+                                                                  meshScales=linkMeshScaleArray,
+                                                                  collisionFramePositions=linkPositionsArray,
+                                                                  collisionFrameOrientations=linkOrientationsArray)
+
+        if link.urdf_visual_shapes and visual:
+            urdfVisuals = link.urdf_visual_shapes
+            # TODO: bug in geom_length where the default is [[10]]
+            linkVisualShapeIndex = p.createVisualShapeArray(shapeTypes=[v.geom_type for v in urdfVisuals],
+                                                            halfExtents=[[ext * 0.5 for ext in v.geom_extents] for v in
+                                                                         urdfVisuals],
+                                                            radii=[v.geom_radius for v in urdfVisuals],
+                                                            lengths=[v.geom_length[0] for v in urdfVisuals],
+                                                            fileNames=[v.geom_meshfilename for v in urdfVisuals],
+                                                            meshScales=[v.geom_meshscale for v in urdfVisuals],
+                                                            rgbaColors=[v.material_rgba for v in urdfVisuals],
+                                                            visualFramePositions=[v.origin_xyz for v in urdfVisuals],
+                                                            visualFrameOrientations=[v.origin_rpy for v in
+                                                                                     urdfVisuals])
+
+        linkMasses.append(linkMass)
+        linkCollisionShapeIndices.append(linkCollisionShapeIndex)
+        linkVisualShapeIndices.append(linkVisualShapeIndex)
+        linkPositions.append(joint.joint_origin_xyz)
+        linkOrientations.append(p.getQuaternionFromEuler(joint.joint_origin_rpy))
+        linkInertialFramePositions.append(link.urdf_inertial.origin_xyz)
+        linkInertialFrameOrientations.append(p.getQuaternionFromEuler(link.urdf_inertial.origin_rpy))
+        linkParentIndices.append(linkParentIndex)
+        linkJointTypes.append(joint.joint_type)
+        linkJointAxis.append(joint.joint_axis_xyz)
+
+    return p.createMultiBody(baseMass, \
+                              baseCollisionShapeIndex=baseCollisionShapeIndex,
+                              baseVisualShapeIndex=baseVisualShapeIndex,
+                              # basePosition=basePosition,
+                              # baseOrientation=baseOrientation,
+                              baseInertialFramePosition=base.urdf_inertial.origin_xyz,
+                              #baseInertialFrameOrientation=base.urdf_inertial.origin_rpy,
+                              baseInertialFrameOrientation=p.getQuaternionFromEuler(base.urdf_inertial.origin_rpy),
+                              linkMasses=linkMasses,
+                              linkCollisionShapeIndices=linkCollisionShapeIndices,
+                              linkVisualShapeIndices=linkVisualShapeIndices,
+                              linkPositions=linkPositions,
+                              linkOrientations=linkOrientations,
+                              linkInertialFramePositions=linkInertialFramePositions,
+                              linkInertialFrameOrientations=linkInertialFrameOrientations,
+                              linkParentIndices=linkParentIndices,
+                              linkJointTypes=linkJointTypes,
+                              linkJointAxis=linkJointAxis)
+"""
+
 
 if __name__ == '__main__':
     main()
