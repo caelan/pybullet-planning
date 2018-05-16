@@ -63,21 +63,25 @@ def read_pickle(filename):
 
 # Simulation
 
-def load_model(model_file, pose=None, fixed_base=True):
+def load_model(rel_path, pose=None, fixed_base=True):
     #p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
     #p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
+
+    directory = os.path.dirname(os.path.abspath(__file__))
+    abs_path = os.path.join(directory, rel_path)
+
     add_data_path()
-    if model_file.endswith('.urdf'):
-        body = p.loadURDF(model_file, useFixedBase=fixed_base)
-    elif model_file.endswith('.sdf'):
-        body = p.loadSDF(model_file)
-    elif model_file.endswith('.xml'):
-        body = p.loadMJCF(model_file)
-    elif model_file.endswith('.bullet'):
-        body = p.loadBullet(model_file)
+    if abs_path.endswith('.urdf'):
+        body = p.loadURDF(abs_path, useFixedBase=fixed_base)
+    elif abs_path.endswith('.sdf'):
+        body = p.loadSDF(abs_path)
+    elif abs_path.endswith('.xml'):
+        body = p.loadMJCF(abs_path)
+    elif abs_path.endswith('.bullet'):
+        body = p.loadBullet(abs_path)
     else:
-        raise ValueError(model_file)
+        raise ValueError(abs_path)
     if pose is not None:
         set_pose(body, pose)
     return body
