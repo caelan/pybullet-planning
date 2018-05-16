@@ -1,11 +1,9 @@
 import argparse
-import os
-
 import pybullet as p
 import random
 
 from pr2_utils import set_arm_conf, get_other_arm, arm_conf, REST_LEFT_ARM, get_carry_conf, get_gripper_link, \
-    GET_GRASPS, IR_FILENAME, DATABASES_DIR
+    GET_GRASPS, IR_FILENAME, get_database_file
 from utils import create_box, disconnect, add_data_path, connect, get_movable_joints, get_joint_positions, \
     sample_placement, set_pose, multiply, invert, set_joint_positions, pairwise_collision, inverse_kinematics, \
     get_link_pose, get_pose, get_body_name, write_pickle, uniform_pose_generator
@@ -35,7 +33,7 @@ def create_inverse_reachability(robot, body, table, arm, grasp_type, num_samples
         print('{} / {}'.format(len(gripper_from_base_list), num_samples))
 
     filename = IR_FILENAME.format(grasp_type, arm)
-    path = os.path.join(DATABASES_DIR, filename)
+    path = get_database_file(filename)
     data = {
         'filename': filename,
         'robot': get_body_name(robot),

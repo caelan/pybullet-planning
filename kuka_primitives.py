@@ -6,7 +6,7 @@ from utils import get_pose, set_pose, get_link_pose, body_from_end_effector, get
     set_joint_positions, get_constraints, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
-    inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, input
+    inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, input, get_sample_fn
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
@@ -159,14 +159,14 @@ class Command(object):
         for i, body_path in enumerate(self.body_paths):
             for j in body_path.iterator():
                 #time.sleep(time_step)
-                wait_for_duration(time_step=time_step)
+                wait_for_duration(time_step)
 
     def control(self, real_time=False, dt=0): # TODO: real_time
         for body_path in self.body_paths:
             body_path.control(real_time=real_time, dt=dt)
 
-    def refine(self, num_steps=0):
-        return self.__class__([body_path.refine(num_steps) for body_path in self.body_paths])
+    def refine(self, **kwargs):
+        return self.__class__([body_path.refine(**kwargs) for body_path in self.body_paths])
 
     def reverse(self):
         return self.__class__([body_path.reverse() for body_path in reversed(self.body_paths)])
@@ -199,31 +199,37 @@ def get_stable_gen(fixed=[]): # TODO: continuous set of grasps
     return gen
 
 
-def get_ik_fn(robot, fixed=[], teleport=False):
+def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10):
+    movable_joints = get_movable_joints(robot)
+    sample_fn = get_sample_fn(robot, movable_joints)
     def fn(body, pose, grasp):
         obstacles = [body] + fixed
         gripper_pose = end_effector_from_body(pose.pose, grasp.grasp_pose)
         approach_pose = approach_from_grasp(grasp.approach_pose, gripper_pose)
-        q_approach = inverse_kinematics(robot, grasp.link, approach_pose)
-        if (q_approach is None) or any(pairwise_collision(robot, b) for b in obstacles):
-            return None
-        conf = BodyConf(robot, q_approach)
-        q_grasp = inverse_kinematics(robot, grasp.link, gripper_pose)
-        if (q_grasp is None) or any(pairwise_collision(robot, b) for b in obstacles):
-            return None
-        if teleport:
-            path = [q_approach, q_grasp]
-        else:
-            conf.assign()
-            path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=obstacles, direct=True)
-            if path is None:
-                if DEBUG_FAILURE: input('Approach motion failed')
-                return None
-        command = Command([BodyPath(robot, path),
-                           Attach(body, robot, grasp.link),
-                           BodyPath(robot, path[::-1], attachments=[grasp])])
-        return (conf, command)
-        # TODO: holding collisions
+        for _ in range(num_attempts):
+            set_joint_positions(robot, movable_joints, sample_fn()) # Random seed
+            # TODO: multiple attempts?
+            q_approach = inverse_kinematics(robot, grasp.link, approach_pose)
+            if (q_approach is None) or any(pairwise_collision(robot, b) for b in obstacles):
+                continue
+            conf = BodyConf(robot, q_approach)
+            q_grasp = inverse_kinematics(robot, grasp.link, gripper_pose)
+            if (q_grasp is None) or any(pairwise_collision(robot, b) for b in obstacles):
+                continue
+            if teleport:
+                path = [q_approach, q_grasp]
+            else:
+                conf.assign()
+                path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=obstacles, direct=True)
+                if path is None:
+                    if DEBUG_FAILURE: input('Approach motion failed')
+                    continue
+            command = Command([BodyPath(robot, path),
+                               Attach(body, robot, grasp.link),
+                               BodyPath(robot, path[::-1], attachments=[grasp])])
+            return (conf, command)
+            # TODO: holding collisions
+        return None
     return fn
 
 

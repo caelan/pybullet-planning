@@ -64,16 +64,19 @@ def read_pickle(filename):
 # Simulation
 
 def load_model(rel_path, pose=None, fixed_base=True):
-    #p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
-    #p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
-
     directory = os.path.dirname(os.path.abspath(__file__))
     abs_path = os.path.join(directory, rel_path)
 
+    flags = 0 # by default, Bullet disables self-collision
+    #flags = p.URDF_USE_INERTIA_FROM_FILE
+    #flags = p.URDF_USE_SELF_COLLISION
+    #flags = p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
+    #flags = p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
+
     add_data_path()
     if abs_path.endswith('.urdf'):
-        body = p.loadURDF(abs_path, useFixedBase=fixed_base)
+        body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags)
     elif abs_path.endswith('.sdf'):
         body = p.loadSDF(abs_path)
     elif abs_path.endswith('.xml'):
@@ -86,7 +89,7 @@ def load_model(rel_path, pose=None, fixed_base=True):
         set_pose(body, pose)
     return body
 
-def wait_for_duration(duration, dt=0):
+def wait_for_duration(duration): #, dt=0):
     t0 = time.time()
     while (time.time() - t0) <= duration:
         disable_gravity()

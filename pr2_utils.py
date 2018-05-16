@@ -271,10 +271,14 @@ GET_GRASPS = {
 DATABASES_DIR = 'databases'
 IR_FILENAME = '{}_{}_ir.pickle'
 
+def get_database_file(filename):
+    directory = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(directory, DATABASES_DIR, filename)
+
 
 def load_inverse_reachability(arm, grasp_type):
     filename = IR_FILENAME.format(grasp_type, arm)
-    path = os.path.join(DATABASES_DIR, filename)
+    path = get_database_file(filename)
     return read_pickle(path)['gripper_from_base']
 
 

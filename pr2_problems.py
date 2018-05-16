@@ -1,6 +1,6 @@
 from collections import namedtuple
 from utils import create_box, set_base_values, set_point, set_pose, get_pose, get_bodies, z_rotation, \
-    set_joint_positions, load_model, BLOCK_URDF
+    set_joint_positions, load_model, BLOCK_URDF, load_model
 from pr2_utils import TOP_HOLDING_LEFT_ARM, set_arm_conf, REST_LEFT_ARM, REST_RIGHT_ARM, open_arm, \
     close_arm, get_carry_conf, arm_conf, get_other_arm, PR2_GROUPS, set_group_conf
 import pybullet as p
@@ -38,12 +38,7 @@ def create_pr2(use_drake=True, fixed_base=True):
         pr2_path = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
     else:
         pr2_path = "models/pr2_description/pr2.urdf"
-    flags = 0 # by default, Bullet disables self-collision
-    #flags = p.URDF_USE_INERTIA_FROM_FILE
-    #flags = p.URDF_USE_SELF_COLLISION
-    #flags = p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
-    #flags = p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
-    pr2 = p.loadURDF(pr2_path, useFixedBase=fixed_base, flags=flags) # Fixed base ensures the robot doesn't fall over
+    pr2 = load_model(pr2_path, fixed_base=fixed_base)
     set_group_conf(pr2, 'torso', [0.2])
     return pr2
 
