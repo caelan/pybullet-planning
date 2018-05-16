@@ -3,9 +3,9 @@ import time
 import pstats
 import cProfile
 
-from examples.pybullet.utils.utils import connect, add_data_path, disconnect, get_pose, enable_gravity, wait_for_interrupt, dump_world, \
+from utils import connect, add_data_path, disconnect, get_pose, enable_gravity, wait_for_interrupt, dump_world, \
     update_state, link_from_name, step_simulation, is_placement, joints_from_names, get_joint_positions, input
-from examples.pybullet.utils.pr2_problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
+from pr2_problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
     cleaning_button_problem, cooking_button_problem
 
 from ss.algorithms.dual_focused import dual_focused
@@ -16,9 +16,9 @@ from ss.model.operators import Action, Axiom
 from ss.model.streams import Stream, ListStream, GenStream, FnStream, TestStream
 from ss.model.plan import print_plan
 
-from examples.pybullet.utils.pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
+from pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
     get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, Trajectory
-from examples.pybullet.utils.pr2_utils import ARM_LINK_NAMES, close_arm, ARM_JOINT_NAMES, get_arm_joints
+from pr2_utils import ARM_LINK_NAMES, close_arm, ARM_JOINT_NAMES, get_arm_joints
 
 import pybullet as p
 

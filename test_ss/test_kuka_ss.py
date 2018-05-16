@@ -13,13 +13,11 @@ from ss.model.plan import print_plan
 from ss.model.problem import Problem
 from ss.model.streams import GenStream, FnStream
 
-from examples.pybullet.utils.kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, get_stable_gen, get_ik_fn, get_free_motion_gen, \
+from kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, get_stable_gen, get_ik_fn, get_free_motion_gen, \
     get_holding_motion_gen, get_movable_collision_test
-from examples.pybullet.utils.utils import WorldSaver
-from examples.pybullet.utils.utils import connect, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
+from utils import WorldSaver,  connect, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
     BLOCK_URDF, get_configuration, SINK_URDF, STOVE_URDF, load_model, wait_for_interrupt, is_placement, get_body_name, \
-    disconnect, DRAKE_IIWA_URDF
-from examples.pybullet.utils.utils import get_bodies, input
+    disconnect, DRAKE_IIWA_URDF, get_bodies, input
 
 #######################################################
 
