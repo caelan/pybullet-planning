@@ -39,8 +39,8 @@ The following repositories are required:
 2) https://github.com/caelan/ss
 
 Examples:
-* Kuka IIWA task and motion planning - ```python test_kuka_ss.py```
-* PR2 task and motion planning - ```python test_pr2_ss.py```
+* Kuka IIWA task and motion planning - ```python -m test_ss.test_kuka_ss```
+* PR2 task and motion planning - ```python -m test_ss.test_pr2_ss```
 
 ## PDDLStream Examples
 
