@@ -9,7 +9,6 @@ from utils import multiply, get_link_pose, joint_from_name, link_from_name, set_
     get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, \
     unit_point, unit_quat, unit_pose, get_center_extent, joints_from_names
-from pr2_self_collision import PR2_ADJACENT_LINKS, PR2_NON_ADJACENT_LINKS
 
 #####################################
 
