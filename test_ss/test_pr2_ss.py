@@ -1,26 +1,21 @@
 import argparse
-import time
-import pstats
 import cProfile
-
-from utils import connect, add_data_path, disconnect, get_pose, enable_gravity, wait_for_interrupt, dump_world, \
-    update_state, link_from_name, step_simulation, is_placement, joints_from_names, get_joint_positions, input
-from pr2_problems import holding_problem, stacking_problem, cleaning_problem, cooking_problem, \
-    cleaning_button_problem, cooking_button_problem
-
-from ss.algorithms.dual_focused import dual_focused
-from ss.algorithms.incremental import incremental
-from ss.model.functions import Predicate, NonNegFunction, rename_functions, initialize, TotalCost, Increase
-from ss.model.problem import Problem, get_length, get_cost
-from ss.model.operators import Action, Axiom
-from ss.model.streams import Stream, ListStream, GenStream, FnStream, TestStream
-from ss.model.plan import print_plan
+import pstats
+import pybullet as p
+import time
 
 from pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
-    get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, Trajectory
-from pr2_utils import ARM_LINK_NAMES, close_arm, ARM_JOINT_NAMES, get_arm_joints
-
-import pybullet as p
+    get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, step_commands
+from pr2_problems import cooking_problem
+from pr2_utils import get_arm_joints
+from ss.algorithms.dual_focused import dual_focused
+from ss.model.functions import Predicate, rename_functions, initialize, TotalCost, Increase
+from ss.model.operators import Action, Axiom
+from ss.model.plan import print_plan
+from ss.model.problem import Problem
+from ss.model.streams import Stream, ListStream, GenStream, FnStream
+from utils import connect, add_data_path, disconnect, get_pose, enable_gravity, is_placement, joints_from_names, \
+    get_joint_positions, input
 
 A = '?a'
 O = '?o'; O2 = '?o2'
@@ -255,40 +250,6 @@ def post_process(problem, plan):
         commands += new_commands
     return commands
 
-def step_commands(commands, time_step=None, simulate=False):
-    # update_state()
-    if simulate: step_simulation()
-    input('Begin?')
-    attachments = {}
-    for i, command in enumerate(commands):
-        print i, command
-        if type(command) is Attach:
-            attachments[command.body] = command
-        elif type(command) is Detach:
-            del attachments[command.body]
-        elif type(command) is Trajectory:
-            # for conf in command.path:
-            for conf in command.path[1:]:
-                conf.step()
-                for attach in attachments.values():
-                    attach.step()
-                update_state()
-                # print attachments
-                if simulate: step_simulation()
-                if time_step is None:
-                    input('Continue?')
-                else:
-                    time.sleep(time_step)
-        elif type(command) in [Clean, Cook]:
-            command.step()
-        else:
-            raise ValueError(command)
-
-def control_commands(commands):
-    input('Control?')
-    for i, command in enumerate(commands):
-        print i, command
-        command.control()
 
 def close_gripper_test(problem):
     from pr2_utils import PR2_GROUPS

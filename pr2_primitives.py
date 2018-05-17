@@ -3,7 +3,7 @@ from utils import invert, multiply, get_body_name, set_pose, get_link_pose, link
     unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values, \
     inverse_kinematics, uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, \
     remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
-    get_max_limit, get_min_limit
+    get_max_limit, get_min_limit, input, step_simulation, update_state
 from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \
     get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses, PR2_GROUPS, joints_from_names
@@ -330,3 +330,40 @@ def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
             else:
                 yield None
     return gen
+
+
+def step_commands(commands, time_step=None, simulate=False):
+    # update_state()
+    if simulate: step_simulation()
+    input('Begin?')
+    attachments = {}
+    for i, command in enumerate(commands):
+        print i, command
+        if type(command) is Attach:
+            attachments[command.body] = command
+        elif type(command) is Detach:
+            del attachments[command.body]
+        elif type(command) is Trajectory:
+            # for conf in command.path:
+            for conf in command.path[1:]:
+                conf.step()
+                for attach in attachments.values():
+                    attach.step()
+                update_state()
+                # print attachments
+                if simulate: step_simulation()
+                if time_step is None:
+                    input('Continue?')
+                else:
+                    time.sleep(time_step)
+        elif type(command) in [Clean, Cook]:
+            command.step()
+        else:
+            raise ValueError(command)
+
+
+def control_commands(commands):
+    input('Control?')
+    for i, command in enumerate(commands):
+        print i, command
+        command.control()
