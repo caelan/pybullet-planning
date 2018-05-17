@@ -8,14 +8,11 @@ STRIPStream + pybullet
 [![PR2](https://img.youtube.com/vi/oWr6m12nXcM/0.jpg)](https://www.youtube.com/watch?v=oWr6m12nXcM)
 
 ## Installation
+
 Install PyBullet on OSX or Linux using: 
 ```
 pip install pybullet
 ```
-
-Clone the following repositories and add them to your PYTHONPATH:
-1) https://github.com/caelan/motion-planners
-2) https://github.com/caelan/ss
 
 ## Tests
 
