@@ -9,7 +9,7 @@ STRIPStream + pybullet
 
 ## Installation
 
-Install PyBullet on OSX or Linux using: 
+Install PyBullet on OS X or Linux using: 
 ```
 pip install pybullet
 ```
