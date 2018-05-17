@@ -19,6 +19,7 @@ import pybullet as p
 import pickle
 import os
 from transformations import quaternion_from_matrix
+from motion.motion_planners.rrt_connect import birrt, direct_path
 
 INF = np.inf
 PI = np.pi
@@ -1238,7 +1239,6 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
                 return True
         return any(pairwise_collision(*pair) for pair in check_body_pairs)
 
-    from motion_planners.rrt_connect import birrt, direct_path
     start_conf = get_joint_positions(body, joints)
     if collision_fn(start_conf):
         print("Warning: initial configuration is in collision")
@@ -1285,7 +1285,6 @@ def plan_base_motion(body, end_conf, obstacles=None, direct=False,
             return single_collision(body)
         return any(pairwise_collision(body, obs) for obs in obstacles)
 
-    from motion_planners.rrt_connect import birrt, direct_path
     start_conf = get_base_values(body)
     if direct:
         return direct_path(start_conf, end_conf, extend_fn, collision_fn)
