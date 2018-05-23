@@ -92,6 +92,30 @@ class Verbose(object):
 
 #####################################
 
+class PoseSaver(object):
+    def __init__(self, body):
+        self.body = body
+        self.pose = get_pose(self.body)
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, traceback):
+        set_pose(self.body, self.pose)
+
+class ConfSaver(object):
+    def __init__(self, body): #, joints):
+        self.body = body
+        self.conf = get_configuration(body)
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, traceback):
+        set_configuration(self.body, self.conf)
+
+#####################################
+
 # Simulation
 
 def load_model(rel_path, pose=None, fixed_base=True):

@@ -8,7 +8,7 @@ import numpy as np
 from utils import multiply, get_link_pose, joint_from_name, link_from_name, set_joint_position, set_joint_positions, \
     get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, \
-    unit_point, unit_quat, unit_pose, get_center_extent, joints_from_names
+    unit_point, unit_quat, unit_pose, get_center_extent, joints_from_names, Euler, PoseSaver, get_lower_upper
 
 #####################################
 
@@ -316,35 +316,67 @@ def get_camera_matrix(width, height, fx, fy):
 def ray_from_pixel(camera_matrix, pixel):
     return np.linalg.inv(camera_matrix).dot(np.append(pixel, 1))
 
+def pixel_from_ray(camera_matrix, ray):
+    return camera_matrix.dot(ray / ray[2])[:2]
+
+def is_visible_point(camera_matrix, depth, point):
+    if not (0 <= point[2] < depth):
+        return False
+    px, py = pixel_from_ray(camera_matrix, point)
+    return (0 <= px < WIDTH) and (0 <= py < HEIGHT)
+
+def cone_mesh_from_support(support):
+    assert(len(support) == 4)
+    vertices = [np.zeros(3)] + support
+    faces = [(1, 4, 3), (1, 3, 2)]
+    for i in range(len(support)):
+        index1 = 1+i
+        index2 = 1+(i+1)%len(support)
+        faces.append((0, index1, index2))
+    return vertices, faces
+
+def get_detection_cone(pr2, body):
+    head_link = link_from_name(pr2, HEAD_LINK)
+    with PoseSaver(body):
+        body_head = multiply(invert(get_link_pose(pr2, head_link)), get_pose(body))
+        set_pose(body, body_head)
+        lower, upper = get_lower_upper(body)
+        min_x, min_y, z = lower
+        max_x, max_y, _ = upper
+        support = [(min_x, min_y, z), (min_x, max_y, z),
+                    (max_x, max_y, z), (max_x, min_y, z)]
+        return cone_mesh_from_support(support)
+
 def get_cone_mesh(depth=5):
     # TODO: attach to the pr2?
     cone = [(0, 0), (WIDTH, 0), (WIDTH, HEIGHT), (0, HEIGHT)]
     camera_matrix = get_camera_matrix(WIDTH, HEIGHT, FX, FY)
-    vertices = [np.zeros(3)]
-    faces = [(1, 4, 3), (1, 3, 2)]
-    for i, pixel in enumerate(cone):
+    vertices = []
+    for pixel in cone:
         ray = depth * ray_from_pixel(camera_matrix, pixel)
         vertices.append(ray[:3])
-        index1 = 1+i
-        index2 = 1+(i+1)%len(cone)
-        faces.append((0, index1, index2))
-    return vertices, faces
+    return cone_mesh_from_support(vertices)
+
 
 def inverse_visibility(pr2, point):
+    # TODO: test visibility by getting box
+    # TODO: IK version
+    # https://github.com/PR2/pr2_controllers/blob/kinetic-devel/pr2_head_action/src/pr2_point_frame.cpp
+
     head_joints = [joint_from_name(pr2, name) for name in PR2_GROUPS['head']]
     #head_pose = get_link_pose(pr2, link_from_name(pr2, HEAD_LINK))
     #dx, dy, dz = point_from_pose(head_pose) - np.array(point)
-    #link = link_from_name(pr2, HEAD_LINK)
-    link = head_joints[-1]
+    #head_link = link_from_name(pr2, HEAD_LINK)
+    joint_link = head_joints[-1]
 
-
-    head_pose = get_link_pose(pr2, link)
-    point_head = point_from_pose(multiply(invert(head_pose), Pose(point)))
+    joint_pose = get_link_pose(pr2, joint_link)
+    point_head = point_from_pose(multiply(invert(joint_pose), Pose(point)))
     dx, dy, dz = np.array(point_head)
     theta = np.math.atan2(dy, dx)  # TODO: might need to negate the minus for the default one
     phi = np.math.atan2(-dz, np.sqrt(dx ** 2 + dy ** 2))
     conf = [theta, phi]
     # TODO: test joint limits
+    #pose = Pose(point_from_pose(head_pose), Euler(pitch=phi, yaw=theta)) # TODO: initial roll?
     return conf
 
 #####################################
