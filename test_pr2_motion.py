@@ -183,6 +183,8 @@ def main(use_pr2_drake=False):
     head_link = head_joints[-1]
     p.addUserDebugLine(point_from_pose(get_link_pose(pr2, head_link)),
                        target_point, lineColorRGB=(1, 0, 0)) # addUserDebugText
+    p.addUserDebugLine(point_from_pose(get_link_pose(pr2, link_from_name(pr2, HEAD_LINK))),
+                       target_point, lineColorRGB=(0, 0, 1)) # addUserDebugText
     #head_conf = sub_inverse_kinematics(pr2, head_joints[0], HEAD_LINK, )
 
 

@@ -362,16 +362,19 @@ def inverse_visibility(pr2, point):
     # TODO: test visibility by getting box
     # TODO: IK version
     # https://github.com/PR2/pr2_controllers/blob/kinetic-devel/pr2_head_action/src/pr2_point_frame.cpp
-
     head_joints = [joint_from_name(pr2, name) for name in PR2_GROUPS['head']]
-    #head_pose = get_link_pose(pr2, link_from_name(pr2, HEAD_LINK))
-    #dx, dy, dz = point_from_pose(head_pose) - np.array(point)
     #head_link = link_from_name(pr2, HEAD_LINK)
-    joint_link = head_joints[-1]
+    #head_link = head_joints[-1]
+    #head_link = link_from_name(pr2, 'high_def_frame')
+    head_link = link_from_name(pr2, 'high_def_optical_frame')
+    optical_frame = True
 
-    joint_pose = get_link_pose(pr2, joint_link)
-    point_head = point_from_pose(multiply(invert(joint_pose), Pose(point)))
-    dx, dy, dz = np.array(point_head)
+    head_pose = get_link_pose(pr2, head_link)
+    point_head = point_from_pose(multiply(invert(head_pose), Pose(point)))
+    if optical_frame:
+        dy, dz, dx =  np.array([-1, -1, 1])*np.array(point_head)
+    else:
+        dx, dy, dz = np.array(point_head)
     theta = np.math.atan2(dy, dx)  # TODO: might need to negate the minus for the default one
     phi = np.math.atan2(-dz, np.sqrt(dx ** 2 + dy ** 2))
     conf = [theta, phi]
