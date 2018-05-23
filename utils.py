@@ -52,6 +52,15 @@ STOVE_URDF = 'models/stove.urdf'
 def is_darwin(): # TODO: change loading accordingly
     return platform.system() == 'Darwin' # platform.release()
 
+
+def read(filename):
+    with open(filename, 'r') as f:
+        return f.read()
+
+def write(filename, string):
+    with open(filename, 'w') as f:
+        f.write(string)
+
 def write_pickle(filename, data):  # NOTE - cannot pickle lambda or nested functions
     with open(filename, 'wb') as f:
         pickle.dump(data, f)
@@ -59,6 +68,27 @@ def write_pickle(filename, data):  # NOTE - cannot pickle lambda or nested funct
 def read_pickle(filename):
     with open(filename, 'rb') as f:
         return pickle.load(f)
+
+def safe_remove(p):
+    if os.path.exists(p):
+        os.remove(p)
+
+
+class Verbose(object):
+    def __init__(self, verbose):
+        self.verbose = verbose
+
+    def __enter__(self):
+        if not self.verbose:
+            self.stdout = sys.stdout
+            self.devnull = open(os.devnull, 'w')
+            sys.stdout = self.devnull
+        return self
+
+    def __exit__(self, type, value, traceback):
+        if not self.verbose:
+            sys.stdout = self.stdout
+            self.devnull.close()
 
 #####################################
 
@@ -778,10 +808,34 @@ def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(.5, .5, .5, 1)):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
 
+def obj_from_mesh(mesh):
+    vertices, faces = mesh
+    s = 'g Mesh\n' # TODO: string writer
+    for v in vertices:
+        assert(len(v) == 3)
+        s += '\nv {}'.format(' '.join(map(str, v)))
+    for f in faces:
+        assert(len(f) == 3)
+        f = [i+1 for i in f]
+        s += '\nf {}'.format(' '.join(map(str, f)))
+        #s += '\nf {}'.format(' '.join(map(str, reversed(f))))
+    return s
 
-def create_mesh(filename, scale=1):
-    collision_id = p.createVisualShape(p.GEOM_MESH, fileName=filename, meshScale=scale*np.ones(3))
-    raise NotImplementedError()
+def create_mesh(mesh, scale=1, mass=STATIC_MASS, color=(.5, .5, .5, 1)):
+    # http://people.sc.fsu.edu/~jburkardt/data/obj/obj.html
+    # TODO: read OFF / WRL / OBJ files
+    filename = 'temp_mesh.obj' # TODO: avoid overwriting
+    write(filename, obj_from_mesh(mesh))
+    mesh_scale = scale*np.ones(3)
+    collision_id = p.createVisualShape(p.GEOM_MESH, fileName=filename, meshScale=mesh_scale)
+    if (color is None) or not has_gui():
+        visual_id = -1
+    else:
+        visual_id = p.createVisualShape(p.GEOM_MESH, fileName=filename, meshScale=mesh_scale, rgbaColor=color)
+    #safe_remove(filename) # TODO: removing might delete mesh?
+    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
+                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
+
 
 VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
                                                  'visualGeometryType', 'dimensions', 'meshAssetFileName',
@@ -843,13 +897,14 @@ def clone_body_editor(body, collision=True, visual=True):
     editor = UrdfEditor()
     editor.initializeFromBulletBody(body, 0)
     return editor.createMultiBody() # pybullet.error: createVisualShapeArray failed.
+
     # TODO: failure is because broken mesh files
     #return body_from_editor(editor, collision=collision, visual=visual)
-    filename = 'temp.urdf'
-    editor.saveUrdf(filename)
-    new_body = load_model(filename)
-    os.remove(filename)
-    return new_body
+    #filename = 'temp.urdf'
+    #editor.saveUrdf(filename)
+    #new_body = load_model(filename)
+    #os.remove(filename)
+    #return new_body
     # TODO: problem with collision is that URDF editor is storing mesh when it should be geom
     # example: fl_caster_l_wheel_link # <mesh filename="unknown_file"/>
 
@@ -1549,6 +1604,9 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
 def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_iterations=200, tolerance=1e-3):
     # TODO: fix stationary joints
     # TODO: pass in set of movable joints and take least common ancestor
+    # TODO: update with most recent bullet updates
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/inverse_kinematics.py
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
 
     selected_links = [first_joint] + get_link_descendants(robot, first_joint)
     selected_movable_joints = [joint for joint in selected_links if is_movable(robot, joint)]
@@ -1566,6 +1624,7 @@ def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_ite
             return None
         set_joint_positions(sub_robot, sub_movable_joints, sub_kinematic_conf)
         link_point, link_quat = get_link_pose(sub_robot, selected_target_link)
+        # TODO: let target_quat be None
         if np.allclose(link_point, target_point, atol=tolerance, rtol=0) and \
                 np.allclose(link_quat, target_quat, atol=tolerance, rtol=0):
             break

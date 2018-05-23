@@ -7,7 +7,7 @@ import numpy as np
 
 from utils import multiply, get_link_pose, joint_from_name, link_from_name, set_joint_position, set_joint_positions, \
     get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
-    get_pose, euler_from_quat, link_from_name, has_link, \
+    get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, \
     unit_point, unit_quat, unit_pose, get_center_extent, joints_from_names
 
 #####################################
@@ -39,12 +39,14 @@ PR2_TOOL_FRAMES = {
     'right_gripper': 'r_gripper_palm_link',  # r_gripper_palm_link | r_gripper_tool_frame
 }
 
-ARM_JOINT_NAMES = {'left': PR2_GROUPS['left_arm'], 'right': PR2_GROUPS['right_arm']}
-
 ARM_LINK_NAMES = {
     'left': 'l_gripper_palm_link',  # l_gripper_tool_frame,
     'right': 'r_gripper_palm_link',
 }
+
+HEAD_LINK = 'high_def_optical_frame' # high_def_optical_frame | high_def_frame | wide_stereo_l_stereo_camera_frame | ...
+# 'head_mount_kinect_rgb_optical_frame'
+# 'head_mount_kinect_rgb_link'
 
 TORSO_JOINT_NAME = 'torso_lift_joint'
 # LEFT_TOOL_NAME = 'l_gripper_tool_frame' # l_gripper_tool_joint | l_gripper_tool_frame
@@ -56,30 +58,30 @@ TORSO_JOINT_NAME = 'torso_lift_joint'
 TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678])
 TOOL_DIRECTION = [0., 0., 1.]
 
-PR2_DISABLED_COLLISIONS = [('base_link', 'br_caster_l_wheel_link'), ('base_link', 'br_caster_r_wheel_link'),
-                           ('base_link', 'fr_caster_l_wheel_link'), ('base_link', 'fr_caster_r_wheel_link'),
-                           ('base_link', 'fl_caster_l_wheel_link'), ('base_link', 'fl_caster_r_wheel_link'),
-                           ('base_link', 'bl_caster_l_wheel_link'), ('base_link', 'bl_caster_r_wheel_link'),
-                           ('base_link', 'l_shoulder_pan_link'), ('base_link', 'r_shoulder_pan_link'),
-                           ('torso_lift_link', 'l_shoulder_lift_link'), ('torso_lift_link', 'r_shoulder_lift_link'),
-                           ('l_shoulder_pan_link', 'l_upper_arm_roll_link'),
-                           ('r_shoulder_pan_link', 'r_upper_arm_roll_link'),
-                           ('l_shoulder_pan_link', 'l_upper_arm_link'), ('r_shoulder_pan_link', 'r_upper_arm_link'),
-                           ('l_elbow_flex_link', 'l_forearm_link'), ('r_elbow_flex_link', 'r_forearm_link'),
-                           ('l_upper_arm_link', 'l_forearm_roll_link'), ('r_upper_arm_link', 'r_forearm_roll_link'),
-                           ('l_forearm_link', 'l_gripper_palm_link'), ('r_forearm_link', 'r_gripper_palm_link'),
-                           ('l_forearm_link', 'l_wrist_roll_link'), ('r_forearm_link', 'r_wrist_roll_link'),
-                           ('l_gripper_l_finger_link', 'l_gripper_r_finger_link'),
-                           ('r_gripper_l_finger_link', 'r_gripper_r_finger_link'),
-                           ('l_gripper_l_finger_tip_link', 'l_gripper_r_finger_link'),
-                           ('r_gripper_l_finger_tip_link', 'r_gripper_r_finger_link'),
-                           ('l_gripper_l_finger_link', 'l_gripper_r_finger_tip_link'),
-                           ('r_gripper_l_finger_link', 'r_gripper_r_finger_tip_link'),
-                           ('torso_lift_link', 'head_tilt_link')
-] + [
-    #('l_upper_arm_link', 'l_shoulder_lift_link'),
-    #('r_upper_arm_link', 'r_shoulder_lift_link'),
-]
+# PR2_DISABLED_COLLISIONS = [('base_link', 'br_caster_l_wheel_link'), ('base_link', 'br_caster_r_wheel_link'),
+#                            ('base_link', 'fr_caster_l_wheel_link'), ('base_link', 'fr_caster_r_wheel_link'),
+#                            ('base_link', 'fl_caster_l_wheel_link'), ('base_link', 'fl_caster_r_wheel_link'),
+#                            ('base_link', 'bl_caster_l_wheel_link'), ('base_link', 'bl_caster_r_wheel_link'),
+#                            ('base_link', 'l_shoulder_pan_link'), ('base_link', 'r_shoulder_pan_link'),
+#                            ('torso_lift_link', 'l_shoulder_lift_link'), ('torso_lift_link', 'r_shoulder_lift_link'),
+#                            ('l_shoulder_pan_link', 'l_upper_arm_roll_link'),
+#                            ('r_shoulder_pan_link', 'r_upper_arm_roll_link'),
+#                            ('l_shoulder_pan_link', 'l_upper_arm_link'), ('r_shoulder_pan_link', 'r_upper_arm_link'),
+#                            ('l_elbow_flex_link', 'l_forearm_link'), ('r_elbow_flex_link', 'r_forearm_link'),
+#                            ('l_upper_arm_link', 'l_forearm_roll_link'), ('r_upper_arm_link', 'r_forearm_roll_link'),
+#                            ('l_forearm_link', 'l_gripper_palm_link'), ('r_forearm_link', 'r_gripper_palm_link'),
+#                            ('l_forearm_link', 'l_wrist_roll_link'), ('r_forearm_link', 'r_wrist_roll_link'),
+#                            ('l_gripper_l_finger_link', 'l_gripper_r_finger_link'),
+#                            ('r_gripper_l_finger_link', 'r_gripper_r_finger_link'),
+#                            ('l_gripper_l_finger_tip_link', 'l_gripper_r_finger_link'),
+#                            ('r_gripper_l_finger_tip_link', 'r_gripper_r_finger_link'),
+#                            ('l_gripper_l_finger_link', 'l_gripper_r_finger_tip_link'),
+#                            ('r_gripper_l_finger_link', 'r_gripper_r_finger_tip_link'),
+#                            ('torso_lift_link', 'head_tilt_link')
+# ] + [
+#     #('l_upper_arm_link', 'l_shoulder_lift_link'),
+#     #('r_upper_arm_link', 'r_shoulder_lift_link'),
+# ]
 
 def rightarm_from_leftarm(config):
     # right_from_left = np.array([-1, 1, -1, 1, -1, 1, 1])
@@ -92,11 +94,12 @@ TOP_HOLDING_RIGHT_ARM = rightarm_from_leftarm(TOP_HOLDING_LEFT_ARM)
 
 
 def arm_conf(arm, config):
-    assert arm in ARM_JOINT_NAMES
     if arm == 'left':
         return config
-    else:
+    elif arm == 'right':
         return rightarm_from_leftarm(config)
+    else:
+        raise ValueError(arm)
 
 
 def get_carry_conf(arm, grasp_type):
@@ -107,9 +110,10 @@ def get_carry_conf(arm, grasp_type):
     else:
         raise NotImplementedError()
 
+ARM_NAMES = ('left', 'right')
 
 def get_other_arm(arm):
-    for other_arm in ARM_JOINT_NAMES:
+    for other_arm in ARM_NAMES:
         if other_arm != arm:
             return other_arm
     raise ValueError(arm)
@@ -153,9 +157,13 @@ def load_srdf_collisions():
 
 # End-effectors
 
+def get_arm_group(arm):
+    assert (arm in ARM_NAMES)
+    return '{}_arm'.format(arm)
+
+
 def get_arm_joints(robot, arm):
-    assert arm in ARM_JOINT_NAMES
-    return joints_from_names(robot, ARM_JOINT_NAMES[arm])
+    return joints_from_names(robot, PR2_GROUPS[get_arm_group(arm)])
 
 
 def get_arm_conf(robot, arm):
@@ -292,6 +300,54 @@ def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
         set_base_values(robot, base_values)
         yield get_pose(robot)
 
+#####################################
+
+WIDTH, HEIGHT = 640, 480
+FX, FY = 772.55, 772.5
+
+def get_camera_matrix(width, height, fx, fy):
+    # cx, cy = 320.5, 240.5
+    cx, cy = width / 2., height / 2.
+    return np.array([
+        [fx, 0, cx],
+        [0, fy, cy],
+        [0, 0, 1]])
+
+def ray_from_pixel(camera_matrix, pixel):
+    return np.linalg.inv(camera_matrix).dot(np.append(pixel, 1))
+
+def get_cone_mesh(depth=5):
+    # TODO: attach to the pr2?
+    cone = [(0, 0), (WIDTH, 0), (WIDTH, HEIGHT), (0, HEIGHT)]
+    camera_matrix = get_camera_matrix(WIDTH, HEIGHT, FX, FY)
+    vertices = [np.zeros(3)]
+    faces = [(1, 4, 3), (1, 3, 2)]
+    for i, pixel in enumerate(cone):
+        ray = depth * ray_from_pixel(camera_matrix, pixel)
+        vertices.append(ray[:3])
+        index1 = 1+i
+        index2 = 1+(i+1)%len(cone)
+        faces.append((0, index1, index2))
+    return vertices, faces
+
+def inverse_visibility(pr2, point):
+    head_joints = [joint_from_name(pr2, name) for name in PR2_GROUPS['head']]
+    #head_pose = get_link_pose(pr2, link_from_name(pr2, HEAD_LINK))
+    #dx, dy, dz = point_from_pose(head_pose) - np.array(point)
+    #link = link_from_name(pr2, HEAD_LINK)
+    link = head_joints[-1]
+
+
+    head_pose = get_link_pose(pr2, link)
+    point_head = point_from_pose(multiply(invert(head_pose), Pose(point)))
+    dx, dy, dz = np.array(point_head)
+    theta = np.math.atan2(dy, dx)  # TODO: might need to negate the minus for the default one
+    phi = np.math.atan2(-dz, np.sqrt(dx ** 2 + dy ** 2))
+    conf = [theta, phi]
+    # TODO: test joint limits
+    return conf
+
+#####################################
 
 NEVER_COLLISIONS = [('base_bellow_link', 'base_footprint'), ('base_bellow_link', 'bl_caster_l_wheel_link'),
                     ('base_bellow_link', 'bl_caster_r_wheel_link'), ('base_bellow_link', 'bl_caster_rotation_link'),
