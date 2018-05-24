@@ -16,7 +16,8 @@ def main():
     add_data_path()
 
     set_camera(0, -30, 1)
-    plane = load_model('plane.urdf')
+    plane = p.loadURDF('plane.urdf', useFixedBase=True)
+    #plane = load_model('plane.urdf')
     cup = load_model('models/cup.urdf', fixed_base=True)
     #set_point(cup, Point(z=stable_z(cup, plane)))
     set_point(cup, Point(z=.2))

@@ -5,7 +5,7 @@ import math
 import time
 import platform
 from collections import defaultdict, deque, namedtuple
-from itertools import product, combinations
+from itertools import product, combinations, count
 
 # from future_builtins import map, filter
 # from builtins import input # TODO - use future
@@ -13,6 +13,7 @@ try:
    input = raw_input
 except NameError:
    pass
+user_input = input
 
 import numpy as np
 import pybullet as p
@@ -73,6 +74,10 @@ def safe_remove(p):
     if os.path.exists(p):
         os.remove(p)
 
+def ensure_dir(f):
+    d = os.path.dirname(f)
+    if not os.path.exists(d):
+        os.makedirs(d)
 
 class Verbose(object):
     def __init__(self, verbose):
@@ -845,18 +850,22 @@ def obj_from_mesh(mesh):
         #s += '\nf {}'.format(' '.join(map(str, reversed(f))))
     return s
 
+mesh_count = count()
+MESH_DIR = 'temp/'
+
 def create_mesh(mesh, scale=1, mass=STATIC_MASS, color=(.5, .5, .5, 1)):
     # http://people.sc.fsu.edu/~jburkardt/data/obj/obj.html
     # TODO: read OFF / WRL / OBJ files
-    filename = 'temp_mesh.obj' # TODO: avoid overwriting
-    write(filename, obj_from_mesh(mesh))
+    ensure_dir(MESH_DIR)
+    path = os.path.join(MESH_DIR, 'mesh{}.obj'.format(next(mesh_count)))
+    write(path, obj_from_mesh(mesh))
     mesh_scale = scale*np.ones(3)
-    collision_id = p.createVisualShape(p.GEOM_MESH, fileName=filename, meshScale=mesh_scale)
+    collision_id = p.createVisualShape(p.GEOM_MESH, fileName=path, meshScale=mesh_scale)
     if (color is None) or not has_gui():
         visual_id = -1
     else:
-        visual_id = p.createVisualShape(p.GEOM_MESH, fileName=filename, meshScale=mesh_scale, rgbaColor=color)
-    #safe_remove(filename) # TODO: removing might delete mesh?
+        visual_id = p.createVisualShape(p.GEOM_MESH, fileName=path, meshScale=mesh_scale, rgbaColor=color)
+    #safe_remove(path) # TODO: removing might delete mesh?
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
 
