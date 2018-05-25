@@ -97,6 +97,8 @@ class Verbose(object):
 
 #####################################
 
+# Savers
+
 class PoseSaver(object):
     def __init__(self, body):
         self.body = body
@@ -188,6 +190,7 @@ def wait_for_input(s=''):
 
 def connect(use_gui=True, shadows=True):
     sim_id = p.connect(p.GUI) if use_gui else p.connect(p.DIRECT)
+    #sim_id = p.connect(p.GUI, options="--opengl2") if use_gui else p.connect(p.DIRECT)
     if use_gui:
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
         p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, shadows)

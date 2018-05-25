@@ -5,16 +5,11 @@ from __future__ import print_function
 import pybullet as p
 import time
 
-from pr2_utils import TOP_HOLDING_LEFT_ARM, TORSO_JOINT_NAME, HEAD_LINK, \
-    SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, get_disabled_collisions, get_cone_mesh, \
-    load_srdf_collisions, load_dae_collisions, REST_LEFT_ARM, rightarm_from_leftarm, inverse_visibility, get_detection_cone
+from pr2_utils import TOP_HOLDING_LEFT_ARM, TORSO_JOINT_NAME, SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, \
+    get_disabled_collisions, REST_LEFT_ARM, rightarm_from_leftarm
 from utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
-    joint_controller, dump_world, get_link_name, wait_for_interrupt, clone_body, clone_body_editor, \
-    get_links, get_joint_parent_frame, euler_from_quat, get_joint_inertial_pose, get_joint_info, \
-    get_link_pose, VisualShapeData, get_visual_data, get_link_parent, link_from_name, set_point, set_pose, \
-    get_link_ancestors, get_link_children, get_link_descendants, dump_body, Verbose, load_model, create_mesh, \
-    sub_inverse_kinematics, point_from_pose, get_pose
+    joint_controller, dump_body, load_model, joints_from_names
 
 def test_base_motion(pr2, base_start, base_goal):
     #disabled_collisions = get_disabled_collisions(pr2)
@@ -73,6 +68,8 @@ def test_arm_control(pr2, left_joints, arm_start):
             p.stepSimulation()
         #time.sleep(0.01)
 
+#####################################
+
 def main(use_pr2_drake=False):
     connect(use_gui=True)
     add_data_path()
@@ -98,8 +95,8 @@ def main(use_pr2_drake=False):
     arm_goal = TOP_HOLDING_LEFT_ARM
     #arm_goal = SIDE_HOLDING_LEFT_ARM
 
-    left_joints = [joint_from_name(pr2, name) for name in PR2_GROUPS['left_arm']]
-    right_joints = [joint_from_name(pr2, name) for name in PR2_GROUPS['right_arm']]
+    left_joints = joints_from_names(pr2, PR2_GROUPS['left_arm'])
+    right_joints = joints_from_names(pr2, PR2_GROUPS['right_arm'])
     set_joint_positions(pr2, left_joints, arm_start)
     set_joint_positions(pr2, right_joints, rightarm_from_leftarm(REST_LEFT_ARM))
     set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT_NAME), 0.2)
