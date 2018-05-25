@@ -1,13 +1,10 @@
-from collections import namedtuple
-from utils import create_box, set_base_values, set_point, set_pose, get_pose, get_bodies, z_rotation, \
-    set_joint_positions, load_model, BLOCK_URDF, load_model
-from pr2_utils import TOP_HOLDING_LEFT_ARM, set_arm_conf, REST_LEFT_ARM, REST_RIGHT_ARM, open_arm, \
-    close_arm, get_carry_conf, arm_conf, get_other_arm, PR2_GROUPS, set_group_conf
-import pybullet as p
 import numpy as np
 
-#Problem = namedtuple('Problem', ['robot', 'arms', 'movable', 'grasp_types', 'surfaces',
-#                                 'goal_conf', 'goal_holding', 'goal_on'])
+from pr2_utils import set_arm_conf, REST_LEFT_ARM, open_arm, \
+    close_arm, get_carry_conf, arm_conf, get_other_arm, set_group_conf
+from utils import create_box, set_base_values, set_point, set_pose, get_pose, get_bodies, z_rotation, \
+    load_model, load_pybullet
+
 
 class Problem(object):
     def __init__(self, robot, arms=tuple(), movable=tuple(), grasp_types=tuple(),
@@ -43,14 +40,14 @@ def create_pr2(use_drake=True, fixed_base=True):
     return pr2
 
 def create_floor():
-    return p.loadURDF("plane.urdf")
+    return load_pybullet("plane.urdf")
 
 def create_table():
     # TODO: table URDF
     raise NotImplementedError()
 
 def create_door():
-    return p.loadURDF("data/door.urdf")
+    return load_pybullet("data/door.urdf")
 
 # https://github.com/bulletphysics/bullet3/search?l=XML&q=.urdf&type=&utf8=%E2%9C%93
 
@@ -68,8 +65,8 @@ def holding_problem(arm='left', grasp_type='side'):
     close_arm(pr2, other_arm)
 
     plane = create_floor()
-    table = p.loadURDF("table/table.urdf")
-    #table = p.loadURDF("table_square/table_square.urdf")
+    table = load_pybullet("table/table.urdf")
+    #table = load_pybullet("table_square/table_square.urdf")
     box = create_box(.07, .05, .15)
     set_point(box, (0, 0, TABLE_MAX_Z + .15/2))
 
@@ -88,13 +85,13 @@ def stacking_problem(arm='left', grasp_type='top'):
     close_arm(pr2, other_arm)
 
     plane = create_floor()
-    table1 = p.loadURDF("table/table.urdf")
-    #table = p.loadURDF("table_square/table_square.urdf")
+    table1 = load_pybullet("table/table.urdf")
+    #table = load_pybullet("table_square/table_square.urdf")
 
     block = create_box(.07, .05, .15)
     set_point(block, (0, 0, TABLE_MAX_Z + .15/2))
 
-    table2 = p.loadURDF("table/table.urdf")
+    table2 = load_pybullet("table/table.urdf")
     set_base_values(table2, (2, 0, 0))
 
     return Problem(robot=pr2, movable=[block], arms=[arm],

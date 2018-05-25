@@ -6,7 +6,7 @@ from kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, get_ik_f
     get_holding_motion_gen
 from utils import WorldSaver, enable_gravity, connect, dump_world, set_pose, Pose, Point, set_default_camera, stable_z, \
     BLOCK_URDF, load_model, wait_for_interrupt, disconnect, DRAKE_IIWA_URDF, input, update_state, \
-    disable_real_time, clone_body, KUKA_IIWA_URDF, clone_body_editor, save_body
+    disable_real_time
 
 def main():
     connect(use_gui=True)

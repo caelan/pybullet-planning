@@ -391,8 +391,3 @@ def inverse_visibility(pr2, point, head_name=HEAD_LINK):
     # TODO: test joint limits
     #pose = Pose(point_from_pose(head_pose), Euler(pitch=phi, yaw=theta)) # TODO: initial roll?
     return conf
-
-
-
-
-# TODO: scan path

@@ -99,6 +99,21 @@ class Verbose(object):
 
 # Savers
 
+# TODO: move the saving to enter?
+
+class ClientSaver(object):
+    def __init__(self, new_client=None):
+        self.client = CLIENT
+        if new_client is not None:
+            use_client(new_client)
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, traceback):
+        use_client(self.client)
+
+
 class PoseSaver(object):
     def __init__(self, body):
         self.body = body
@@ -130,6 +145,9 @@ CLIENT = 0
 def use_client(client):
     global CLIENT
     CLIENT = client
+
+def load_pybullet(filename, fixed_base=False):
+    return p.loadURDF(filename, useFixedBase=fixed_base, physicsClientId=CLIENT)
 
 def load_model(rel_path, pose=None, fixed_base=True):
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
@@ -199,8 +217,8 @@ def connect(use_gui=True, shadows=True):
     sim_id = p.connect(method)
     #sim_id = p.connect(p.GUI, options="--opengl2") if use_gui else p.connect(p.DIRECT)
     if use_gui:
-        p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0, physicsClientId=CLIENT)
-        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, shadows, physicsClientId=CLIENT)
+        p.configureDebugVisualizer(p.COV_ENABLE_GUI, False, physicsClientId=sim_id)
+        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, shadows, physicsClientId=sim_id)
     #visualizer_options = {
     #    p.COV_ENABLE_WIREFRAME: 1,
     #    p.COV_ENABLE_SHADOWS: 0,
@@ -215,7 +233,6 @@ def connect(use_gui=True, shadows=True):
     #}
     #for pair in visualizer_options.items():
     #    p.configureDebugVisualizer(*pair)
-
     return sim_id
 
 def disconnect():
@@ -278,6 +295,18 @@ def set_camera(yaw, pitch, distance, target_position=np.zeros(3)):
 
 def set_default_camera():
     set_camera(160, -35, 2.5, Point())
+
+def save_state():
+    return p.saveState(clientServerId=CLIENT)
+
+def restore_state(state_id):
+    p.restoreState(stateId=state_id, clientServerId=CLIENT)
+
+def save_bullet(filename):
+    p.saveBullet(filename, physicsClientId=CLIENT)
+
+def restore_bullet(filename):
+    p.restoreState(fileName=filename, physicsClientId=CLIENT)
 
 #####################################
 
@@ -543,7 +572,7 @@ def get_joint_positions(body, joints=None):
     return tuple(get_joint_position(body, joint) for joint in joints)
 
 def set_joint_position(body, joint, value):
-    p.resetJointState(body, joint, value)
+    p.resetJointState(body, joint, value, physicsClientId=CLIENT)
 
 def set_joint_positions(body, joints, values):
     assert len(joints) == len(values)
@@ -888,7 +917,7 @@ VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
                                                  'localVisualFrame_position', 'localVisualFrame_orientation',
                                                  'rgbaColor'])
 
-def visual_shape_from_data(data):
+def visual_shape_from_data(data, client):
     if (data.visualGeometryType == p.GEOM_MESH) and (data.meshAssetFileName == 'unknown_file'):
         return -1
     # visualFramePosition: translational offset of the visual shape with respect to the link
@@ -905,8 +934,9 @@ def visual_shape_from_data(data):
                                planeNormal=get_data_normal(data),
                                rgbaColor=data.rgbaColor,
                                #specularColor=,
-                                  visualFramePosition=point,
-                               visualFrameOrientation=quat, physicsClientId=CLIENT)
+                               visualFramePosition=point,
+                               visualFrameOrientation=quat,
+                               physicsClientId=client)
 
 def get_visual_data(body, link=BASE_LINK):
     visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body, physicsClientId=CLIENT)]
@@ -917,7 +947,7 @@ CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'link
                                                        'geometry_type', 'dimensions', 'filename',
                                                        'local_frame_pos', 'local_frame_orn'])
 
-def collision_shape_from_data(data, body, link):
+def collision_shape_from_data(data, body, link, client):
     if (data.geometry_type == p.GEOM_MESH) and (data.filename == 'unknown_file'):
         return -1
     pose = (data.local_frame_pos, data.local_frame_orn)
@@ -935,9 +965,10 @@ def collision_shape_from_data(data, body, link):
                                   planeNormal=get_data_normal(data),
                                   collisionFramePosition=point,
                                   collisionFrameOrientation=quat,
-                                  physicsClientId=CLIENT)
+                                  physicsClientId=client)
     #return p.createCollisionShapeArray()
 
+"""
 def clone_body_editor(body, collision=True, visual=True):
     #from pybullet_utils.urdfEditor import UrdfEditor
     from urdfEditor import UrdfEditor
@@ -961,25 +992,26 @@ def save_body(body, filename):
     editor = UrdfEditor()
     editor.initializeFromBulletBody(body, physicsClientId=CLIENT)
     editor.saveUrdf(filename)
+"""
 
-def clone_visual_shape(body, link):
+def clone_visual_shape(body, link, client):
     if not has_gui():
         return -1
     visual_data = get_visual_data(body, link)
     if visual_data:
         assert (len(visual_data) == 1)
-        return visual_shape_from_data(visual_data[0])
+        return visual_shape_from_data(visual_data[0], client)
     return -1
 
-def clone_collision_shape(body, link):
+def clone_collision_shape(body, link, client):
     collision_data = get_collision_data(body, link)
     if collision_data:
         assert (len(collision_data) == 1)
         # TODO: can do CollisionArray
-        return collision_shape_from_data(collision_data[0], body, link)
+        return collision_shape_from_data(collision_data[0], body, link, client)
     return -1
 
-def clone_body(body, links=None, collision=True, visual=True):
+def clone_body(body, links=None, collision=True, visual=True, client=CLIENT):
     # TODO: names are not retained
     # TODO: error with createMultiBody link poses on PR2
     # localVisualFrame_position: position of local visual frame, relative to link/joint frame
@@ -1009,8 +1041,8 @@ def clone_body(body, links=None, collision=True, visual=True):
         joint_info = get_joint_info(body, link)
         dynamics_info = get_dynamics_info(body, link)
         masses.append(dynamics_info.mass)
-        collision_shapes.append(clone_collision_shape(body, link) if collision else -1)
-        visual_shapes.append(clone_visual_shape(body, link) if visual else -1)
+        collision_shapes.append(clone_collision_shape(body, link, client) if collision else -1)
+        visual_shapes.append(clone_visual_shape(body, link, client) if visual else -1)
         point, quat = get_local_link_pose(body, link)
         positions.append(point)
         orientations.append(quat)
@@ -1024,8 +1056,8 @@ def clone_body(body, links=None, collision=True, visual=True):
     base_dynamics_info = get_dynamics_info(body, base_link)
     base_point, base_quat = get_link_pose(body, base_link)
     new_body = p.createMultiBody(baseMass=base_dynamics_info.mass,
-                                 baseCollisionShapeIndex=clone_collision_shape(body, base_link) if collision else -1,
-                                 baseVisualShapeIndex=clone_visual_shape(body, base_link) if visual else -1,
+                                 baseCollisionShapeIndex=clone_collision_shape(body, base_link, client) if collision else -1,
+                                 baseVisualShapeIndex=clone_visual_shape(body, base_link, client) if visual else -1,
                                  basePosition=base_point,
                                  baseOrientation=base_quat,
                                  baseInertialFramePosition=base_dynamics_info.local_inertial_pos,
@@ -1040,9 +1072,15 @@ def clone_body(body, links=None, collision=True, visual=True):
                                  linkParentIndices=parent_indices,
                                  linkJointTypes=joint_types,
                                  linkJointAxis=joint_axes,
-                                 physicsClientId=CLIENT)
+                                 physicsClientId=client)
     set_configuration(new_body, get_joint_positions(body, movable_joints))
     return new_body
+
+def clone_world(client):
+    for body in get_bodies():
+        clone_body(body, collision=True, visual=True, client=client)
+
+#####################################
 
 def get_collision_data(body, link=BASE_LINK):
     return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link, physicsClientId=CLIENT)]
