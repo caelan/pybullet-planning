@@ -125,6 +125,12 @@ class ConfSaver(object):
 
 # Simulation
 
+CLIENT = 0
+
+def use_client(client):
+    global CLIENT
+    CLIENT = client
+
 def load_model(rel_path, pose=None, fixed_base=True):
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
     directory = os.path.dirname(os.path.abspath(__file__))
@@ -138,13 +144,13 @@ def load_model(rel_path, pose=None, fixed_base=True):
 
     add_data_path()
     if abs_path.endswith('.urdf'):
-        body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags)
+        body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags, physicsClientId=CLIENT)
     elif abs_path.endswith('.sdf'):
-        body = p.loadSDF(abs_path)
+        body = p.loadSDF(abs_path, physicsClientId=CLIENT)
     elif abs_path.endswith('.xml'):
-        body = p.loadMJCF(abs_path)
+        body = p.loadMJCF(abs_path, physicsClientId=CLIENT)
     elif abs_path.endswith('.bullet'):
-        body = p.loadBullet(abs_path)
+        body = p.loadBullet(abs_path, physicsClientId=CLIENT)
     else:
         raise ValueError(abs_path)
     if pose is not None:
@@ -189,11 +195,12 @@ def wait_for_input(s=''):
 
 
 def connect(use_gui=True, shadows=True):
-    sim_id = p.connect(p.GUI) if use_gui else p.connect(p.DIRECT)
+    method = p.GUI if use_gui else p.DIRECT
+    sim_id = p.connect(method)
     #sim_id = p.connect(p.GUI, options="--opengl2") if use_gui else p.connect(p.DIRECT)
     if use_gui:
-        p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
-        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, shadows)
+        p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0, physicsClientId=CLIENT)
+        p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, shadows, physicsClientId=CLIENT)
     #visualizer_options = {
     #    p.COV_ENABLE_WIREFRAME: 1,
     #    p.COV_ENABLE_SHADOWS: 0,
@@ -212,13 +219,13 @@ def connect(use_gui=True, shadows=True):
     return sim_id
 
 def disconnect():
-    return p.disconnect()
+    return p.disconnect(physicsClientId=CLIENT)
 
 def is_connected():
-    return p.getConnectionInfo()['isConnected']
+    return p.getConnectionInfo(physicsClientId=CLIENT)['isConnected']
 
 def get_connection():
-    return p.getConnectionInfo()['connectionMethod']
+    return p.getConnectionInfo(physicsClientId=CLIENT)['connectionMethod']
 
 def has_gui():
     return get_connection() == p.GUI
@@ -231,19 +238,19 @@ def add_data_path():
     return p.setAdditionalSearchPath(get_data_path())
 
 def enable_gravity():
-    p.setGravity(0, 0, -9.8)
+    p.setGravity(0, 0, -9.8, physicsClientId=CLIENT)
 
 def disable_gravity():
-    p.setGravity(0, 0, 0)
+    p.setGravity(0, 0, 0, physicsClientId=CLIENT)
 
 def step_simulation():
-    p.stepSimulation()
+    p.stepSimulation(physicsClientId=CLIENT)
 
 def enable_real_time():
-    p.setRealTimeSimulation(1)
+    p.setRealTimeSimulation(1, physicsClientId=CLIENT)
 
 def disable_real_time():
-    p.setRealTimeSimulation(0)
+    p.setRealTimeSimulation(0, physicsClientId=CLIENT)
 
 def update_state():
     disable_gravity()
@@ -261,13 +268,13 @@ def update_state():
     #p.getMouseEvents()
 
 def reset_simulation():
-    p.resetSimulation()
+    p.resetSimulation(physicsClientId=CLIENT)
 
 def get_camera():
-    return p.getDebugVisualizerCamera()
+    return p.getDebugVisualizerCamera(physicsClientId=CLIENT)
 
 def set_camera(yaw, pitch, distance, target_position=np.zeros(3)):
-    p.resetDebugVisualizerCamera(distance, yaw, pitch, target_position)
+    p.resetDebugVisualizerCamera(distance, yaw, pitch, target_position, physicsClientId=CLIENT)
 
 def set_default_camera():
     set_camera(160, -35, 2.5, Point())
@@ -322,7 +329,7 @@ def z_rotation(theta):
     return quat_from_euler([0, 0, theta])
 
 def matrix_from_quat(quat):
-    return p.getMatrixFromQuaternion(quat)
+    return p.getMatrixFromQuaternion(quat, physicsClientId=CLIENT)
 
 def quat_from_matrix(mat):
     matrix = np.eye(4)
@@ -375,12 +382,13 @@ def pose_from_base_values(base_values, default_pose):
 # Bodies
 
 def get_bodies():
-    return [p.getBodyUniqueId(i) for i in range(p.getNumBodies())]
+    return [p.getBodyUniqueId(i, physicsClientId=CLIENT)
+            for i in range(p.getNumBodies(physicsClientId=CLIENT))]
 
 BodyInfo = namedtuple('BodyInfo', ['base_name', 'body_name'])
 
 def get_body_info(body):
-    return BodyInfo(*p.getBodyInfo(body))
+    return BodyInfo(*p.getBodyInfo(body, physicsClientId=CLIENT))
 
 def get_base_name(body):
     return get_body_info(body).base_name
@@ -402,30 +410,30 @@ def body_from_name(name):
     raise ValueError(name)
 
 def remove_body(body):
-    return p.removeBody(body)
-
-def get_point(body):
-    return p.getBasePositionAndOrientation(body)[0]
-
-def get_quat(body):
-    return p.getBasePositionAndOrientation(body)[1] # [x,y,z,w]
+    return p.removeBody(body, physicsClientId=CLIENT)
 
 def get_pose(body):
-    return p.getBasePositionAndOrientation(body)
+    return p.getBasePositionAndOrientation(body, physicsClientId=CLIENT)
     #return np.concatenate([point, quat])
+
+def get_point(body):
+    return get_pose(body)[0]
+
+def get_quat(body):
+    return get_pose(body)[1] # [x,y,z,w]
 
 def get_base_values(body):
     return base_values_from_pose(get_pose(body))
 
-def set_point(body, point):
-    p.resetBasePositionAndOrientation(body, point, get_quat(body))
-
-def set_quat(body, quat):
-    p.resetBasePositionAndOrientation(body, get_point(body), quat)
-
 def set_pose(body, pose):
     (point, quat) = pose
-    p.resetBasePositionAndOrientation(body, point, quat)
+    p.resetBasePositionAndOrientation(body, point, quat, physicsClientId=CLIENT)
+
+def set_point(body, point):
+    set_pose(body, (point, get_quat(body)))
+
+def set_quat(body, quat):
+    set_pose(body, (get_point(body), quat))
 
 def set_base_values(body, values):
     _, _, z = get_point(body)
@@ -478,7 +486,7 @@ JOINT_TYPES = {
 }
 
 def get_num_joints(body):
-    return p.getNumJoints(body)
+    return p.getNumJoints(body, physicsClientId=CLIENT)
 
 def get_joints(body):
     return list(range(get_num_joints(body)))
@@ -495,7 +503,7 @@ JointInfo = namedtuple('JointInfo', ['jointIndex', 'jointName', 'jointType',
                                      'parentFramePos', 'parentFrameOrn', 'parentIndex'])
 
 def get_joint_info(body, joint):
-    return JointInfo(*p.getJointInfo(body, joint))
+    return JointInfo(*p.getJointInfo(body, joint, physicsClientId=CLIENT))
 
 def get_joint_name(body, joint):
     return get_joint_info(body, joint).jointName.decode('UTF-8')
@@ -523,7 +531,7 @@ JointState = namedtuple('JointState', ['jointPosition', 'jointVelocity',
                                      'jointReactionForces', 'appliedJointMotorTorque'])
 
 def get_joint_state(body, joint):
-    return JointState(*p.getJointState(body, joint))
+    return JointState(*p.getJointState(body, joint, physicsClientId=CLIENT))
 
 def get_joint_position(body, joint):
     return get_joint_state(body, joint).jointPosition
@@ -656,7 +664,7 @@ LinkState = namedtuple('LinkState', ['linkWorldPosition', 'linkWorldOrientation'
                                      'worldLinkFramePosition', 'worldLinkFrameOrientation'])
 
 def get_link_state(body, link):
-    return LinkState(*p.getLinkState(body, link))
+    return LinkState(*p.getLinkState(body, link, physicsClientId=CLIENT))
 
 def get_com_pose(body, link): # COM = center of mass
     link_state = get_link_state(body, link)
@@ -753,7 +761,7 @@ DynamicsInfo = namedtuple('DynamicsInfo', ['mass', 'lateral_friction',
                                            'contact_damping', 'contact_stiffness'])
 
 def get_dynamics_info(body, link=BASE_LINK):
-    return DynamicsInfo(*p.getDynamicsInfo(body, link))
+    return DynamicsInfo(*p.getDynamicsInfo(body, link, physicsClientId=CLIENT))
 
 def get_mass(body, link=BASE_LINK):
     return get_dynamics_info(body, link).mass
@@ -792,53 +800,55 @@ SHAPE_TYPES = {
     p.GEOM_CAPSULE: 'capsule',  # 7
 }
 
+# TODO: clean this up to avoid repeated work
+
 def create_box(w, l, h, mass=STATIC_MASS, color=(1, 0, 0, 1)):
     half_extents = [w/2., l/2., h/2.]
-    collision_id = p.createCollisionShape(p.GEOM_BOX, halfExtents=half_extents)
+    collision_id = p.createCollisionShape(p.GEOM_BOX, halfExtents=half_extents, physicsClientId=CLIENT)
     if (color is None) or not has_gui():
         visual_id = -1
     else:
-        visual_id = p.createVisualShape(p.GEOM_BOX, halfExtents=half_extents, rgbaColor=color)
+        visual_id = p.createVisualShape(p.GEOM_BOX, halfExtents=half_extents, rgbaColor=color, physicsClientId=CLIENT)
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
+                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
     # linkCollisionShapeIndices | linkVisualShapeIndices
 
 def create_cylinder(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
-    collision_id =  p.createCollisionShape(p.GEOM_CYLINDER, radius=radius, height=height)
+    collision_id =  p.createCollisionShape(p.GEOM_CYLINDER, radius=radius, height=height, physicsClientId=CLIENT)
     if (color is None) or not has_gui():
         visual_id = -1
     else:
-        visual_id = p.createVisualShape(p.GEOM_CYLINDER, radius=radius, height=height, rgbaColor=color)
+        visual_id = p.createVisualShape(p.GEOM_CYLINDER, radius=radius, height=height, rgbaColor=color, physicsClientId=CLIENT)
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
+                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
 
 def create_capsule(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
-    collision_id = p.createCollisionShape(p.GEOM_CAPSULE, radius=radius, height=height)
+    collision_id = p.createCollisionShape(p.GEOM_CAPSULE, radius=radius, height=height, physicsClientId=CLIENT)
     if (color is None) or not has_gui():
         visual_id = -1
     else:
-        visual_id = p.createVisualShape(p.GEOM_CAPSULE, radius=radius, height=height, rgbaColor=color)
+        visual_id = p.createVisualShape(p.GEOM_CAPSULE, radius=radius, height=height, rgbaColor=color, physicsClientId=CLIENT)
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
+                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
 
 def create_sphere(radius, mass=STATIC_MASS, color=(0, 0, 1, 1)):
     # mass = 0  => static
-    collision_id = p.createCollisionShape(p.GEOM_SPHERE, radius=radius)
+    collision_id = p.createCollisionShape(p.GEOM_SPHERE, radius=radius, physicsClientId=CLIENT)
     if (color is None) or not has_gui():
         visual_id = -1
     else:
-        visual_id = p.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color)
+        visual_id = p.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color, physicsClientId=CLIENT)
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
+                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
 
 def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(.5, .5, .5, 1)):
-    collision_id = p.createCollisionShape(p.GEOM_PLANE, normal=normal)
+    collision_id = p.createCollisionShape(p.GEOM_PLANE, normal=normal, physicsClientId=CLIENT)
     if (color is None) or not has_gui():
         visual_id = -1
     else:
-        visual_id = p.createVisualShape(p.GEOM_PLANE, normal=normal, rgbaColor=color)
+        visual_id = p.createVisualShape(p.GEOM_PLANE, normal=normal, rgbaColor=color, physicsClientId=CLIENT)
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
+                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
 
 def obj_from_mesh(mesh):
     vertices, faces = mesh
@@ -863,14 +873,14 @@ def create_mesh(mesh, scale=1, mass=STATIC_MASS, color=(.5, .5, .5, 1)):
     path = os.path.join(MESH_DIR, 'mesh{}.obj'.format(next(mesh_count)))
     write(path, obj_from_mesh(mesh))
     mesh_scale = scale*np.ones(3)
-    collision_id = p.createVisualShape(p.GEOM_MESH, fileName=path, meshScale=mesh_scale)
+    collision_id = p.createVisualShape(p.GEOM_MESH, fileName=path, meshScale=mesh_scale, physicsClientId=CLIENT)
     if (color is None) or not has_gui():
         visual_id = -1
     else:
-        visual_id = p.createVisualShape(p.GEOM_MESH, fileName=path, meshScale=mesh_scale, rgbaColor=color)
+        visual_id = p.createVisualShape(p.GEOM_MESH, fileName=path, meshScale=mesh_scale, rgbaColor=color, physicsClientId=CLIENT)
     #safe_remove(path) # TODO: removing might delete mesh?
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id) # basePosition | baseOrientation
+                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
 
 
 VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
@@ -887,19 +897,19 @@ def visual_shape_from_data(data):
     inertial_pose = get_joint_inertial_pose(data.objectUniqueId, data.linkIndex)
     point, quat = multiply(invert(inertial_pose), pose)
     return p.createVisualShape(shapeType=data.visualGeometryType,
-                                  radius=get_data_radius(data),
-                                  halfExtents=np.array(get_data_extents(data))/2,
-                                  length=get_data_height(data),
-                                  fileName=data.meshAssetFileName,
-                                  meshScale=get_data_scale(data),
-                                  planeNormal=get_data_normal(data),
-                                  rgbaColor=data.rgbaColor,
-                                  #specularColor=,
+                               radius=get_data_radius(data),
+                               halfExtents=np.array(get_data_extents(data))/2,
+                               length=get_data_height(data),
+                               fileName=data.meshAssetFileName,
+                               meshScale=get_data_scale(data),
+                               planeNormal=get_data_normal(data),
+                               rgbaColor=data.rgbaColor,
+                               #specularColor=,
                                   visualFramePosition=point,
-                                  visualFrameOrientation=quat)
+                               visualFrameOrientation=quat, physicsClientId=CLIENT)
 
 def get_visual_data(body, link=BASE_LINK):
-    visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body)]
+    visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body, physicsClientId=CLIENT)]
     return filter(lambda d: d.linkIndex == link, visual_data)
 
 # object_unique_id and linkIndex seem to be noise
@@ -917,22 +927,23 @@ def collision_shape_from_data(data, body, link):
     # TODO: the visual data seems affected by the collision data
     return p.createCollisionShape(shapeType=data.geometry_type,
                                   radius=get_data_radius(data),
-                                 # halfExtents=get_data_extents(data.geometry_type, data.dimensions),
+                                  # halfExtents=get_data_extents(data.geometry_type, data.dimensions),
                                   halfExtents=np.array(get_data_extents(data)) / 2,
                                   height=get_data_height(data),
                                   fileName=data.filename,
                                   meshScale=get_data_scale(data),
                                   planeNormal=get_data_normal(data),
                                   collisionFramePosition=point,
-                                  collisionFrameOrientation=quat)
+                                  collisionFrameOrientation=quat,
+                                  physicsClientId=CLIENT)
     #return p.createCollisionShapeArray()
 
 def clone_body_editor(body, collision=True, visual=True):
     #from pybullet_utils.urdfEditor import UrdfEditor
     from urdfEditor import UrdfEditor
     editor = UrdfEditor()
-    editor.initializeFromBulletBody(body, 0)
-    return editor.createMultiBody() # pybullet.error: createVisualShapeArray failed.
+    editor.initializeFromBulletBody(body, physicsClientId=CLIENT)
+    return editor.createMultiBody(physicsClientId=CLIENT) # pybullet.error: createVisualShapeArray failed.
 
     # TODO: failure is because broken mesh files
     #return body_from_editor(editor, collision=collision, visual=visual)
@@ -948,7 +959,7 @@ def save_body(body, filename):
     #from pybullet_utils.urdfEditor import UrdfEditor
     from urdfEditor import UrdfEditor
     editor = UrdfEditor()
-    editor.initializeFromBulletBody(body, 0)
+    editor.initializeFromBulletBody(body, physicsClientId=CLIENT)
     editor.saveUrdf(filename)
 
 def clone_visual_shape(body, link):
@@ -1013,27 +1024,28 @@ def clone_body(body, links=None, collision=True, visual=True):
     base_dynamics_info = get_dynamics_info(body, base_link)
     base_point, base_quat = get_link_pose(body, base_link)
     new_body = p.createMultiBody(baseMass=base_dynamics_info.mass,
-                             baseCollisionShapeIndex=clone_collision_shape(body, base_link) if collision else -1,
-                             baseVisualShapeIndex=clone_visual_shape(body, base_link) if visual else -1,
-                             basePosition=base_point,
-                             baseOrientation=base_quat,
-                             baseInertialFramePosition=base_dynamics_info.local_inertial_pos,
-                             baseInertialFrameOrientation=base_dynamics_info.local_inertial_orn,
-                             linkMasses=masses,
-                             linkCollisionShapeIndices=collision_shapes,
-                             linkVisualShapeIndices=visual_shapes,
-                             linkPositions=positions,
-                             linkOrientations=orientations,
-                             linkInertialFramePositions=inertial_positions,
-                             linkInertialFrameOrientations=inertial_orientations,
-                             linkParentIndices=parent_indices,
-                             linkJointTypes=joint_types,
-                             linkJointAxis=joint_axes)
+                                 baseCollisionShapeIndex=clone_collision_shape(body, base_link) if collision else -1,
+                                 baseVisualShapeIndex=clone_visual_shape(body, base_link) if visual else -1,
+                                 basePosition=base_point,
+                                 baseOrientation=base_quat,
+                                 baseInertialFramePosition=base_dynamics_info.local_inertial_pos,
+                                 baseInertialFrameOrientation=base_dynamics_info.local_inertial_orn,
+                                 linkMasses=masses,
+                                 linkCollisionShapeIndices=collision_shapes,
+                                 linkVisualShapeIndices=visual_shapes,
+                                 linkPositions=positions,
+                                 linkOrientations=orientations,
+                                 linkInertialFramePositions=inertial_positions,
+                                 linkInertialFrameOrientations=inertial_orientations,
+                                 linkParentIndices=parent_indices,
+                                 linkJointTypes=joint_types,
+                                 linkJointAxis=joint_axes,
+                                 physicsClientId=CLIENT)
     set_configuration(new_body, get_joint_positions(body, movable_joints))
     return new_body
 
 def get_collision_data(body, link=BASE_LINK):
-    return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link)]
+    return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link, physicsClientId=CLIENT)]
 
 def get_data_type(data):
     return data.geometry_type if isinstance(data, CollisionShapeData) else data.visualGeometryType
@@ -1113,14 +1125,14 @@ def set_color(body, color, link=BASE_LINK, shape_index=-1):
     :param shape_index:
     :return:
     """
-    return p.changeVisualShape(body, link, rgbaColor=color)
+    return p.changeVisualShape(body, link, rgbaColor=color, physicsClientId=CLIENT)
 
 #####################################
 
 # Bounding box
 
 def get_lower_upper(body):
-    return p.getAABB(body)
+    return p.getAABB(body, physicsClientId=CLIENT)
 
 get_aabb = get_lower_upper
 
@@ -1141,7 +1153,7 @@ def aabb_contains(contained, container):
 
 def get_bodies_in_region(aabb):
     (lower, upper) = aabb
-    return p.getOverlappingObjects(lower, upper)
+    return p.getOverlappingObjects(lower, upper, physicsClientId=CLIENT)
 
 #####################################
 
@@ -1151,8 +1163,8 @@ def get_bodies_in_region(aabb):
 MAX_DISTANCE = 0
 
 def contact_collision():
-    p.stepSimulation()
-    return len(p.getContactPoints()) != 0
+    step_simulation()
+    return len(p.getContactPoints(physicsClientId=CLIENT)) != 0
 
 ContactResult = namedtuple('ContactResult', ['contactFlag', 'bodyUniqueIdA', 'bodyUniqueIdB',
                                          'linkIndexA', 'linkIndexB', 'positionOnA', 'positionOnB',
@@ -1160,12 +1172,14 @@ ContactResult = namedtuple('ContactResult', ['contactFlag', 'bodyUniqueIdA', 'bo
 
 def pairwise_collision(body1, body2, max_distance=MAX_DISTANCE): # 10000
     # TODO: confirm that this doesn't just check the base link
-    return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance)) != 0 # getContactPoints
+    return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
+                                  physicsClientId=CLIENT)) != 0 # getContactPoints
 
 
 def pairwise_link_collision(body1, link1, body2, link2, max_distance=MAX_DISTANCE): # 10000
     return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
-                                  linkIndexA=link1, linkIndexB=link2)) != 0 # getContactPoints
+                                  linkIndexA=link1, linkIndexB=link2,
+                                  physicsClientId=CLIENT)) != 0 # getContactPoints
 
 #def single_collision(body, max_distance=1e-3):
 #    return len(p.getClosestPoints(body, max_distance=max_distance)) != 0
@@ -1190,7 +1204,7 @@ RayResult = namedtuple('RayResult', ['objectUniqueId', 'linkIndex',
 def ray_collision(rays):
     ray_starts = [start for start, _ in rays]
     ray_ends = [start for _, end in rays]
-    return [RayResult(*tup) for tup in p.rayTestBatch(ray_starts, ray_ends)]
+    return [RayResult(*tup) for tup in p.rayTestBatch(ray_starts, ray_ends, physicsClientId=CLIENT)]
     #return RayResult(*p.rayTest(start, end))
 
 #####################################
@@ -1446,10 +1460,11 @@ def get_constraints():
     getConstraintUniqueId will take a serial index in range 0..getNumConstraints,  and reports the constraint unique id.
     Note that the constraint unique ids may not be contiguous, since you may remove constraints.
     """
-    return [p.getConstraintUniqueId(i) for i in range(p.getNumConstraints())]
+    return [p.getConstraintUniqueId(i, physicsClientId=CLIENT)
+            for i in range(p.getNumConstraints(physicsClientId=CLIENT))]
 
 def remove_constraint(constraint):
-    p.removeConstraint(constraint)
+    p.removeConstraint(constraint, physicsClientId=CLIENT)
 
 ConstraintInfo = namedtuple('ConstraintInfo', ['parentBodyUniqueId', 'parentJointIndex',
                                                'childBodyUniqueId', 'childLinkIndex', 'constraintType',
@@ -1458,7 +1473,7 @@ ConstraintInfo = namedtuple('ConstraintInfo', ['parentBodyUniqueId', 'parentJoin
 
 def get_constraint_info(constraint): # getConstraintState
     # TODO: four additional arguments
-    return ConstraintInfo(*p.getConstraintInfo(constraint)[:11])
+    return ConstraintInfo(*p.getConstraintInfo(constraint, physicsClientId=CLIENT)[:11])
 
 def get_fixed_constraints():
     fixed_constraints = []
@@ -1482,14 +1497,15 @@ def add_fixed_constraint(body, robot, robot_link, max_force=None):
     #                          childFramePosition=point,
     #                          parentFrameOrientation=unit_quat(),
     #                          childFrameOrientation=quat)
-    constraint = p.createConstraint(robot, robot_link, body, body_link, # Both seem to work
+    constraint = p.createConstraint(robot, robot_link, body, body_link,  # Both seem to work
                               p.JOINT_FIXED, jointAxis=unit_point(),
-                              parentFramePosition=point,
-                              childFramePosition=unit_point(),
-                              parentFrameOrientation=quat,
-                              childFrameOrientation=unit_quat())
+                                    parentFramePosition=point,
+                                    childFramePosition=unit_point(),
+                                    parentFrameOrientation=quat,
+                                    childFrameOrientation=unit_quat(),
+                                    physicsClientId=CLIENT)
     if max_force is not None:
-        p.changeConstraint(constraint, maxForce=max_force)
+        p.changeConstraint(constraint, maxForce=max_force, physicsClientId=CLIENT)
     return constraint
 
 def remove_fixed_constraint(body, robot, robot_link):
@@ -1553,12 +1569,13 @@ def get_grasp_pose(constraint):
 
 def control_joint(body, joint, value):
     return p.setJointMotorControl2(bodyUniqueId=body,
-                            jointIndex=joint,
-                            controlMode=p.POSITION_CONTROL,
-                            targetPosition=value,
-                            targetVelocity=0,
-                            maxVelocity=get_max_velocity(body, joint),
-                            force=get_max_force(body, joint))
+                                   jointIndex=joint,
+                                   controlMode=p.POSITION_CONTROL,
+                                   targetPosition=value,
+                                   targetVelocity=0,
+                                   maxVelocity=get_max_velocity(body, joint),
+                                   force=get_max_force(body, joint),
+                                   physicsClientId=CLIENT)
 
 
 def control_joints(body, joints, positions):
@@ -1570,7 +1587,8 @@ def control_joints(body, joints, positions):
     #forces = [20000]*len(joints)
     return p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL,
                                        targetPositions=positions,
-                                        targetVelocities=[0.0] * len(joints)) #,
+                                       targetVelocities=[0.0] * len(joints),
+                                       physicsClientId=CLIENT) #,
                                         #positionGains=[kp] * len(joints),
                                         #velocityGains=[kv] * len(joints),)
                                         #forces=forces)
@@ -1623,7 +1641,8 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
     for iterations in range(max_iterations):
         # TODO: stop is no progress
         # TODO: stop if collision or invalid joint limits
-        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, target_quat)
+        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, target_quat,
+                                                      physicsClientId=CLIENT)
         if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
             return None
         set_joint_positions(robot, movable_joints, kinematic_conf)
@@ -1654,7 +1673,8 @@ def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_ite
     sub_movable_joints = get_movable_joints(sub_robot)
     for _ in range(max_iterations):
         sub_kinematic_conf = p.calculateInverseKinematics(sub_robot, selected_target_link,
-                                                      target_point, target_quat)
+                                                          target_point, target_quat,
+                                                          physicsClientId=CLIENT)
         if (sub_kinematic_conf is None) or any(map(math.isnan, sub_kinematic_conf)):
             remove_body(sub_robot)
             return None

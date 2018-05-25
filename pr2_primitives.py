@@ -74,7 +74,7 @@ class Trajectory(object):
             for _ in joint_controller_hold(conf.body, conf.joints, conf.values):
                 enable_gravity()
                 if not real_time:
-                    p.stepSimulation()
+                    step_simulation()
                 time.sleep(dt)
     def reverse(self):
         return Trajectory(reversed(self.path))
@@ -108,7 +108,7 @@ class Attach(object):
             values = [get_min_limit(self.robot, joint) for joint in joints] # Closed
             for _ in joint_controller_hold(self.robot, joints, values):
                 enable_gravity()
-                p.stepSimulation()
+                step_simulation()
                 #if not real_time:
                 #    p.stepSimulation()
                 #time.sleep(dt)

@@ -1,5 +1,4 @@
 import pybullet as p
-import time
 
 UNKNOWN_FILE = 'unknown_file'
 

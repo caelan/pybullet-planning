@@ -15,7 +15,7 @@ from ss.model.plan import print_plan
 from ss.model.problem import Problem
 from ss.model.streams import Stream, ListStream, GenStream, FnStream
 from utils import connect, add_data_path, disconnect, get_pose, enable_gravity, is_placement, joints_from_names, \
-    get_joint_positions, input
+    get_joint_positions, input, load_model, use_client
 
 A = '?a'
 O = '?o'; O2 = '?o2'
@@ -272,7 +272,8 @@ def main(search='ff-astar', max_time=60, verbose=True):
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem
     # cleaning_button_problem | cooking_button_problem
 
-    connect(use_gui=args.viewer)
+    world1 = connect(use_gui=args.viewer)
+    print(world1) # 0
     add_data_path()
 
     problem = problem_fn()
@@ -282,10 +283,11 @@ def main(search='ff-astar', max_time=60, verbose=True):
     print ss_problem
     #ss_problem.dump()
 
-    #path = os.path.join('worlds', 'test_ss')
-    #p.saveWorld(path)
+    #world_file = 'test_world.py'
+    #p.saveWorld(world_file) # Saves a Python file to be executed
     #state_id = p.saveState()
-    #p.saveBullet(path)
+    #test_bullet = 'test_world.bullet'
+    #p.saveBullet(test_bullet) # Segfault
 
     t0 = time.time()
     pr = cProfile.Profile()
@@ -307,7 +309,8 @@ def main(search='ff-astar', max_time=60, verbose=True):
         p.restoreState(state_id)
     else:
         disconnect()
-        connect(use_gui=True)
+        world2 = connect(use_gui=True) # 0
+        print(world2)
         problem = problem_fn()  # TODO: way of doing this without reloading?
 
     commands = post_process(problem, plan)
