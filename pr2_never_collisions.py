@@ -1,3 +1,12 @@
+# TODO: maybe some OpenRAVE links are disabled
+# http://openrave.org/docs/0.8.2/collada_robot_extensions/
+
+# < extra
+# type = "collision" >
+# < technique
+# profile = "OpenRAVE"
+# ignore_link_pair
+
 NEVER_COLLISIONS = [('base_bellow_link', 'base_footprint'), ('base_bellow_link', 'bl_caster_l_wheel_link'),
                     ('base_bellow_link', 'bl_caster_r_wheel_link'), ('base_bellow_link', 'bl_caster_rotation_link'),
                     ('base_bellow_link', 'br_caster_l_wheel_link'), ('base_bellow_link', 'br_caster_r_wheel_link'),

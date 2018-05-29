@@ -138,6 +138,40 @@ class ConfSaver(object):
 
 #####################################
 
+class BodySaver(object):
+    def __init__(self, body, pose=None):
+        if pose is None:
+            pose = get_pose(body)
+        self.body = body
+        self.pose = pose
+        self.conf = get_configuration(body)
+
+    def restore(self):
+        set_configuration(self.body, self.conf)
+        set_pose(self.body, self.pose)
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, traceback):
+        self.restore()
+
+class WorldSaver(object):
+    def __init__(self):
+        self.body_savers = [BodySaver(body) for body in get_bodies()]
+
+    def restore(self):
+        for body_saver in self.body_savers:
+            body_saver.restore()
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, traceback):
+        self.restore()
+
+#####################################
+
 # Simulation
 
 CLIENT = 0
@@ -1630,27 +1664,6 @@ def velocity_control_joints(body, joints, velocities):
                                        physicsClientId=CLIENT) #,
                                         #velocityGains=[kv] * len(joints),)
                                         #forces=forces)
-
-#####################################
-
-class BodySaver(object): # TODO: with statements
-    def __init__(self, body, pose=None):
-        if pose is None:
-            pose = get_pose(body)
-        self.body = body
-        self.pose = pose
-        self.conf = get_configuration(body)
-    def restore(self):
-        set_configuration(self.body, self.conf)
-        set_pose(self.body, self.pose)
-
-
-class WorldSaver(object):
-    def __init__(self):
-        self.body_savers = [BodySaver(body) for body in get_bodies()]
-    def restore(self):
-        for body_saver in self.body_savers:
-            body_saver.restore()
 
 #####################################
 

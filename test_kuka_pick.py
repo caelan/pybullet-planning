@@ -5,28 +5,10 @@ from __future__ import print_function
 from kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, get_ik_fn, get_free_motion_gen, \
     get_holding_motion_gen
 from utils import WorldSaver, enable_gravity, connect, dump_world, set_pose, Pose, Point, set_default_camera, stable_z, \
-    BLOCK_URDF, load_model, wait_for_interrupt, disconnect, DRAKE_IIWA_URDF, input, update_state, \
+    BLOCK_URDF, load_model, wait_for_interrupt, disconnect, DRAKE_IIWA_URDF, user_input, update_state, \
     disable_real_time
 
-def main():
-    connect(use_gui=True)
-    disable_real_time()
-    #robot = load_model(KUKA_IIWA_URDF)
-    robot = load_model(DRAKE_IIWA_URDF)
-    floor = load_model('models/short_floor.urdf')
-    block = load_model(BLOCK_URDF, fixed_base=False)
-    set_pose(block, Pose(Point(y=0.5, z=stable_z(block, floor))))
-    set_default_camera()
-
-    #clone_body(robot, collision=False, visual=False)
-    #clone_skeleton(robot)
-    #new_robot = clone_body_editor(robot)
-    #save_body(robot, 'test.urdf')
-    dump_world()
-
-    saved_world = WorldSaver()
-    teleport = False
-    fixed = [floor] # TODO: get fixed objects
+def plan(robot, block, fixed, teleport):
     grasp_gen = get_grasp_gen(robot, 'top')
     ik_fn = get_ik_fn(robot, fixed=fixed, teleport=teleport)
     free_motion_fn = get_free_motion_gen(robot, fixed=([block] + fixed), teleport=teleport)
@@ -34,6 +16,7 @@ def main():
 
     pose0 = BodyPose(block)
     conf0 = BodyConf(robot)
+    saved_world = WorldSaver()
     for grasp, in grasp_gen(block):
         saved_world.restore()
         result1 = ik_fn(block, pose0, grasp)
@@ -49,27 +32,31 @@ def main():
         if result3 is None:
             continue
         path3, = result3
-        command = Command(path1.body_paths +
+        return Command(path1.body_paths +
                           path2.body_paths +
                           path3.body_paths)
-        break
-    else:
+    return None
+
+
+def main(display='execute'): # control | execute | step
+    connect(use_gui=True)
+    disable_real_time()
+    robot = load_model(DRAKE_IIWA_URDF) # KUKA_IIWA_URDF | DRAKE_IIWA_URDF
+    floor = load_model('models/short_floor.urdf')
+    block = load_model(BLOCK_URDF, fixed_base=False)
+    set_pose(block, Pose(Point(y=0.5, z=stable_z(block, floor))))
+    set_default_camera()
+    dump_world()
+
+    saved_world = WorldSaver()
+    command = plan(robot, block, fixed=[floor], teleport=False)
+    if (command is None) or (display is None):
         print('Unable to find a plan!')
         return
 
     saved_world.restore()
     update_state()
-    # TODO: maybe some OpenRAVE links are disabled
-    # http://openrave.org/docs/0.8.2/collada_robot_extensions/
-
-    #< extra
-    #type = "collision" >
-    #< technique
-    #profile = "OpenRAVE"
-    # ignore_link_pair
-
-    display = 'control' # control | execute | step
-    input('{}?'.format(display))
+    user_input('{}?'.format(display))
     if display == 'control':
         enable_gravity()
         command.control(real_time=False, dt=0)
