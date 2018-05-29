@@ -6,7 +6,8 @@ from utils import get_pose, set_pose, get_link_pose, body_from_end_effector, get
     set_joint_positions, get_constraints, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
-    inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, input, get_sample_fn
+    inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, input, get_sample_fn, \
+    workspace_trajectory, point_from_pose, quat_from_pose
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
@@ -220,7 +221,12 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10):
                 path = [q_approach, q_grasp]
             else:
                 conf.assign()
-                path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=obstacles, direct=True)
+
+                direction, _ = grasp.approach_pose
+                path = workspace_trajectory(robot, grasp.link, point_from_pose(approach_pose), -direction,
+                                                   quat_from_pose(approach_pose))
+                print(path)
+                #path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=obstacles, direct=True)
                 if path is None:
                     if DEBUG_FAILURE: input('Approach motion failed')
                     continue

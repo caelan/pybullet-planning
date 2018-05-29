@@ -1688,6 +1688,23 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
         return None
     return kinematic_conf
 
+def workspace_trajectory(robot, link, start_point, direction, quat, step_size=0.01, **kwargs):
+    # TODO: pushing example
+    # TODO: just use current configuration?
+    distance = np.linalg.norm(direction)
+    unit_direction = np.array(direction) / distance
+    traj = []
+    for t in np.arange(0, distance, step_size):
+        point = start_point + t*unit_direction
+        pose = (point, quat)
+        conf = inverse_kinematics(robot, link, pose, **kwargs)
+        if conf is None:
+            return None
+        traj.append(conf)
+    return traj
+
+#####################################
+
 def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_iterations=200, tolerance=1e-3):
     # TODO: fix stationary joints
     # TODO: pass in set of movable joints and take least common ancestor
