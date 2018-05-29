@@ -1,5 +1,35 @@
 # Produced using OpenRAVE
 
+# TOOL_TFORM = [[0., 0., 1., 0.18],
+#              [0., 1., 0., 0.],
+#              [-1., 0., 0., 0.],
+#              [0., 0., 0., 1.]]
+
+# PR2_DISABLED_COLLISIONS = [('base_link', 'br_caster_l_wheel_link'), ('base_link', 'br_caster_r_wheel_link'),
+#                            ('base_link', 'fr_caster_l_wheel_link'), ('base_link', 'fr_caster_r_wheel_link'),
+#                            ('base_link', 'fl_caster_l_wheel_link'), ('base_link', 'fl_caster_r_wheel_link'),
+#                            ('base_link', 'bl_caster_l_wheel_link'), ('base_link', 'bl_caster_r_wheel_link'),
+#                            ('base_link', 'l_shoulder_pan_link'), ('base_link', 'r_shoulder_pan_link'),
+#                            ('torso_lift_link', 'l_shoulder_lift_link'), ('torso_lift_link', 'r_shoulder_lift_link'),
+#                            ('l_shoulder_pan_link', 'l_upper_arm_roll_link'),
+#                            ('r_shoulder_pan_link', 'r_upper_arm_roll_link'),
+#                            ('l_shoulder_pan_link', 'l_upper_arm_link'), ('r_shoulder_pan_link', 'r_upper_arm_link'),
+#                            ('l_elbow_flex_link', 'l_forearm_link'), ('r_elbow_flex_link', 'r_forearm_link'),
+#                            ('l_upper_arm_link', 'l_forearm_roll_link'), ('r_upper_arm_link', 'r_forearm_roll_link'),
+#                            ('l_forearm_link', 'l_gripper_palm_link'), ('r_forearm_link', 'r_gripper_palm_link'),
+#                            ('l_forearm_link', 'l_wrist_roll_link'), ('r_forearm_link', 'r_wrist_roll_link'),
+#                            ('l_gripper_l_finger_link', 'l_gripper_r_finger_link'),
+#                            ('r_gripper_l_finger_link', 'r_gripper_r_finger_link'),
+#                            ('l_gripper_l_finger_tip_link', 'l_gripper_r_finger_link'),
+#                            ('r_gripper_l_finger_tip_link', 'r_gripper_r_finger_link'),
+#                            ('l_gripper_l_finger_link', 'l_gripper_r_finger_tip_link'),
+#                            ('r_gripper_l_finger_link', 'r_gripper_r_finger_tip_link'),
+#                            ('torso_lift_link', 'head_tilt_link')
+# ] + [
+#     #('l_upper_arm_link', 'l_shoulder_lift_link'),
+#     #('r_upper_arm_link', 'r_shoulder_lift_link'),
+# ]
+
 PR2_NON_ADJACENT_LINKS = [('base_footprint', 'bl_caster_l_wheel_link'), ('base_link', 'bl_caster_l_wheel_link'),
                           ('base_bellow_link', 'bl_caster_l_wheel_link'), ('base_footprint', 'bl_caster_r_wheel_link'),
                           ('base_link', 'bl_caster_r_wheel_link'), ('base_bellow_link', 'bl_caster_r_wheel_link'),

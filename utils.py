@@ -105,13 +105,13 @@ class ClientSaver(object):
     def __init__(self, new_client=None):
         self.client = CLIENT
         if new_client is not None:
-            use_client(new_client)
+            set_client(new_client)
 
     def __enter__(self):
         pass
 
     def __exit__(self, type, value, traceback):
-        use_client(self.client)
+        set_client(self.client)
 
 
 class PoseSaver(object):
@@ -142,7 +142,12 @@ class ConfSaver(object):
 
 CLIENT = 0
 
-def use_client(client):
+def get_client(client=None):
+    if client is None:
+        return CLIENT
+    return client
+
+def set_client(client):
     global CLIENT
     CLIENT = client
 
@@ -199,17 +204,17 @@ def wait_for_interrupt(max_time=np.inf):
     finally:
         print()
 
-def wait_for_input(s=''):
-    print(s)
-    while True:
-        step_simulation()
-        line = sys.stdin.readline()
-        if line:
-            print('Fish')
-        #events = p.getKeyboardEvents() # TODO: only works when the viewer is in focus
-        #if events:
-        #    print(events)
-        # https://docs.python.org/2/library/select.html
+# def wait_for_input(s=''):
+#     print(s)
+#     while True:
+#         step_simulation()
+#         line = sys.stdin.readline()
+#         if line:
+#             pass
+#         #events = p.getKeyboardEvents() # TODO: only works when the viewer is in focus
+#         #if events:
+#         #    print(events)
+#         # https://docs.python.org/2/library/select.html
 
 
 def connect(use_gui=True, shadows=True):
@@ -241,11 +246,11 @@ def disconnect():
 def is_connected():
     return p.getConnectionInfo(physicsClientId=CLIENT)['isConnected']
 
-def get_connection():
-    return p.getConnectionInfo(physicsClientId=CLIENT)['connectionMethod']
+def get_connection(client=None):
+    return p.getConnectionInfo(physicsClientId=get_client(client))['connectionMethod']
 
-def has_gui():
-    return get_connection() == p.GUI
+def has_gui(client=None):
+    return get_connection(get_client(client)) == p.GUI
 
 def get_data_path():
     import pybullet_data
@@ -780,7 +785,6 @@ def get_fixed_links(body):
                     cluster.append(next_link)
                     queue.append(next_link)
                     visited.add(next_link)
-        #print cluster
         fixed.update(product(cluster, cluster))
     return fixed
 
@@ -951,7 +955,6 @@ def collision_shape_from_data(data, body, link, client):
     if (data.geometry_type == p.GEOM_MESH) and (data.filename == 'unknown_file'):
         return -1
     pose = (data.local_frame_pos, data.local_frame_orn)
-    #print(body, link, data.object_unique_id, data.linkIndex)
     pose = multiply(invert(get_joint_inertial_pose(body, link)), pose)
     point, quat = pose
     # TODO: the visual data seems affected by the collision data
@@ -968,34 +971,8 @@ def collision_shape_from_data(data, body, link, client):
                                   physicsClientId=client)
     #return p.createCollisionShapeArray()
 
-"""
-def clone_body_editor(body, collision=True, visual=True):
-    #from pybullet_utils.urdfEditor import UrdfEditor
-    from urdfEditor import UrdfEditor
-    editor = UrdfEditor()
-    editor.initializeFromBulletBody(body, physicsClientId=CLIENT)
-    return editor.createMultiBody(physicsClientId=CLIENT) # pybullet.error: createVisualShapeArray failed.
-
-    # TODO: failure is because broken mesh files
-    #return body_from_editor(editor, collision=collision, visual=visual)
-    #filename = 'temp.urdf'
-    #editor.saveUrdf(filename)
-    #new_body = load_model(filename)
-    #os.remove(filename)
-    #return new_body
-    # TODO: problem with collision is that URDF editor is storing mesh when it should be geom
-    # example: fl_caster_l_wheel_link # <mesh filename="unknown_file"/>
-
-def save_body(body, filename):
-    #from pybullet_utils.urdfEditor import UrdfEditor
-    from urdfEditor import UrdfEditor
-    editor = UrdfEditor()
-    editor.initializeFromBulletBody(body, physicsClientId=CLIENT)
-    editor.saveUrdf(filename)
-"""
-
 def clone_visual_shape(body, link, client):
-    if not has_gui():
+    if not has_gui(client):
         return -1
     visual_data = get_visual_data(body, link)
     if visual_data:
@@ -1011,19 +988,19 @@ def clone_collision_shape(body, link, client):
         return collision_shape_from_data(collision_data[0], body, link, client)
     return -1
 
-def clone_body(body, links=None, collision=True, visual=True, client=CLIENT):
+def clone_body(body, links=None, collision=True, visual=True, client=None):
     # TODO: names are not retained
     # TODO: error with createMultiBody link poses on PR2
     # localVisualFrame_position: position of local visual frame, relative to link/joint frame
     # localVisualFrame orientation: orientation of local visual frame relative to link/joint frame
     # parentFramePos: joint position in parent frame
     # parentFrameOrn: joint orientation in parent frame
+    client = get_client(client)
     if links is None:
         links = get_links(body)
     movable_joints = [joint for joint in links if is_movable(body, joint)]
     new_from_original = {}
-    #base_link = BASE_LINK
-    base_link = get_link_parent(body, links[0])
+    base_link = get_link_parent(body, links[0]) if links else BASE_LINK
     new_from_original[base_link] = -1
 
     masses = []
@@ -1076,7 +1053,7 @@ def clone_body(body, links=None, collision=True, visual=True, client=CLIENT):
     set_configuration(new_body, get_joint_positions(body, movable_joints))
     return new_body
 
-def clone_world(client):
+def clone_world(client=None):
     for body in get_bodies():
         clone_body(body, collision=True, visual=True, client=client)
 
@@ -1335,9 +1312,6 @@ def get_moving_pairs(body, moving_joints):
             link2 = moving_links[j]
             ancestors2 = set(get_joint_ancestors(body, link2)) & set(moving_joints)
             if ancestors1 != ancestors2:
-                #print(get_link_name(body, link1), ancestors1)
-                #print(get_link_name(body, link2), ancestors2)
-                #input('awefawef')
                 yield link1, link2
 
 def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
@@ -1378,7 +1352,6 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
         #    return True
         for link1, link2 in check_link_pairs:
             if pairwise_link_collision(body, link1, body, link2):
-                print(get_link_name(body, link1), get_link_name(body, link2))
                 return True
         return any(pairwise_collision(*pair) for pair in check_body_pairs)
 

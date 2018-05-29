@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import argparse
 import cProfile
 import pstats
@@ -13,8 +15,8 @@ from ss.model.operators import Action, Axiom
 from ss.model.problem import Problem
 from ss.model.streams import Stream, ListStream, GenStream, FnStream
 from utils import connect, add_data_path, disconnect, get_pose, enable_gravity, is_placement, joints_from_names, \
-    get_joint_positions, input, use_client, clone_body ,ClientSaver, step_simulation, user_input, \
-    save_state, restore_state, save_bullet, restore_bullet, clone_world
+    get_joint_positions, input, set_client, clone_body ,ClientSaver, step_simulation, user_input, \
+    save_state, restore_state, save_bullet, restore_bullet, clone_world, get_bodies, get_joints, update_state
 
 A = '?a'
 O = '?o'; O2 = '?o2'
@@ -218,7 +220,7 @@ def post_process(problem, plan):
     robot = problem.robot
     commands = []
     for i, (action, args) in enumerate(plan):
-        print i, action, args
+        print(i, action, args)
         if action.name == 'move':
             t = args[-1]
             new_commands = [t]
@@ -257,7 +259,7 @@ def close_gripper_test(problem):
     values = [get_min_limit(problem.robot, joint) for joint in joints]
     for _ in joint_controller_hold(problem.robot, joints, values):
         enable_gravity()
-        step_simluation()
+        step_simulation()
         # if not real_time:
         #    p.stepSimulation()
         # time.sleep(dt)
@@ -270,27 +272,37 @@ def main(search='ff-astar', max_time=60, verbose=True):
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem
     # cleaning_button_problem | cooking_button_problem
 
-    world1 = connect(use_gui=False)
-    print(world1) # 0
+    #sim_world = connect(use_gui=True)
+    #add_data_path()
+    #problem = problem_fn()
+    #real_world = connect(use_gui=False)
+    #clone_world(real_world)
+    #set_client(real_world)
+    # TODO: the cloning doesn't preserve joint names (joint77...)
+
+    sim_world = connect(use_gui=False)
+    set_client(sim_world)
     add_data_path()
     problem = problem_fn()
     #state_id = save_state()
 
     if args.display:
-        world2 = connect(use_gui=True)
+        real_world = connect(use_gui=True)
+        add_data_path()
         # world_file = 'test_world.py'
         # p.saveWorld(world_file) # Saves a Python file to be executed
         # state_id = p.saveState()
         #test_bullet = 'test_world.bullet'
         #save_bullet(test_bullet)
-        #clone_world(world2)
-        with ClientSaver(world2):
-            #pass
-            #restore_bullet(test_bullet)
+        #clone_world(real_world)
+        with ClientSaver(real_world):
+            # pass
+            # restore_bullet(test_bullet)
             problem_fn()  # TODO: way of doing this without reloading?
+            update_state()
 
     ss_problem = ss_from_problem(problem, remote=True, teleport=False)
-    print ss_problem
+    print(ss_problem)
     #ss_problem.dump()
 
     t0 = time.time()
@@ -303,13 +315,13 @@ def main(search='ff-astar', max_time=60, verbose=True):
     pr.disable()
     pstats.Stats(pr).sort_stats('tottime').print_stats(10) # tottime | cumtime
 
-    print 'Time:', time.time() - t0
+    print('Time:', time.time() - t0)
     #print_plan(plan, evaluations)
     if (plan is None) or not args.display:
         disconnect()
         return
 
-    use_client(world2)
+    set_client(real_world)
     commands = post_process(problem, plan)
     enable_gravity()
     #step_commands(commands)

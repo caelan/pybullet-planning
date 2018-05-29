@@ -413,6 +413,32 @@ def experimental_inverse_kinematics(robot, link, pose,
     return kinematic_conf
 
 """
+def clone_body_editor(body, collision=True, visual=True):
+    #from pybullet_utils.urdfEditor import UrdfEditor
+    from urdfEditor import UrdfEditor
+    editor = UrdfEditor()
+    editor.initializeFromBulletBody(body, physicsClientId=CLIENT)
+    return editor.createMultiBody(physicsClientId=CLIENT) # pybullet.error: createVisualShapeArray failed.
+
+    # TODO: failure is because broken mesh files
+    #return body_from_editor(editor, collision=collision, visual=visual)
+    #filename = 'temp.urdf'
+    #editor.saveUrdf(filename)
+    #new_body = load_model(filename)
+    #os.remove(filename)
+    #return new_body
+    # TODO: problem with collision is that URDF editor is storing mesh when it should be geom
+    # example: fl_caster_l_wheel_link # <mesh filename="unknown_file"/>
+
+def save_body(body, filename):
+    #from pybullet_utils.urdfEditor import UrdfEditor
+    from urdfEditor import UrdfEditor
+    editor = UrdfEditor()
+    editor.initializeFromBulletBody(body, physicsClientId=CLIENT)
+    editor.saveUrdf(filename)
+"""
+
+"""
 def body_from_editor(editor, collision=True, visual=True):
     #basePosition = [0, 0, 0]
     #baseOrientation = unit_quat()

@@ -9,9 +9,7 @@ from pr2_never_collisions import NEVER_COLLISIONS
 from utils import multiply, get_link_pose, joint_from_name, set_joint_position, set_joint_positions, \
     get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
-    unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits
-
-#####################################
+    unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints
 
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
@@ -21,6 +19,10 @@ WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -
 CENTER_LEFT_ARM = [-0.07133691252641006, -0.052973836083405494, 1.5741805775919033, -1.4481146328076862,
                    1.571782540186805, -1.4891468812835686, -9.413338322697955]
 # WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296, -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
+
+PR2_LEFT_ARM_CONFS = {
+    'top': TOP_HOLDING_LEFT_ARM,
+}
 
 PR2_GROUPS = {
     'base': ['x', 'y', 'theta'],
@@ -45,54 +47,34 @@ ARM_LINK_NAMES = {
     'right': 'r_gripper_palm_link',
 }
 
-HEAD_LINK = 'high_def_optical_frame' # high_def_optical_frame | high_def_frame | wide_stereo_l_stereo_camera_frame | ...
+HEAD_LINK_NAME = 'high_def_optical_frame' # high_def_optical_frame | high_def_frame | wide_stereo_l_stereo_camera_frame | ...
 # 'head_mount_kinect_rgb_optical_frame'
 # 'head_mount_kinect_rgb_link'
 
 TORSO_JOINT_NAME = 'torso_lift_joint'
 # LEFT_TOOL_NAME = 'l_gripper_tool_frame' # l_gripper_tool_joint | l_gripper_tool_frame
 
-# TOOL_TFORM = [[0., 0., 1., 0.18],
-#              [0., 1., 0., 0.],
-#              [-1., 0., 0., 0.],
-#              [0., 0., 0., 1.]]
 TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678])
 TOOL_DIRECTION = [0., 0., 1.]
 
-# PR2_DISABLED_COLLISIONS = [('base_link', 'br_caster_l_wheel_link'), ('base_link', 'br_caster_r_wheel_link'),
-#                            ('base_link', 'fr_caster_l_wheel_link'), ('base_link', 'fr_caster_r_wheel_link'),
-#                            ('base_link', 'fl_caster_l_wheel_link'), ('base_link', 'fl_caster_r_wheel_link'),
-#                            ('base_link', 'bl_caster_l_wheel_link'), ('base_link', 'bl_caster_r_wheel_link'),
-#                            ('base_link', 'l_shoulder_pan_link'), ('base_link', 'r_shoulder_pan_link'),
-#                            ('torso_lift_link', 'l_shoulder_lift_link'), ('torso_lift_link', 'r_shoulder_lift_link'),
-#                            ('l_shoulder_pan_link', 'l_upper_arm_roll_link'),
-#                            ('r_shoulder_pan_link', 'r_upper_arm_roll_link'),
-#                            ('l_shoulder_pan_link', 'l_upper_arm_link'), ('r_shoulder_pan_link', 'r_upper_arm_link'),
-#                            ('l_elbow_flex_link', 'l_forearm_link'), ('r_elbow_flex_link', 'r_forearm_link'),
-#                            ('l_upper_arm_link', 'l_forearm_roll_link'), ('r_upper_arm_link', 'r_forearm_roll_link'),
-#                            ('l_forearm_link', 'l_gripper_palm_link'), ('r_forearm_link', 'r_gripper_palm_link'),
-#                            ('l_forearm_link', 'l_wrist_roll_link'), ('r_forearm_link', 'r_wrist_roll_link'),
-#                            ('l_gripper_l_finger_link', 'l_gripper_r_finger_link'),
-#                            ('r_gripper_l_finger_link', 'r_gripper_r_finger_link'),
-#                            ('l_gripper_l_finger_tip_link', 'l_gripper_r_finger_link'),
-#                            ('r_gripper_l_finger_tip_link', 'r_gripper_r_finger_link'),
-#                            ('l_gripper_l_finger_link', 'l_gripper_r_finger_tip_link'),
-#                            ('r_gripper_l_finger_link', 'r_gripper_r_finger_tip_link'),
-#                            ('torso_lift_link', 'head_tilt_link')
-# ] + [
-#     #('l_upper_arm_link', 'l_shoulder_lift_link'),
-#     #('r_upper_arm_link', 'r_shoulder_lift_link'),
-# ]
+#####################################
+
+PR2_JOINT_NAMES = []
+
+def set_pr2_joint_names(pr2):
+    for joint in get_joints(pr2):
+        PR2_JOINT_NAMES.append(joint)
+
+def get_pr2_joints(joint_names):
+    joint_from_name = dict(zip(PR2_JOINT_NAMES, range(len(PR2_JOINT_NAMES))))
+    return [joint_from_name[name] for name in joint_names]
+
+#####################################
 
 def rightarm_from_leftarm(config):
     # right_from_left = np.array([-1, 1, -1, 1, -1, 1, 1])
     right_from_left = np.array([-1, 1, -1, 1, -1, 1, -1])  # Drake
     return config * right_from_left
-
-
-REST_RIGHT_ARM = rightarm_from_leftarm(REST_LEFT_ARM)
-TOP_HOLDING_RIGHT_ARM = rightarm_from_leftarm(TOP_HOLDING_LEFT_ARM)
-
 
 def arm_conf(arm, config):
     if arm == 'left':
@@ -205,6 +187,9 @@ def close_arm(robot, arm):
         joint = joint_from_name(robot, name)
         set_joint_position(robot, joint, get_min_limit(robot, joint))
 
+#####################################
+
+# Grasps
 
 #GRASP_LENGTH = 0.04
 GRASP_LENGTH = 0.
@@ -276,6 +261,8 @@ GET_GRASPS = {
 
 #####################################
 
+# Inverse reachability
+
 DATABASES_DIR = 'databases'
 IR_FILENAME = '{}_{}_ir.pickle'
 
@@ -302,6 +289,8 @@ def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
         yield get_pose(robot)
 
 #####################################
+
+# Camera
 
 WIDTH, HEIGHT = 640, 480
 FX, FY = 772.55, 772.5
@@ -337,7 +326,7 @@ def cone_mesh_from_support(support):
     return vertices, faces
 
 def get_detection_cone(pr2, body):
-    head_link = link_from_name(pr2, HEAD_LINK)
+    head_link = link_from_name(pr2, HEAD_LINK_NAME)
     with PoseSaver(body):
         body_head = multiply(invert(get_link_pose(pr2, head_link)), get_pose(body))
         set_pose(body, body_head)
@@ -370,7 +359,7 @@ def plan_scan_path(pr2, tilt=0):
     third_conf = np.array([0, tilt])
     return [start_conf, first_conf, second_conf, third_conf]
 
-def inverse_visibility(pr2, point, head_name=HEAD_LINK):
+def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME):
     # TODO: test visibility by getting box
     # TODO: IK version
     # https://github.com/PR2/pr2_controllers/blob/kinetic-devel/pr2_head_action/src/pr2_point_frame.cpp

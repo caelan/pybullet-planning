@@ -5,7 +5,7 @@ from __future__ import print_function
 import pybullet as p
 import numpy as np
 
-from pr2_utils import TORSO_JOINT_NAME, HEAD_LINK, \
+from pr2_utils import TORSO_JOINT_NAME, HEAD_LINK_NAME, \
     PR2_GROUPS, get_cone_mesh, \
     REST_LEFT_ARM, rightarm_from_leftarm, inverse_visibility, get_detection_cone
 from utils import joint_from_name, set_joint_position, \
@@ -51,18 +51,18 @@ def main():
 
         p.addUserDebugLine(point_from_pose(get_link_pose(pr2, head_link)),
                            target_point, lineColorRGB=(1, 0, 0))  # addUserDebugText
-        p.addUserDebugLine(point_from_pose(get_link_pose(pr2, link_from_name(pr2, HEAD_LINK))),
+        p.addUserDebugLine(point_from_pose(get_link_pose(pr2, link_from_name(pr2, HEAD_LINK_NAME))),
                            target_point, lineColorRGB=(0, 0, 1))  # addUserDebugText
 
         # head_conf = sub_inverse_kinematics(pr2, head_joints[0], HEAD_LINK, )
         head_conf = inverse_visibility(pr2, target_point)
         set_joint_positions(pr2, head_joints, head_conf)
 
-        head_pose = get_link_pose(pr2, link_from_name(pr2, HEAD_LINK))
+        head_pose = get_link_pose(pr2, link_from_name(pr2, HEAD_LINK_NAME))
         detect_cone = create_mesh(get_detection_cone(pr2, block), color=(0, 1, 0, 0.5))
         set_pose(detect_cone, head_pose)
         view_cone = create_mesh(get_cone_mesh(depth=2.5), color=(1, 0, 0, 0.25))
-        set_pose(view_cone, get_link_pose(pr2, link_from_name(pr2, HEAD_LINK)))
+        set_pose(view_cone, get_link_pose(pr2, link_from_name(pr2, HEAD_LINK_NAME)))
         wait_for_interrupt()
         remove_body(detect_cone)
         remove_body(view_cone)
