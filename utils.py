@@ -1623,6 +1623,14 @@ def joint_controller_hold(body, joints, target, max_time=None):
         conf[movable_from_original[joint]] = value
     return joint_controller(body, movable_joints, conf)
 
+def velocity_control_joints(body, joints, velocities):
+    #kv = 0.3
+    return p.setJointMotorControlArray(body, joints, p.VELOCITY_CONTROL,
+                                       targetVelocities=velocities,
+                                       physicsClientId=CLIENT) #,
+                                        #velocityGains=[kv] * len(joints),)
+                                        #forces=forces)
+
 #####################################
 
 class BodySaver(object): # TODO: with statements
