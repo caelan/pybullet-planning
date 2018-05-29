@@ -52,7 +52,7 @@ STOVE_URDF = 'models/stove.urdf'
 
 def is_darwin(): # TODO: change loading accordingly
     return platform.system() == 'Darwin' # platform.release()
-
+    #return sys.platform == 'darwin'
 
 def read(filename):
     with open(filename, 'r') as f:

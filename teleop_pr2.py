@@ -6,6 +6,7 @@ import select
 import sys
 import termios
 import tty
+import threading
 
 from pr2_utils import PR2_GROUPS
 from utils import add_data_path, connect, enable_gravity, load_model, joints_from_names, load_pybullet, \
@@ -80,9 +81,50 @@ def print_velocities(speed, turn):
 
 #####################################
 
+def run_simulate(pr2):
+	joints = joints_from_names(pr2, PR2_GROUPS['base'])
+	dx = dy = dz = dth = 1
+	speed, turn = 0.5, 1.0
+	while True:
+		velocities = [dx * speed, dy * speed, dth * turn]
+		velocity_control_joints(pr2, joints, velocities)
+
+def run_thread(pr2):
+	joints = joints_from_names(pr2, PR2_GROUPS['base'])
+	dx = dy = dz = dth = 0
+	speed, turn = 0.5, 1.0
+	settings = termios.tcgetattr(sys.stdin)
+	try:
+		print(HELP_MSG)
+		print_velocities(speed, turn)
+		while True:
+			key = get_key(settings)  # Waits until a key is read
+			if key in MOVE_BINDINGS:
+				dx, dy, dz, dth = MOVE_BINDINGS[key]
+			elif key in SPEED_BINDINGS:
+				mspeed, mturn = SPEED_BINDINGS[key]
+				speed *= mspeed
+				turn *= mturn
+				print_velocities(speed, turn)
+			else:  # When it receives another key
+				dx = dy = dz = dth = 0
+				if key == ESCAPE:
+					break
+			# twist.linear.dz = dz * speed
+			velocities = [dx * speed, dy * speed, dth * turn]
+			velocity_control_joints(pr2, joints, velocities)
+	except Exception as e:
+		print(e)
+
+	finally:
+		termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+
+#####################################
+
 def main():
 	"""
 	https://github.com/ros-teleop/teleop_twist_keyboard
+	http://openrave.org/docs/latest_stable/_modules/openravepy/misc/#SetViewerUserThread
 	"""
 
 	connect(use_gui=True)
@@ -90,43 +132,15 @@ def main():
 	load_pybullet("plane.urdf")
 	#load_pybullet("models/table_collision/table.urdf")
 	pr2 = load_model("models/drake/pr2_description/urdf/pr2_simplified.urdf", fixed_base=True)
-	joints = joints_from_names(pr2, PR2_GROUPS['base'])
 	enable_gravity()
 	enable_real_time() # TODO: won't work as well on OS X due to simulation thread
 
-	settings = termios.tcgetattr(sys.stdin)
-	speed = 0.5
-	turn = 1.0
-	dx = dy = dz = dth = 0
-	status = 0
-
-	try:
-		print(HELP_MSG)
-		print_velocities(speed, turn)
-		while True:
-			key = get_key(settings)  # Waits until a key is read
-			if key in MOVE_BINDINGS.keys():
-				dx, dy, dz, dth = MOVE_BINDINGS[key]
-			elif key in SPEED_BINDINGS.keys():
-				mspeed, mturn = SPEED_BINDINGS[key]
-				speed *= mspeed
-				turn *= mturn
-				print_velocities(speed, turn)
-				if status == 14:
-					print(HELP_MSG)
-				status = (status + 1) % 15
-			else:  # When it receives another key
-				dx = dy = dz = dth = 0
-				if key == ESCAPE:
-					break
-			#twist.linear.dz = dz * speed
-			velocities = [dx*speed, dy*speed, dth*turn]
-			velocity_control_joints(pr2, joints, velocities)
-	except Exception as e:
-		print(e)
-
-	finally:
-		termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+	#run_simulate(pr2)
+	run_thread(pr2)
+	# TODO: keep working on this
+	#userthread = threading.Thread(target=run_thread, args=[pr2])
+	#userthread.start()
+	#userthread.join()
 
 	disconnect()
 
