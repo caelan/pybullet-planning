@@ -3,25 +3,14 @@
 from __future__ import print_function
 
 import pybullet as p
-import numpy as np
 
 from pr2_utils import TORSO_JOINT_NAME, HEAD_LINK_NAME, \
     PR2_GROUPS, get_cone_mesh, get_detections, \
-    REST_LEFT_ARM, rightarm_from_leftarm, inverse_visibility, get_detection_cone
+    REST_LEFT_ARM, rightarm_from_leftarm, inverse_visibility, get_detection_cone, visible_base_generator
 from utils import joint_from_name, set_joint_position, \
     set_joint_positions, connect, wait_for_interrupt, get_link_pose, link_from_name, set_point, set_pose, \
-    dump_body, load_model, create_mesh, unit_from_theta, \
-    point_from_pose, get_pose, joints_from_names, BLOCK_URDF, remove_body
+    dump_body, load_model, create_mesh, point_from_pose, get_pose, joints_from_names, BLOCK_URDF, remove_body
 
-def visible_base_generator(robot, target_point, distance_range):
-    #base_from_table = point_from_pose(get_pose(robot))[:2]
-    while True:
-        base_from_table = unit_from_theta(np.random.uniform(0, 2 * np.pi))
-        look_distance = np.random.uniform(*distance_range)
-        base_xy = target_point[:2] - look_distance * base_from_table
-        base_theta = np.math.atan2(base_from_table[1], base_from_table[0])
-        base_q = np.append(base_xy, base_theta)
-        yield base_q
 
 def main():
     connect(use_gui=True)
@@ -59,6 +48,7 @@ def main():
         head_conf = inverse_visibility(pr2, target_point)
         set_joint_positions(pr2, head_joints, head_conf)
         print(get_detections(pr2))
+        # TODO: does this detect the robot sometimes?
 
         detect_mesh, z = get_detection_cone(pr2, block)
         detect_cone = create_mesh(detect_mesh, color=(0, 1, 0, 0.5))

@@ -10,7 +10,7 @@ from utils import multiply, get_link_pose, joint_from_name, set_joint_position, 
     get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
     unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
-    ConfSaver, get_bodies, create_mesh, remove_body, get_body_name, single_collision
+    ConfSaver, get_bodies, create_mesh, remove_body, get_body_name, single_collision, unit_from_theta
 
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
@@ -438,3 +438,12 @@ def get_kinect_registrations(pr2, **kwargs):
 #####################################
 
 # TODO: base motion with some stochasticity
+def visible_base_generator(robot, target_point, base_range):
+    #base_from_table = point_from_pose(get_pose(robot))[:2]
+    while True:
+        base_from_table = unit_from_theta(np.random.uniform(0, 2 * np.pi))
+        look_distance = np.random.uniform(*base_range)
+        base_xy = target_point[:2] - look_distance * base_from_table
+        base_theta = np.math.atan2(base_from_table[1], base_from_table[0]) # TODO: stochastic orientation?
+        base_q = np.append(base_xy, base_theta)
+        yield base_q
