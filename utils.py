@@ -1087,9 +1087,10 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
     set_configuration(new_body, get_joint_positions(body, movable_joints))
     return new_body
 
-def clone_world(client=None):
+def clone_world(client=None, exclude=[]):
     for body in get_bodies():
-        clone_body(body, collision=True, visual=True, client=client)
+        if body not in exclude:
+            clone_body(body, collision=True, visual=True, client=client)
 
 #####################################
 
