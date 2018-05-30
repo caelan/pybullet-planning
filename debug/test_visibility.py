@@ -45,9 +45,10 @@ def main():
     distance_range = (max_register_distance/2, max_register_distance)
     base_generator = visible_base_generator(pr2, target_point, distance_range)
 
+    base_joints = joints_from_names(pr2, PR2_GROUPS['base'])
     for i in range(5):
         base_conf = next(base_generator)
-        set_joint_positions(pr2, joints_from_names(pr2, PR2_GROUPS['base']), base_conf)
+        set_joint_positions(pr2, base_joints, base_conf)
 
         p.addUserDebugLine(point_from_pose(get_link_pose(pr2, head_link)),
                            target_point, lineColorRGB=(1, 0, 0))  # addUserDebugText

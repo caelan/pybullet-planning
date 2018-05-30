@@ -9,7 +9,7 @@ from pr2_never_collisions import NEVER_COLLISIONS
 from utils import multiply, get_link_pose, joint_from_name, set_joint_position, set_joint_positions, \
     get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
-    unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints
+    unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, ConfSaver
 
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
@@ -309,11 +309,33 @@ def ray_from_pixel(camera_matrix, pixel):
 def pixel_from_ray(camera_matrix, ray):
     return camera_matrix.dot(ray / ray[2])[:2]
 
+def get_pr2_camera_matrix():
+    return get_camera_matrix(WIDTH, HEIGHT, FX, FY)
+
+def get_pr2_view_section(z):
+    camera_matrix = get_pr2_camera_matrix()
+    pixels = [(0, 0), (WIDTH, HEIGHT)]
+    return [z*ray_from_pixel(camera_matrix, p) for p in pixels]
+
 def is_visible_point(camera_matrix, depth, point):
     if not (0 <= point[2] < depth):
         return False
     px, py = pixel_from_ray(camera_matrix, point)
     return (0 <= px < WIDTH) and (0 <= py < HEIGHT)
+
+def is_visible_aabb(body_lower, body_upper):
+    z = body_lower[2]
+    if z < 0:
+        return False
+    view_lower, view_upper = get_pr2_view_section(z)
+    return not (np.any(body_lower[:2] < view_lower[:2]) or
+                np.any(view_upper[:2] < body_upper[:2]))
+
+def support_from_aabb(lower, upper):
+    min_x, min_y, z = lower
+    max_x, max_y, _ = upper
+    return [(min_x, min_y, z), (min_x, max_y, z),
+            (max_x, max_y, z), (max_x, min_y, z)]
 
 def cone_mesh_from_support(support):
     assert(len(support) == 4)
@@ -330,17 +352,15 @@ def get_detection_cone(pr2, body):
     with PoseSaver(body):
         body_head = multiply(invert(get_link_pose(pr2, head_link)), get_pose(body))
         set_pose(body, body_head)
-        lower, upper = get_lower_upper(body)
-        min_x, min_y, z = lower
-        max_x, max_y, _ = upper
-        support = [(min_x, min_y, z), (min_x, max_y, z),
-                    (max_x, max_y, z), (max_x, min_y, z)]
-        return cone_mesh_from_support(support)
+        body_lower, body_upper = get_lower_upper(body)
+        if not is_visible_aabb(body_lower, body_upper):
+            return None
+        return cone_mesh_from_support(support_from_aabb(body_lower, body_upper))
 
 def get_cone_mesh(depth=5):
     # TODO: attach to the pr2?
     cone = [(0, 0), (WIDTH, 0), (WIDTH, HEIGHT), (0, HEIGHT)]
-    camera_matrix = get_camera_matrix(WIDTH, HEIGHT, FX, FY)
+    camera_matrix = get_pr2_camera_matrix()
     vertices = []
     for pixel in cone:
         ray = depth * ray_from_pixel(camera_matrix, pixel)
@@ -368,7 +388,10 @@ def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME):
     optical_frame = ('optical' in head_name)
     head_link = link_from_name(pr2, head_name)
 
-    head_pose = get_link_pose(pr2, head_link)
+    head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
+    with ConfSaver(pr2):
+        set_joint_positions(pr2, head_joints, np.zeros(len(head_joints)))
+        head_pose = get_link_pose(pr2, head_link)
     point_head = point_from_pose(multiply(invert(head_pose), Pose(point)))
     if optical_frame:
         dy, dz, dx =  np.array([-1, -1, 1])*np.array(point_head)

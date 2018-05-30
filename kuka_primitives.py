@@ -221,12 +221,10 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10):
                 path = [q_approach, q_grasp]
             else:
                 conf.assign()
-
-                direction, _ = grasp.approach_pose
-                path = workspace_trajectory(robot, grasp.link, point_from_pose(approach_pose), -direction,
-                                                   quat_from_pose(approach_pose))
-                print(path)
-                #path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=obstacles, direct=True)
+                #direction, _ = grasp.approach_pose
+                #path = workspace_trajectory(robot, grasp.link, point_from_pose(approach_pose), -direction,
+                #                                   quat_from_pose(approach_pose))
+                path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=obstacles, direct=True)
                 if path is None:
                     if DEBUG_FAILURE: input('Approach motion failed')
                     continue

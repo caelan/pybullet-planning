@@ -1691,6 +1691,8 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
 def workspace_trajectory(robot, link, start_point, direction, quat, step_size=0.01, **kwargs):
     # TODO: pushing example
     # TODO: just use current configuration?
+    # TODO: check collisions?
+    # TODO: lower intermediate tolerance
     distance = np.linalg.norm(direction)
     unit_direction = np.array(direction) / distance
     traj = []
