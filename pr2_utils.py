@@ -2,14 +2,15 @@ import math
 import os
 import random
 import re
-
 import numpy as np
 
+from collections import namedtuple
 from pr2_never_collisions import NEVER_COLLISIONS
 from utils import multiply, get_link_pose, joint_from_name, set_joint_position, set_joint_positions, \
     get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
-    unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, ConfSaver
+    unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
+    ConfSaver, get_bodies, create_mesh, remove_body, get_body_name, single_collision
 
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
@@ -294,6 +295,7 @@ def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
 
 WIDTH, HEIGHT = 640, 480
 FX, FY = 772.55, 772.5
+MAX_DEPTH = 5
 
 def get_camera_matrix(width, height, fx, fy):
     # cx, cy = 320.5, 240.5
@@ -347,17 +349,20 @@ def cone_mesh_from_support(support):
         faces.append((0, index1, index2))
     return vertices, faces
 
-def get_detection_cone(pr2, body):
+def get_detection_cone(pr2, body, depth=MAX_DEPTH):
     head_link = link_from_name(pr2, HEAD_LINK_NAME)
     with PoseSaver(body):
         body_head = multiply(invert(get_link_pose(pr2, head_link)), get_pose(body))
         set_pose(body, body_head)
         body_lower, body_upper = get_lower_upper(body)
+        z = body_lower[2]
+        if depth < z:
+            return None, z
         if not is_visible_aabb(body_lower, body_upper):
-            return None
-        return cone_mesh_from_support(support_from_aabb(body_lower, body_upper))
+            return None, z
+        return cone_mesh_from_support(support_from_aabb(body_lower, body_upper)), z
 
-def get_cone_mesh(depth=5):
+def get_cone_mesh(depth=MAX_DEPTH):
     # TODO: attach to the pr2?
     cone = [(0, 0), (WIDTH, 0), (WIDTH, HEIGHT), (0, HEIGHT)]
     camera_matrix = get_pr2_camera_matrix()
@@ -403,3 +408,33 @@ def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME):
     # TODO: test joint limits
     #pose = Pose(point_from_pose(head_pose), Euler(pitch=phi, yaw=theta)) # TODO: initial roll?
     return conf
+
+#####################################
+
+Detection = namedtuple('Detection', ['body', 'distance'])
+
+def get_detections(pr2, p_false_neg=0, **kwargs):
+    detections = []
+    for body in get_bodies():
+        if np.random.random() < p_false_neg:
+            continue
+        mesh, z = get_detection_cone(pr2, body)
+        if mesh is None:
+            continue
+        cone = create_mesh(mesh, color=None)
+        if not single_collision(cone):
+            detections.append(Detection(body, z))
+        remove_body(cone)
+    return detections
+
+def get_visual_detections(pr2, **kwargs):
+    return get_detections(pr2, depth=5.0, **kwargs)
+
+def get_kinect_registrations(pr2, **kwargs):
+    return get_detections(pr2, depth=2.5, **kwargs)
+
+# TODO: Gaussian on resulting pose
+
+#####################################
+
+# TODO: base motion with some stochasticity
