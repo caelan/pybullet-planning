@@ -1513,7 +1513,7 @@ def is_center_stable(body, surface, epsilon=1e-2):
            (aabb_contains_point(base_center[:2], aabb2d_from_aabb(bottom_aabb)))
 
 
-def sample_placement(top_body, bottom_body, max_attempts=50):
+def sample_placement(top_body, bottom_body, max_attempts=50, epsilon=1e-3):
     bottom_aabb = get_lower_upper(bottom_body)
     for _ in range(max_attempts):
         theta = np.random.uniform(*CIRCULAR_LIMITS)
@@ -1525,7 +1525,7 @@ def sample_placement(top_body, bottom_body, max_attempts=50):
         if np.any(upper < lower):
           continue
         x, y = np.random.uniform(lower, upper)
-        z = (bottom_aabb[1] + extent/2.)[2]
+        z = (bottom_aabb[1] + extent/2.)[2] + epsilon
         point = np.array([x, y, z]) + (get_point(top_body) - center)
         set_point(top_body, point)
         return point, quat

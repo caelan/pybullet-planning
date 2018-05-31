@@ -5,7 +5,7 @@ from utils import invert, multiply, get_name, set_pose, get_link_pose, link_from
     unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values, \
     inverse_kinematics, uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, \
     remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
-    get_max_limit, get_min_limit, user_input, step_simulation, update_state, get_body_name
+    get_max_limit, get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies
 from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \
     get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses, PR2_GROUPS, joints_from_names
@@ -77,6 +77,9 @@ class Trajectory(Command):
                 user_input('Continue?')
             else:
                 time.sleep(time_step)
+        end_conf = self.path[-1]
+        if isinstance(end_conf, Pose):
+            state.poses[end_conf.body] = end_conf
     def control(self, real_time=False, dt=0):
         # TODO: just waypoints
         if real_time:
@@ -106,6 +109,7 @@ class Attach(Command):
         self.link = link_from_name(self.robot, ARM_LINK_NAMES[self.arm])
     def apply(self, state, **kwargs):
         state.attachments[self.body] = self
+        del state.poses[self.body]
     def step(self):
         gripper_pose = get_link_pose(self.robot, self.link)
         body_pose = multiply(gripper_pose, self.grasp.value)
@@ -139,8 +143,10 @@ class Detach(Command):
         self.arm = arm
         self.body = body
         self.link = link_from_name(self.robot, ARM_LINK_NAMES[self.arm])
+        # TODO: pose argument to maintain same object
     def apply(self, state, **kwargs):
         del state.attachments[self.body]
+        state.poses[self.body] = Pose(self.body, get_pose(self.body))
     def step(self):
         open_arm(self.robot, self.arm)
     def control(self, **kwargs):
@@ -400,6 +406,7 @@ def control_commands(commands):
 
 class State(object):
     def __init__(self, attachments={}, cleaned=set(), cooked=set()):
+        self.poses = {body: Pose(body, get_pose(body)) for body in get_bodies() if body not in attachments}
         self.attachments = attachments
         self.cleaned = cleaned
         self.cooked = cooked
