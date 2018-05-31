@@ -1,15 +1,15 @@
 from __future__ import print_function
 
-from utils import invert, multiply, get_name, set_pose, get_link_pose, link_from_name, \
+from .utils import invert, multiply, get_name, set_pose, get_link_pose, link_from_name, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
     unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values, \
     inverse_kinematics, uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, \
     remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
     get_max_limit, get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies
-from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \
+from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \
     get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses, PR2_GROUPS, joints_from_names
-from pr2_problems import get_fixed_bodies
+from .pr2_problems import get_fixed_bodies
 
 import pybullet as p
 import numpy as np
@@ -306,7 +306,7 @@ def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
     fixed = get_fixed_bodies(problem)
 
     def gen(arm, button):
-        fixed_wo_button = filter(lambda b: b != button, fixed)
+        fixed_wo_button = list(filter(lambda b: b != button, fixed))
         pose = get_pose(button)
         grasp_type = 'side'
 

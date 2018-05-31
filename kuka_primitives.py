@@ -1,13 +1,12 @@
-import pybullet as p
 import time
 
-from pr2_utils import get_top_grasps
-from utils import get_pose, set_pose, get_link_pose, body_from_end_effector, get_movable_joints, get_configuration, \
+from .pr2_utils import get_top_grasps
+from .utils import get_pose, set_pose, get_link_pose, body_from_end_effector, get_movable_joints, get_configuration, \
     set_joint_positions, get_constraints, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
-    enable_gravity, get_refine_fn, input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
+    enable_gravity, get_refine_fn, user_input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
-    inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, input, get_sample_fn, \
-    workspace_trajectory, point_from_pose, quat_from_pose
+    inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
+    workspace_trajectory, point_from_pose, quat_from_pose, step_simulation
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
@@ -94,7 +93,7 @@ class BodyPath(object):
             for _ in joint_controller(self.body, self.joints, values):
                 enable_gravity()
                 if not real_time:
-                    p.stepSimulation()
+                    step_simulation()
                 time.sleep(dt)
     # def full_path(self, q0=None):
     #     # TODO: could produce sequence of savers
@@ -152,7 +151,7 @@ class Command(object):
         for i, body_path in enumerate(self.body_paths):
             for j in body_path.iterator():
                 msg = '{},{}) step?'.format(i, j)
-                input(msg)
+                user_input(msg)
                 #print(msg)
                 #wait_for_interrupt()
 
@@ -226,7 +225,7 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10):
                 #                                   quat_from_pose(approach_pose))
                 path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=obstacles, direct=True)
                 if path is None:
-                    if DEBUG_FAILURE: input('Approach motion failed')
+                    if DEBUG_FAILURE: user_input('Approach motion failed')
                     continue
             command = Command([BodyPath(robot, path),
                                Attach(body, robot, grasp.link),
@@ -247,7 +246,7 @@ def get_free_motion_gen(robot, fixed=[], teleport=False):
             path = plan_joint_motion(robot, conf2.joints, conf2.configuration,
                                      obstacles=fixed)
             if path is None:
-                if DEBUG_FAILURE: input('Free motion failed')
+                if DEBUG_FAILURE: user_input('Free motion failed')
                 return None
         command = Command([BodyPath(robot, path)])
         return (command,)
@@ -264,7 +263,7 @@ def get_holding_motion_gen(robot, fixed=[], teleport=False):
             path = plan_joint_motion(robot, conf2.joints, conf2.configuration,
                                      obstacles=fixed, attachments=[grasp.attachment()])
             if path is None:
-                if DEBUG_FAILURE: input('Holding motion failed')
+                if DEBUG_FAILURE: user_input('Holding motion failed')
                 return None
         command = Command([BodyPath(robot, path, attachments=[grasp])])
         return (command,)
@@ -282,7 +281,7 @@ def get_movable_collision_test():
             for _ in path.iterator():
                 # TODO: could shuffle this
                 if any(pairwise_collision(mov, body) for mov in moving):
-                    if DEBUG_FAILURE: input('Movable collision')
+                    if DEBUG_FAILURE: user_input('Movable collision')
                     return True
         return False
     return test

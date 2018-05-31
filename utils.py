@@ -4,8 +4,15 @@ import sys
 import math
 import time
 import platform
+import numpy as np
+import pybullet as p
+import pickle
+import os
+
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
+from .transformations import quaternion_from_matrix
+from .motion.motion_planners.rrt_connect import birrt, direct_path
 
 # from future_builtins import map, filter
 # from builtins import input # TODO - use future
@@ -14,13 +21,6 @@ try:
 except NameError:
    pass
 user_input = input
-
-import numpy as np
-import pybullet as p
-import pickle
-import os
-from transformations import quaternion_from_matrix
-from motion.motion_planners.rrt_connect import birrt, direct_path
 
 INF = np.inf
 PI = np.pi
@@ -487,10 +487,10 @@ def get_body_info(body):
     return BodyInfo(*p.getBodyInfo(body, physicsClientId=CLIENT))
 
 def get_base_name(body):
-    return get_body_info(body).base_name
+    return get_body_info(body).base_name.decode(encoding='UTF-8')
 
 def get_body_name(body):
-    return get_body_info(body).body_name
+    return get_body_info(body).body_name.decode(encoding='UTF-8')
 
 def get_name(body):
     name = get_body_name(body)
@@ -738,7 +738,7 @@ get_links = get_joints
 def get_link_name(body, link):
     if link == BASE_LINK:
         return get_base_name(body)
-    return get_joint_info(body, link).linkName
+    return get_joint_info(body, link).linkName.decode('UTF-8')
 
 def get_link_parent(body, link):
     if link == BASE_LINK:
@@ -808,7 +808,7 @@ def get_joint_ancestors(body, link):
     return get_link_ancestors(body, link) + [link]
 
 def get_movable_joint_ancestors(body, link):
-    return filter(lambda j: is_movable(body, j), get_joint_ancestors(body, link))
+    return list(filter(lambda j: is_movable(body, j), get_joint_ancestors(body, link)))
 
 def get_link_descendants(body, link):
     descendants = []
@@ -830,8 +830,8 @@ def get_adjacent_links(body):
     return adjacent
 
 def get_adjacent_fixed_links(body):
-    return filter(lambda item: not is_movable(body, item[0]),
-                  get_adjacent_links(body))
+    return list(filter(lambda item: not is_movable(body, item[0]),
+                  get_adjacent_links(body)))
 
 
 def get_fixed_links(body):
@@ -1012,7 +1012,7 @@ def visual_shape_from_data(data, client):
 
 def get_visual_data(body, link=BASE_LINK):
     visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body, physicsClientId=CLIENT)]
-    return filter(lambda d: d.linkIndex == link, visual_data)
+    return list(filter(lambda d: d.linkIndex == link, visual_data))
 
 # object_unique_id and linkIndex seem to be noise
 CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'linkIndex',
@@ -1031,7 +1031,7 @@ def collision_shape_from_data(data, body, link, client):
                                   # halfExtents=get_data_extents(data.geometry_type, data.dimensions),
                                   halfExtents=np.array(get_data_extents(data)) / 2,
                                   height=get_data_height(data),
-                                  fileName=data.filename,
+                                  fileName=data.filename.decode(encoding='UTF-8'),
                                   meshScale=get_data_scale(data),
                                   planeNormal=get_data_normal(data),
                                   collisionFramePosition=point,
@@ -1411,9 +1411,9 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
             check_link_pairs += list(get_moving_pairs(body, joints))
         else:
             check_link_pairs += list(combinations(moving_links, 2))
-        check_link_pairs = filter(lambda pair: not are_links_adjacent(body, *pair), check_link_pairs)
-        check_link_pairs = filter(lambda pair: (pair not in disabled_collisions) and
-                                               (pair[::-1] not in disabled_collisions), check_link_pairs)
+        check_link_pairs = list(filter(lambda pair: not are_links_adjacent(body, *pair), check_link_pairs))
+        check_link_pairs = list(filter(lambda pair: (pair not in disabled_collisions) and
+                                               (pair[::-1] not in disabled_collisions), check_link_pairs))
 
     if obstacles is None:
         obstacles = list(set(get_bodies()) - set(moving_bodies))
