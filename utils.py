@@ -946,8 +946,8 @@ def obj_from_mesh(mesh):
     for f in faces:
         assert(len(f) == 3)
         f = [i+1 for i in f]
-        s += '\nf {}'.format(' '.join(map(str, f)))
-        #s += '\nf {}'.format(' '.join(map(str, reversed(f))))
+        #s += '\nf {}'.format(' '.join(map(str, f)))
+        s += '\nf {}'.format(' '.join(map(str, reversed(f))))
     return s
 
 mesh_count = count()
