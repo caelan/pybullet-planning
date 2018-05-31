@@ -1481,6 +1481,12 @@ def plan_base_motion(body, end_conf, obstacles=None, direct=False,
         return any(pairwise_collision(body, obs) for obs in obstacles)
 
     start_conf = get_base_values(body)
+    if collision_fn(start_conf):
+        print("Warning: initial configuration is in collision")
+        return None
+    if collision_fn(end_conf):
+        print("Warning: end configuration is in collision")
+        return None
     if direct:
         return direct_path(start_conf, end_conf, extend_fn, collision_fn)
     return birrt(start_conf, end_conf, distance_fn,

@@ -28,7 +28,7 @@ class Problem(object):
 
 def get_fixed_bodies(problem):
     movable = [problem.robot] + list(problem.movable)
-    return filter(lambda b: b not in movable, get_bodies())
+    return list(filter(lambda b: b not in movable, get_bodies()))
 
 def create_pr2(use_drake=True, fixed_base=True):
     if use_drake:

@@ -200,13 +200,12 @@ class Cook(Command):
 def get_motion_gen(problem, teleport=False):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
-
     def fn(bq1, bq2):
         set_pose(robot, bq1.value)
         if teleport:
             path = [bq1, bq2]
         else:
-            raw_path = plan_base_motion(robot, base_values_from_pose(bq2.value))
+            raw_path = plan_base_motion(robot, base_values_from_pose(bq2.value), obstacles=fixed)
             if raw_path is None:
                 print('Failed motion plan!')
                 return None
