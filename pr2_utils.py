@@ -298,7 +298,8 @@ def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
 
 WIDTH, HEIGHT = 640, 480
 FX, FY = 772.55, 772.5
-MAX_DEPTH = 5
+MAX_VISUAL_DISTANCE = 5.0
+MAX_KINECT_DISTANCE = 2.5
 
 def get_camera_matrix(width, height, fx, fy):
     # cx, cy = 320.5, 240.5
@@ -352,7 +353,7 @@ def cone_mesh_from_support(support):
         faces.append((0, index1, index2))
     return vertices, faces
 
-def get_detection_cone(pr2, body, depth=MAX_DEPTH):
+def get_detection_cone(pr2, body, depth=MAX_VISUAL_DISTANCE):
     head_link = link_from_name(pr2, HEAD_LINK_NAME)
     with PoseSaver(body):
         body_head = multiply(invert(get_link_pose(pr2, head_link)), get_pose(body))
@@ -365,7 +366,7 @@ def get_detection_cone(pr2, body, depth=MAX_DEPTH):
             return None, z
         return cone_mesh_from_support(support_from_aabb(body_lower, body_upper)), z
 
-def get_cone_mesh(depth=MAX_DEPTH):
+def get_cone_mesh(depth=MAX_VISUAL_DISTANCE):
     # TODO: attach to the pr2?
     cone = [(0, 0), (WIDTH, 0), (WIDTH, HEIGHT), (0, HEIGHT)]
     camera_matrix = get_pr2_camera_matrix()
@@ -421,7 +422,7 @@ def get_detections(pr2, p_false_neg=0, **kwargs):
     for body in get_bodies():
         if np.random.random() < p_false_neg:
             continue
-        mesh, z = get_detection_cone(pr2, body)
+        mesh, z = get_detection_cone(pr2, body, **kwargs)
         if mesh is None:
             continue
         cone = create_mesh(mesh, color=None)
@@ -430,14 +431,11 @@ def get_detections(pr2, p_false_neg=0, **kwargs):
         remove_body(cone)
     return detections
 
-MAX_VISUAL_DISTANCE = 5.0
-MAX_KINECT_DISTANCE = 2.5
-
 def get_visual_detections(pr2, **kwargs):
-    return get_detections(pr2, depth=MAX_VISUAL_DISTANCE, **kwargs)
+    return [body for body, _ in get_detections(pr2, depth=MAX_VISUAL_DISTANCE, **kwargs)]
 
 def get_kinect_registrations(pr2, **kwargs):
-    return get_detections(pr2, depth=MAX_KINECT_DISTANCE, **kwargs)
+    return [body for body, _ in get_detections(pr2, depth=MAX_KINECT_DISTANCE, **kwargs)]
 
 # TODO: Gaussian on resulting pose
 

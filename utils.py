@@ -79,6 +79,8 @@ def ensure_dir(f):
     if not os.path.exists(d):
         os.makedirs(d)
 
+#####################################
+
 class Verbose(object):
     def __init__(self, verbose):
         self.verbose = verbose
@@ -95,94 +97,106 @@ class Verbose(object):
             sys.stdout = self.stdout
             self.devnull.close()
 
+# https://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python/14797594#14797594
+# https://stackoverflow.com/questions/4178614/suppressing-output-of-module-calling-outside-library
+# https://stackoverflow.com/questions/4675728/redirect-stdout-to-a-file-in-python/22434262#22434262
+
+
+class HideOutput(object):
+    '''
+    A context manager that block stdout for its scope, usage:
+
+    with HideOutput():
+        os.system('ls -l')
+    '''
+    def __init__(self, *args, **kw):
+        sys.stdout.flush()
+        self._origstdout = sys.stdout
+        self._oldstdout_fno = os.dup(sys.stdout.fileno())
+        self._devnull = os.open(os.devnull, os.O_WRONLY)
+
+    def __enter__(self):
+        self._newstdout = os.dup(1)
+        os.dup2(self._devnull, 1)
+        os.close(self._devnull)
+        sys.stdout = os.fdopen(self._newstdout, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout = self._origstdout
+        sys.stdout.flush()
+        os.dup2(self._oldstdout_fno, 1)
+
 #####################################
 
 # Savers
 
 # TODO: move the saving to enter?
 
-class ClientSaver(object):
+class Saver(object):
+    def restore(self):
+        raise NotImplementedError()
+    def __enter__(self):
+        pass
+    def __exit__(self, type, value, traceback):
+        self.restore()
+
+class ClientSaver(Saver):
     def __init__(self, new_client=None):
         self.client = CLIENT
         if new_client is not None:
             set_client(new_client)
 
-    def __enter__(self):
-        pass
-
-    def __exit__(self, type, value, traceback):
+    def restore(self):
         set_client(self.client)
 
-class StateSaver(object):
+
+class StateSaver(Saver):
     def __init__(self):
         self.state = save_state()
 
     def restore(self):
         restore_state(self.state)
 
-    def __enter__(self):
-        pass
-
-    def __exit__(self, type, value, traceback):
-        self.restore()
 
 #####################################
 
-class PoseSaver(object):
+class PoseSaver(Saver):
     def __init__(self, body):
         self.body = body
         self.pose = get_pose(self.body)
 
-    def __enter__(self):
-        pass
-
-    def __exit__(self, type, value, traceback):
+    def restore(self):
         set_pose(self.body, self.pose)
 
-class ConfSaver(object):
+class ConfSaver(Saver):
     def __init__(self, body): #, joints):
         self.body = body
         self.conf = get_configuration(body)
 
-    def __enter__(self):
-        pass
-
-    def __exit__(self, type, value, traceback):
+    def restore(self):
         set_configuration(self.body, self.conf)
 
 #####################################
 
-class BodySaver(object):
-    def __init__(self, body, pose=None):
-        if pose is None:
-            pose = get_pose(body)
+class BodySaver(Saver):
+    def __init__(self, body): #, pose=None):
+        #if pose is None:
+        #    pose = get_pose(body)
         self.body = body
-        self.pose = pose
-        self.conf = get_configuration(body)
+        self.pose_saver = PoseSaver(body)
+        self.conf_saver = ConfSaver(body)
 
     def restore(self):
-        set_configuration(self.body, self.conf)
-        set_pose(self.body, self.pose)
+        self.pose_saver.restore()
+        self.conf_saver.restore()
 
-    def __enter__(self):
-        pass
-
-    def __exit__(self, type, value, traceback):
-        self.restore()
-
-class WorldSaver(object):
+class WorldSaver(Saver):
     def __init__(self):
         self.body_savers = [BodySaver(body) for body in get_bodies()]
 
     def restore(self):
         for body_saver in self.body_savers:
             body_saver.restore()
-
-    def __enter__(self):
-        pass
-
-    def __exit__(self, type, value, traceback):
-        self.restore()
 
 #####################################
 
@@ -1104,13 +1118,19 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
                                  linkJointTypes=joint_types,
                                  linkJointAxis=joint_axes,
                                  physicsClientId=client)
-    set_configuration(new_body, get_joint_positions(body, movable_joints))
+    #set_configuration(new_body, get_joint_positions(body, movable_joints)) # Need to use correct client
+    for joint, value in zip(range(len(links)), get_joint_positions(body, links)):
+        # TODO: check if movable?
+        p.resetJointState(new_body, joint, value, physicsClientId=client)
     return new_body
 
 def clone_world(client=None, exclude=[]):
+    mapping = {}
     for body in get_bodies():
         if body not in exclude:
-            clone_body(body, collision=True, visual=True, client=client)
+            new_body = clone_body(body, collision=True, visual=True, client=client)
+            mapping[body] = new_body
+    return mapping
 
 #####################################
 
@@ -1216,10 +1236,14 @@ def aabb2d_from_aabb(aabb):
     (lower, upper) = aabb
     return lower[:2], upper[:2]
 
-def aabb_contains(contained, container):
+def aabb_contains_aabb(contained, container):
     lower1, upper1 = contained
     lower2, upper2 = container
     return np.all(lower2 <= lower1) and np.all(upper1 <= upper2)
+
+def aabb_contains_point(point, container):
+    lower, upper = container
+    return np.all(lower <= point) and np.all(point <= upper)
 
 def get_bodies_in_region(aabb):
     (lower, upper) = aabb
@@ -1476,7 +1500,18 @@ def is_placement(body, surface, epsilon=1e-2): # TODO: above / below
     bottom_aabb = get_lower_upper(surface)
     bottom_z_max = bottom_aabb[1][2]
     return (bottom_z_max <= top_aabb[0][2] <= (bottom_z_max + epsilon)) and \
-           (aabb_contains(aabb2d_from_aabb(top_aabb), aabb2d_from_aabb(bottom_aabb)))
+           (aabb_contains_aabb(aabb2d_from_aabb(top_aabb), aabb2d_from_aabb(bottom_aabb)))
+
+def is_center_stable(body, surface, epsilon=1e-2):
+    # TODO: compute AABB in origin
+    # TODO: use center of mass?
+    center, extent = get_center_extent(body)
+    base_center = center - np.array([0, 0, extent[2]])/2
+    bottom_aabb = get_aabb(surface)
+    bottom_z_max = bottom_aabb[1][2]
+    return (bottom_z_max <= base_center[2] <= (bottom_z_max + epsilon)) and \
+           (aabb_contains_point(base_center[:2], aabb2d_from_aabb(bottom_aabb)))
+
 
 def sample_placement(top_body, bottom_body, max_attempts=50):
     bottom_aabb = get_lower_upper(bottom_body)
@@ -1768,3 +1803,20 @@ def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_ite
     if violates_limits(robot, get_movable_joints(robot), kinematic_conf):
         return None
     return kinematic_conf
+
+#####################################
+
+def add_debug_text(text, position=(0, 0, 0), color=(0, 0, 0), lifetime=None, parent=-1):
+    if lifetime is None:
+        lifetime = 0
+    return p.addUserDebugText(text, textPosition=position, textColorRGB=color, # textSize=1,
+                       lifeTime=lifetime, parentObjectUniqueId=parent)
+
+
+def add_body_name(body, **kwargs):
+    with PoseSaver(body):
+        set_pose(body, unit_pose())
+        lower, upper = get_aabb(body)
+    #position = (0, 0, upper[2])
+    position = upper
+    return add_debug_text(get_name(body), position=position, parent=body, **kwargs)  # removeUserDebugItem
