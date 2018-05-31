@@ -427,11 +427,14 @@ def get_detections(pr2, p_false_neg=0, **kwargs):
         remove_body(cone)
     return detections
 
+MAX_VISUAL_DISTANCE = 5.0
+MAX_KINECT_DISTANCE = 2.5
+
 def get_visual_detections(pr2, **kwargs):
-    return get_detections(pr2, depth=5.0, **kwargs)
+    return get_detections(pr2, depth=MAX_VISUAL_DISTANCE, **kwargs)
 
 def get_kinect_registrations(pr2, **kwargs):
-    return get_detections(pr2, depth=2.5, **kwargs)
+    return get_detections(pr2, depth=MAX_KINECT_DISTANCE, **kwargs)
 
 # TODO: Gaussian on resulting pose
 
