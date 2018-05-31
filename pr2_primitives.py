@@ -1,9 +1,11 @@
-from utils import invert, multiply, get_body_name, set_pose, get_link_pose, link_from_name, \
+from __future__ import print_function
+
+from utils import invert, multiply, get_name, set_pose, get_link_pose, link_from_name, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
     unit_quat, plan_base_motion, plan_joint_motion, set_base_values, base_values_from_pose, pose_from_base_values, \
     inverse_kinematics, uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, \
     remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
-    get_max_limit, get_min_limit, input, step_simulation, update_state
+    get_max_limit, get_min_limit, user_input, step_simulation, update_state, get_body_name
 from pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, get_carry_conf, \
     get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses, PR2_GROUPS, joints_from_names
@@ -114,7 +116,7 @@ class Attach(object):
                 #time.sleep(dt)
     def __repr__(self):
         return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
-                                     self.arm, get_body_name(self.body))
+                                     self.arm, get_name(self.body))
 
 class Detach(object):
     def __init__(self, robot, arm, body):
@@ -128,7 +130,7 @@ class Detach(object):
         remove_fixed_constraint(self.body, self.robot, self.link)
     def __repr__(self):
         return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
-                                     self.arm, get_body_name(self.body))
+                                     self.arm, get_name(self.body))
 
 class Clean(object):
     def __init__(self, body):
@@ -176,7 +178,7 @@ def get_motion_gen(problem, teleport=False):
         else:
             raw_path = plan_base_motion(robot, base_values_from_pose(bq2.value))
             if raw_path is None:
-                print 'Failed motion plan!'
+                print('Failed motion plan!')
                 return None
             path = [Pose(robot, pose_from_base_values(q, bq1.value)) for q in raw_path]
         bt = Trajectory(path)
@@ -334,11 +336,11 @@ def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
 
 def step_commands(commands, time_step=None, simulate=False):
     # update_state()
-    if simulate: step_simulation()
-    input('Begin?')
+    #if simulate: step_simulation()
+    user_input('Execute?')
     attachments = {}
     for i, command in enumerate(commands):
-        print i, command
+        print(i, command)
         if type(command) is Attach:
             attachments[command.body] = command
         elif type(command) is Detach:
@@ -351,9 +353,10 @@ def step_commands(commands, time_step=None, simulate=False):
                     attach.step()
                 update_state()
                 # print attachments
-                if simulate: step_simulation()
+                if simulate:
+                    step_simulation()
                 if time_step is None:
-                    input('Continue?')
+                    user_input('Continue?')
                 else:
                     time.sleep(time_step)
         elif type(command) in [Clean, Cook]:
@@ -363,7 +366,7 @@ def step_commands(commands, time_step=None, simulate=False):
 
 
 def control_commands(commands):
-    input('Control?')
+    user_input('Control?')
     for i, command in enumerate(commands):
-        print i, command
+        print(i, command)
         command.control()

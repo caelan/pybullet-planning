@@ -5,8 +5,6 @@ import cProfile
 import pstats
 import time
 
-from pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
-    get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, step_commands
 from pr2_problems import cooking_problem
 from pr2_utils import get_arm_joints
 from ss.algorithms.dual_focused import dual_focused
@@ -15,8 +13,11 @@ from ss.model.operators import Action, Axiom
 from ss.model.problem import Problem
 from ss.model.streams import Stream, ListStream, GenStream, FnStream
 from utils import connect, add_data_path, disconnect, get_pose, enable_gravity, is_placement, joints_from_names, \
-    get_joint_positions, input, set_client, clone_body ,ClientSaver, step_simulation, user_input, \
-    save_state, restore_state, save_bullet, restore_bullet, clone_world, get_bodies, get_joints, update_state
+    get_joint_positions, set_client, clone_body ,ClientSaver, step_simulation, user_input, \
+    save_state, restore_state, save_bullet, restore_bullet, clone_world, get_bodies, get_joints, \
+    update_state, wait_for_interrupt
+from pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
+    get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, step_commands, control_commands
 
 A = '?a'
 O = '?o'; O2 = '?o2'
@@ -264,7 +265,7 @@ def close_gripper_test(problem):
         #    p.stepSimulation()
         # time.sleep(dt)
 
-def main(search='ff-astar', max_time=60, verbose=True):
+def main(search='ff-astar', max_time=60, verbose=True, execute='execute'):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-display', action='store_true', help='enable viewer.')
     args = parser.parse_args()
@@ -320,16 +321,20 @@ def main(search='ff-astar', max_time=60, verbose=True):
     if (plan is None) or not args.display:
         disconnect()
         return
+    commands = post_process(problem, plan)
 
     set_client(real_world)
-    commands = post_process(problem, plan)
-    enable_gravity()
-    #step_commands(commands)
-    step_commands(commands, time_step=0.01)
-    #control_commands(commands)
-    #dump_world()
-    #wait_for_interrupt()
-    user_input('Finish?')
+    if execute == 'control':
+        enable_gravity()
+        control_commands(commands)
+    elif execute == 'execute':
+        step_commands(commands, time_step=0.01)
+    elif execute == 'step':
+        step_commands(commands)
+    else:
+        raise ValueError(execute)
+
+    wait_for_interrupt()
     disconnect()
 
 

@@ -113,6 +113,20 @@ class ClientSaver(object):
     def __exit__(self, type, value, traceback):
         set_client(self.client)
 
+class StateSaver(object):
+    def __init__(self):
+        self.state = save_state()
+
+    def restore(self):
+        restore_state(self.state)
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, traceback):
+        self.restore()
+
+#####################################
 
 class PoseSaver(object):
     def __init__(self, body):
@@ -463,6 +477,12 @@ def get_base_name(body):
 
 def get_body_name(body):
     return get_body_info(body).body_name
+
+def get_name(body):
+    name = get_body_name(body)
+    if name == '':
+        name = 'body'
+    return '{}{}'.format(name, int(body))
 
 def has_body(name):
     try:
