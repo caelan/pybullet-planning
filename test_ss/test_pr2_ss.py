@@ -16,8 +16,8 @@ from utils import connect, add_data_path, disconnect, get_pose, enable_gravity, 
     get_joint_positions, set_client, clone_body ,ClientSaver, step_simulation, user_input, \
     save_state, restore_state, save_bullet, restore_bullet, clone_world, get_bodies, get_joints, \
     update_state, wait_for_interrupt
-from pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, \
-    get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, step_commands, control_commands
+from pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, apply_commands, \
+    get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, step_commands, control_commands, State
 
 A = '?a'
 O = '?o'; O2 = '?o2'
@@ -265,7 +265,7 @@ def close_gripper_test(problem):
         #    p.stepSimulation()
         # time.sleep(dt)
 
-def main(search='ff-astar', max_time=60, verbose=True, execute='execute'):
+def main(search='ff-astar', max_time=60, verbose=True, execute='apply'):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-display', action='store_true', help='enable viewer.')
     args = parser.parse_args()
@@ -323,14 +323,18 @@ def main(search='ff-astar', max_time=60, verbose=True, execute='execute'):
         return
     commands = post_process(problem, plan)
 
+    time_step = 0.01
     set_client(real_world)
     if execute == 'control':
         enable_gravity()
         control_commands(commands)
     elif execute == 'execute':
-        step_commands(commands, time_step=0.01)
+        step_commands(commands, time_step=time_step)
     elif execute == 'step':
         step_commands(commands)
+    elif execute == 'apply':
+        state = State()
+        apply_commands(state, commands, time_step=time_step)
     else:
         raise ValueError(execute)
 

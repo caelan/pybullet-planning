@@ -25,6 +25,9 @@ class Pose(object):
         self.value = tuple(value)
     def step(self):
         set_pose(self.body, self.value)
+    def to_pose(self):
+        value = base_values_from_pose(self.value)
+        return Conf(self.body, range(len(value)), value)
     def __repr__(self):
         return 'p{}'.format(id(self) % 1000)
 
@@ -48,22 +51,32 @@ class Conf(object):
     def __repr__(self):
         return 'q{}'.format(id(self) % 1000)
 
-def conf_from_pose(pose):
-    return Conf(pose.body, range(3), base_values_from_pose(pose.value))
+#####################################
 
-class Trajectory(object):
+class Command(object):
+    def control(self, real_time=False, dt=0):
+        raise NotImplementedError()
+    def step(self):
+        raise NotImplementedError()
+    def apply(self, state, **kwargs):
+        raise NotImplementedError()
+
+class Trajectory(Command):
     def __init__(self, path):
         self.path = tuple(path)
         # TODO: constructor that takes in this info
-    #def step(self):
-    #    #for q in self.path:
-    #    for q in self.path[1:]:
-    #    #for q in self.path[1::5]:
-    #        q.step()
-    #        #set_joint_position(q.body, q.joints, q.values)
-    #        #p.stepSimulation()
-    #        update_state()
-    #        raw_input('Continue?')
+    def apply(self, state, time_step=None, simulate=False, sample=1):
+        for conf in self.path[1::sample]:
+            conf.step()
+            for attach in state.attachments.values():
+                attach.step()
+            update_state()
+            if simulate:
+                step_simulation()
+            if time_step is None:
+                user_input('Continue?')
+            else:
+                time.sleep(time_step)
     def control(self, real_time=False, dt=0):
         # TODO: just waypoints
         if real_time:
@@ -72,7 +85,7 @@ class Trajectory(object):
             disable_real_time()
         for conf in self.path:
             if isinstance(conf, Pose):
-                conf = conf_from_pose(conf)
+                conf = conf.to_pose()
             for _ in joint_controller_hold(conf.body, conf.joints, conf.values):
                 enable_gravity()
                 if not real_time:
@@ -83,7 +96,7 @@ class Trajectory(object):
     def __repr__(self):
         return 't{}'.format(id(self) % 1000)
 
-class Attach(object):
+class Attach(Command):
     vacuum = True
     def __init__(self, robot, arm, grasp, body):
         self.robot = robot
@@ -91,12 +104,14 @@ class Attach(object):
         self.grasp = grasp
         self.body = body
         self.link = link_from_name(self.robot, ARM_LINK_NAMES[self.arm])
+    def apply(self, state, **kwargs):
+        state.attachments[self.body] = self
     def step(self):
         gripper_pose = get_link_pose(self.robot, self.link)
         body_pose = multiply(gripper_pose, self.grasp.value)
         set_pose(self.body, body_pose)
         close_arm(self.robot, self.arm)
-    def control(self):
+    def control(self, **kwargs):
         if self.vacuum:
             #add_fixed_constraint(self.body, self.robot, self.link)
             add_fixed_constraint(self.body, self.robot, self.link, max_force=1) # Less force makes it easier to pick
@@ -118,23 +133,28 @@ class Attach(object):
         return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
                                      self.arm, get_name(self.body))
 
-class Detach(object):
+class Detach(Command):
     def __init__(self, robot, arm, body):
         self.robot = robot
         self.arm = arm
         self.body = body
         self.link = link_from_name(self.robot, ARM_LINK_NAMES[self.arm])
+    def apply(self, state, **kwargs):
+        del state.attachments[self.body]
     def step(self):
         open_arm(self.robot, self.arm)
-    def control(self):
+    def control(self, **kwargs):
         remove_fixed_constraint(self.body, self.robot, self.link)
     def __repr__(self):
         return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
                                      self.arm, get_name(self.body))
 
-class Clean(object):
+class Clean(Command):
     def __init__(self, body):
         self.body = body
+    def apply(self, state, **kwargs):
+        state.cleaned.add(self.body)
+        self.step()
     def step(self):
         p.addUserDebugText('Cleaned', textPosition=(0, 0, .25), textColorRGB=(0,0,1), #textSize=1,
                            lifeTime=0, parentObjectUniqueId=self.body)
@@ -143,10 +163,14 @@ class Clean(object):
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.body)
 
-class Cook(object):
+class Cook(Command):
     # TODO: global state here?
     def __init__(self, body):
         self.body = body
+    def apply(self, state, **kwargs):
+        state.cleaned.remove(self.body)
+        state.cooked.add(self.body)
+        self.step()
     def step(self):
         # changeVisualShape
         # setDebugObjectColor
@@ -158,11 +182,11 @@ class Cook(object):
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.body)
 
-class Commands(object):
-    def __init__(self, commands):
-        self.commands = tuple(commands)
-    def __repr__(self):
-        return 'c{}'.format(id(self) % 1000)
+#class Commands(object):
+#    def __init__(self, commands):
+#        self.commands = tuple(commands)
+#    def __repr__(self):
+#        return 'c{}'.format(id(self) % 1000)
 
 ##################################################
 
@@ -333,6 +357,7 @@ def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
                 yield None
     return gen
 
+#####################################
 
 def step_commands(commands, time_step=None, simulate=False):
     # update_state()
@@ -370,3 +395,17 @@ def control_commands(commands):
     for i, command in enumerate(commands):
         print(i, command)
         command.control()
+
+#####################################
+
+class State(object):
+    def __init__(self, attachments={}, cleaned=set(), cooked=set()):
+        self.attachments = attachments
+        self.cleaned = cleaned
+        self.cooked = cooked
+
+def apply_commands(state, commands, **kwargs):
+    user_input('Apply?')
+    for i, command in enumerate(commands):
+        print(i, command)
+        command.apply(state, **kwargs)
