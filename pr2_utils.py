@@ -12,6 +12,9 @@ from utils import multiply, get_link_pose, joint_from_name, set_joint_position, 
     unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
     ConfSaver, get_bodies, create_mesh, remove_body, get_body_name, single_collision, unit_from_theta
 
+PR2_URDF = "models/pr2_description/pr2.urdf"
+DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
+
 TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
 REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
