@@ -2,10 +2,8 @@
 
 from __future__ import print_function
 
-import pybullet as p
-
-from pr2_utils import PR2_GROUPS
-from utils import set_base_values, joint_from_name, connect, input, \
+from pybullet_tools.pr2_utils import PR2_GROUPS
+from pybullet_tools.utils import HideOutput, disconnect, set_base_values, joint_from_name, connect, user_input, \
     dump_world, get_link_name, wait_for_interrupt, clone_body, get_link_parent, get_link_descendants, load_model
 
 
@@ -71,12 +69,13 @@ def test_clone_arm(pr2):
 def main():
     connect(use_gui=True)
 
-    pr2 = load_model("models/pr2_description/pr2.urdf")
+    with HideOutput():
+        pr2 = load_model("models/pr2_description/pr2.urdf")
     test_clone_robot(pr2)
     test_clone_arm(pr2)
 
-    input('Finish?')
-    p.disconnect()
+    user_input('Finish?')
+    disconnect()
 
 
 if __name__ == '__main__':

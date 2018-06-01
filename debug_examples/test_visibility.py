@@ -4,18 +4,17 @@ from __future__ import print_function
 
 import pybullet as p
 
-from pr2_utils import TORSO_JOINT_NAME, HEAD_LINK_NAME, \
-    PR2_GROUPS, get_cone_mesh, get_detections, \
+from pybullet_tools.pr2_utils import TORSO_JOINT_NAME, HEAD_LINK_NAME, PR2_GROUPS, get_cone_mesh, get_detections, \
     REST_LEFT_ARM, rightarm_from_leftarm, inverse_visibility, get_detection_cone, visible_base_generator
-from utils import joint_from_name, set_joint_position, \
+from pybullet_tools.utils import joint_from_name, set_joint_position, disconnect, HideOutput, \
     set_joint_positions, connect, wait_for_interrupt, get_link_pose, link_from_name, set_point, set_pose, \
     dump_body, load_model, create_mesh, point_from_pose, get_pose, joints_from_names, BLOCK_URDF, remove_body
 
 
 def main():
     connect(use_gui=True)
-
-    pr2 = load_model("models/drake/pr2_description/urdf/pr2_simplified.urdf")
+    with HideOutput():
+        pr2 = load_model("models/drake/pr2_description/urdf/pr2_simplified.urdf")
     set_joint_positions(pr2, joints_from_names(pr2, PR2_GROUPS['left_arm']), REST_LEFT_ARM)
     set_joint_positions(pr2, joints_from_names(pr2, PR2_GROUPS['right_arm']), rightarm_from_leftarm(REST_LEFT_ARM))
     set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT_NAME), 0.2)
@@ -59,7 +58,7 @@ def main():
         remove_body(detect_cone)
         remove_body(view_cone)
 
-    p.disconnect()
+    disconnect()
 
 if __name__ == '__main__':
     main()

@@ -5,9 +5,9 @@ from __future__ import print_function
 import pybullet as p
 import time
 
-from pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, TORSO_JOINT_NAME, \
+from examples.pybullet.utils.pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, TORSO_JOINT_NAME, \
     SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, get_disabled_collisions, REST_LEFT_ARM, rightarm_from_leftarm
-from pybullet_tools.utils import set_base_values, joint_from_name, set_joint_position, \
+from examples.pybullet.utils.pybullet_tools.utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
     joint_controller, dump_body, load_model, joints_from_names
 

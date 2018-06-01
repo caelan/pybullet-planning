@@ -2,13 +2,12 @@
 
 from __future__ import print_function
 
-import pybullet as p
 import time
 import numpy as np
 
-from utils import add_data_path, connect, enable_gravity, input, disconnect, create_sphere, set_point, Point, \
+from pybullet_tools.utils import add_data_path, connect, enable_gravity, input, disconnect, create_sphere, set_point, Point, \
     enable_real_time, dump_world, load_model, wait_for_interrupt, set_camera, stable_z, \
-    set_color, get_lower_upper, wait_for_duration, simulate_for_duration
+    set_color, get_lower_upper, wait_for_duration, simulate_for_duration, load_pybullet
 
 
 def main():
@@ -16,7 +15,7 @@ def main():
     add_data_path()
 
     set_camera(0, -30, 1)
-    plane = p.loadURDF('plane.urdf', useFixedBase=True)
+    plane = load_pybullet('plane.urdf', fixed_base=True)
     #plane = load_model('plane.urdf')
     cup = load_model('models/cup.urdf', fixed_base=True)
     #set_point(cup, Point(z=stable_z(cup, plane)))

@@ -13,9 +13,9 @@ from ss.model.plan import print_plan
 from ss.model.problem import Problem
 from ss.model.streams import GenStream, FnStream
 
-from kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, get_stable_gen, get_ik_fn, get_free_motion_gen, \
+from pybullet_tools.kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, get_stable_gen, get_ik_fn, get_free_motion_gen, \
     get_holding_motion_gen, get_movable_collision_test
-from utils import WorldSaver,  connect, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
+from pybullet_tools.utils import WorldSaver,  connect, dump_world, get_pose, set_pose, Pose, Point, set_default_camera, stable_z, \
     BLOCK_URDF, get_configuration, SINK_URDF, STOVE_URDF, load_model, wait_for_interrupt, is_placement, get_body_name, \
     disconnect, DRAKE_IIWA_URDF, get_bodies, user_input
 
@@ -206,8 +206,10 @@ def load_world():
 def main(execute='execute'):
     parser = argparse.ArgumentParser()  # Automatically includes help
     parser.add_argument('-viewer', action='store_true', help='enable viewer.')
-    parser.add_argument('-display', action='store_true', help='enable viewer.')
+    #parser.add_argument('-display', action='store_true', help='enable viewer.')
     args = parser.parse_args()
+    #display = args.display
+    display = True
 
     connect(use_gui=args.viewer)
     robot, block = load_world()
@@ -228,7 +230,7 @@ def main(execute='execute'):
     # plan, evaluations = incremental(ss_problem, verbose=True)
     print_plan(plan, evaluations)
     print(time.time() - t0)
-    if (not args.display) or (plan is None):
+    if (not display) or (plan is None):
         p.disconnect()
         return
 

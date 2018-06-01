@@ -5,18 +5,19 @@ import cProfile
 import pstats
 import time
 
-from pr2_problems import cooking_problem
-from pr2_utils import get_arm_joints
 from ss.algorithms.dual_focused import dual_focused
 from ss.model.functions import Predicate, rename_functions, initialize, TotalCost, Increase
 from ss.model.operators import Action, Axiom
 from ss.model.problem import Problem
 from ss.model.streams import Stream, ListStream, GenStream, FnStream
-from utils import connect, add_data_path, disconnect, get_pose, enable_gravity, is_placement, joints_from_names, \
+
+from pybullet_tools.pr2_problems import cooking_problem
+from pybullet_tools.pr2_utils import get_arm_joints, PR2_GROUPS
+from pybullet_tools.utils import connect, add_data_path, disconnect, get_pose, enable_gravity, is_placement, joints_from_names, \
     get_joint_positions, set_client, clone_body ,ClientSaver, step_simulation, user_input, \
     save_state, restore_state, save_bullet, restore_bullet, clone_world, get_bodies, get_joints, \
-    update_state, wait_for_interrupt
-from pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, apply_commands, \
+    update_state, wait_for_interrupt, get_min_limit, joint_controller_hold, enable_gravity
+from pybullet_tools.pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, apply_commands, \
     get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, step_commands, control_commands, State
 
 A = '?a'
@@ -254,8 +255,6 @@ def post_process(problem, plan):
 
 
 def close_gripper_test(problem):
-    from pr2_utils import PR2_GROUPS
-    from utils import get_min_limit, joint_controller_hold, enable_gravity
     joints = joints_from_names(problem.robot, PR2_GROUPS['left_gripper'])
     values = [get_min_limit(problem.robot, joint) for joint in joints]
     for _ in joint_controller_hold(problem.robot, joints, values):
@@ -266,9 +265,12 @@ def close_gripper_test(problem):
         # time.sleep(dt)
 
 def main(search='ff-astar', max_time=60, verbose=True, execute='apply'):
-    parser = argparse.ArgumentParser()  # Automatically includes help
-    parser.add_argument('-display', action='store_true', help='enable viewer.')
-    args = parser.parse_args()
+    #parser = argparse.ArgumentParser()  # Automatically includes help
+    #parser.add_argument('-display', action='store_true', help='enable viewer.')
+    #args = parser.parse_args()
+    #display = args.display
+    display = True
+
     problem_fn = cooking_problem
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem
     # cleaning_button_problem | cooking_button_problem
@@ -287,7 +289,7 @@ def main(search='ff-astar', max_time=60, verbose=True, execute='apply'):
     problem = problem_fn()
     #state_id = save_state()
 
-    if args.display:
+    if display:
         real_world = connect(use_gui=True)
         add_data_path()
         # world_file = 'test_world.py'
@@ -318,7 +320,7 @@ def main(search='ff-astar', max_time=60, verbose=True, execute='apply'):
 
     print('Time:', time.time() - t0)
     #print_plan(plan, evaluations)
-    if (plan is None) or not args.display:
+    if (plan is None) or not display:
         disconnect()
         return
     commands = post_process(problem, plan)

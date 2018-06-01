@@ -13,7 +13,11 @@ from itertools import product, combinations, count
 import numpy as np
 
 from .transformations import quaternion_from_matrix
-from ..motion.motion_planners.rrt_connect import birrt, direct_path
+
+directory = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(directory, '../motion'))
+from motion_planners.rrt_connect import birrt, direct_path
+#from ..motion.motion_planners.rrt_connect import birrt, direct_path
 
 # from future_builtins import map, filter
 # from builtins import input # TODO - use future
