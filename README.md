@@ -8,7 +8,7 @@ STRIPStream + pybullet
 
 Install PyBullet on OS X or Linux using: 
 ```
-pip install pybullet
+pip install numpy pybullet
 ```
 
 ## Tests
@@ -19,20 +19,21 @@ pip install pybullet
 ## Manipulation Examples
 
 Examples:
-* Kuka IIWA pick planning - ```./test_kuka_pick.py```
-* PR2 motion planning - ```./test_pr2_motion.py```
-* PR@ visibility - ```python -m debug.test_visibility```
+* Kuka IIWA pick planning - ```$ python -m debug_examples.test_kuka_pick```
+* PR2 motion planning - ```$ python -m debug_examples.test_pr2_motion```
+* PR2 visibility - ```$ python -m debug_examples.test_visibility```
+* PR2 copying - ```$ python -m debug_examples.test_clone```
 
 ## STRIPStream Examples
 
 Add the following repository to your PYTHONPATH: https://github.com/caelan/ss
 
 Examples:
-* Kuka IIWA task and motion planning - ```python -m test_ss.test_kuka_ss```
-* PR2 task and motion planning - ```python -m test_ss.test_pr2_ss```
+* Kuka IIWA task and motion planning - ```python -m ss_examples.test_kuka```
+* PR2 task and motion planning - ```python -m ss_examples.test_pr2```
 
-[![Kuka IIWA](https://img.youtube.com/vi/3HJrkgIGK7c/0.jpg)](https://www.youtube.com/watch?v=3HJrkgIGK7c)
-[![PR2](https://img.youtube.com/vi/oWr6m12nXcM/0.jpg)](https://www.youtube.com/watch?v=oWr6m12nXcM)
+[<img src="https://img.youtube.com/vi/3HJrkgIGK7c/0.jpg" height="200">](https://www.youtube.com/watch?v=3HJrkgIGK7c)
+[<img src="https://img.youtube.com/vi/oWr6m12nXcM/0.jpg" height="200">](https://www.youtube.com/watch?v=oWr6m12nXcM)
 
 ## PDDLStream Examples
 
