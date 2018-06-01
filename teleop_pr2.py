@@ -6,10 +6,10 @@ import select
 import sys
 import termios
 import tty
-import threading
 
-from pr2_utils import PR2_GROUPS
-from utils import add_data_path, connect, enable_gravity, load_model, joints_from_names, load_pybullet, \
+from pybullet_tools.pr2_utils import PR2_GROUPS
+from pybullet_tools.utils import add_data_path, connect, enable_gravity, load_model, \
+	joints_from_names, load_pybullet, \
 	velocity_control_joints, disconnect, enable_real_time
 
 HELP_MSG = """

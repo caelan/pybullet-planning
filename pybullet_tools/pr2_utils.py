@@ -2,15 +2,16 @@ import math
 import os
 import random
 import re
+from collections import namedtuple
+
 import numpy as np
 
-from collections import namedtuple
 from .pr2_never_collisions import NEVER_COLLISIONS
-from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, set_joint_positions, \
-    get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
+from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, \
+    set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
     unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
-    ConfSaver, get_bodies, create_mesh, remove_body, get_body_name, single_collision, unit_from_theta
+    ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta
 
 PR2_URDF = "models/pr2_description/pr2.urdf"
 DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
@@ -267,7 +268,7 @@ GET_GRASPS = {
 
 # Inverse reachability
 
-DATABASES_DIR = 'databases'
+DATABASES_DIR = '../databases'
 IR_FILENAME = '{}_{}_ir.pickle'
 
 def get_database_file(filename):

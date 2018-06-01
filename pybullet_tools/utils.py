@@ -1,18 +1,19 @@
 from __future__ import print_function
 
-import sys
 import math
-import time
-import platform
-import numpy as np
-import pybullet as p
-import pickle
 import os
-
+import pickle
+import platform
+import pybullet as p
+import sys
+import time
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
+
+import numpy as np
+
 from .transformations import quaternion_from_matrix
-from .motion.motion_planners.rrt_connect import birrt, direct_path
+from ..motion.motion_planners.rrt_connect import birrt, direct_path
 
 # from future_builtins import map, filter
 # from builtins import input # TODO - use future
@@ -219,7 +220,7 @@ def load_pybullet(filename, fixed_base=False):
 def load_model(rel_path, pose=None, fixed_base=True):
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
     directory = os.path.dirname(os.path.abspath(__file__))
-    abs_path = os.path.join(directory, rel_path)
+    abs_path = os.path.join(directory, '..', rel_path)
 
     flags = 0 # by default, Bullet disables self-collision
     #flags = p.URDF_USE_INERTIA_FROM_FILE

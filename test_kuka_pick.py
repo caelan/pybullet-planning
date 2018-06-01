@@ -2,11 +2,12 @@
 
 from __future__ import print_function
 
-from kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, get_ik_fn, get_free_motion_gen, \
-    get_holding_motion_gen
-from utils import WorldSaver, enable_gravity, connect, dump_world, set_pose, Pose, Point, set_default_camera, stable_z, \
-    BLOCK_URDF, load_model, wait_for_interrupt, disconnect, DRAKE_IIWA_URDF, user_input, update_state, \
-    disable_real_time
+from pybullet_tools.kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, \
+    get_ik_fn, get_free_motion_gen, get_holding_motion_gen
+from pybullet_tools.utils import WorldSaver, enable_gravity, connect, dump_world, set_pose, \
+    Pose, Point, set_default_camera, stable_z, \
+    BLOCK_URDF, load_model, wait_for_interrupt, disconnect, DRAKE_IIWA_URDF, user_input, update_state, disable_real_time
+
 
 def plan(robot, block, fixed, teleport):
     grasp_gen = get_grasp_gen(robot, 'top')

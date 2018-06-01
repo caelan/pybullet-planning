@@ -1,12 +1,12 @@
 import time
 
 from .pr2_utils import get_top_grasps
-from .utils import get_pose, set_pose, get_link_pose, body_from_end_effector, get_movable_joints, get_configuration, \
-    set_joint_positions, get_constraints, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
+from .utils import get_pose, set_pose, get_movable_joints, get_configuration, \
+    set_joint_positions, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, user_input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
     inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
-    workspace_trajectory, point_from_pose, quat_from_pose, step_simulation
+    step_simulation
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
