@@ -1520,7 +1520,8 @@ def is_center_stable(body, surface, epsilon=1e-2):
     base_center = center - np.array([0, 0, extent[2]])/2
     bottom_aabb = get_aabb(surface)
     bottom_z_max = bottom_aabb[1][2]
-    return (bottom_z_max <= base_center[2] <= (bottom_z_max + epsilon)) and \
+    #return (bottom_z_max <= base_center[2] <= (bottom_z_max + epsilon)) and \
+    return (abs(base_center[2] - bottom_z_max) < epsilon) and \
            (aabb_contains_point(base_center[:2], aabb2d_from_aabb(bottom_aabb)))
 
 
