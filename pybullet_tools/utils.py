@@ -429,6 +429,9 @@ def unit_pose():
 def angle_between(vec1, vec2):
     return np.math.acos(np.dot(vec1, vec2) / (np.linalg.norm(vec1) *  np.linalg.norm(vec2)))
 
+def get_unit_vector(vec):
+    return np.array(vec) / np.linalg.norm(vec)
+
 def z_rotation(theta):
     return quat_from_euler([0, 0, theta])
 
@@ -1353,6 +1356,13 @@ def get_refine_fn(body, joints, num_steps=0):
             # TODO: should wrap these joints
     return fn
 
+def refine_path(body, joints, waypoints, num_steps):
+    refine_fn = get_refine_fn(body, joints, num_steps)
+    refined_path = []
+    for v1, v2 in zip(waypoints, waypoints[1:]):
+        refined_path += list(refine_fn(v1, v2))
+    return refined_path
+
 def get_extend_fn(body, joints, resolutions=None):
     if resolutions is None:
         resolutions = 0.05*np.ones(len(joints))
@@ -1378,6 +1388,26 @@ def get_extend_fn(body, joints, resolutions=None):
 #         #last_conf = q
 #         # TODO: test if a scaling of itself
 #     return path
+
+def waypoints_from_path(path):
+    if len(path) < 2:
+        return path
+
+    def difference_fn(q2, q1):
+        return np.array(q2) - np.array(q1)
+
+    waypoints = [path[0]]
+    last_conf = path[1]
+    last_difference = get_unit_vector(difference_fn(last_conf, waypoints[-1]))
+    for conf in path[2:]:
+        difference = get_unit_vector(difference_fn(conf, waypoints[-1]))
+        if not np.allclose(last_difference, difference, atol=1e-3, rtol=0):
+            waypoints.append(last_conf)
+            difference = get_unit_vector(difference_fn(conf, waypoints[-1]))
+        last_conf = conf
+        last_difference = difference
+    waypoints.append(last_conf)
+    return waypoints
 
 def get_moving_links(body, moving_joints):
     moving_links = list(moving_joints)
@@ -1439,8 +1469,40 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         return any(pairwise_collision(*pair) for pair in check_body_pairs)
     return collision_fn
 
+def check_initial_end(start_conf, end_conf, collision_fn):
+    if collision_fn(start_conf):
+        print("Warning: initial configuration is in collision")
+        return False
+    if collision_fn(end_conf):
+        print("Warning: end configuration is in collision")
+        return False
+    return True
+
+def plan_waypoints_joint_motion(body, joints, waypoints, obstacles=None, attachments=[],
+                      self_collisions=True, disabled_collisions=set()):
+    extend_fn = get_extend_fn(body, joints)
+    collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions)
+    start_conf = get_joint_positions(body, joints)
+    if not check_initial_end(start_conf, waypoints[-1], collision_fn):
+        return None
+    path = [start_conf]
+    for waypoint in waypoints:
+        assert len(joints) == len(waypoint)
+        for q in extend_fn(path[-1], waypoint):
+            if collision_fn(q):
+                return None
+            path.append(q)
+    return path
+
+def plan_direct_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
+                      self_collisions=True, disabled_collisions=set()):
+    return plan_waypoints_joint_motion(body, joints, [end_conf], obstacles, attachments, self_collisions,
+                                       disabled_collisions)
+
 def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
                       self_collisions=True, disabled_collisions=set(), direct=False, **kwargs):
+    if direct:
+        return plan_direct_joint_motion(body, joints, end_conf, obstacles, attachments, self_collisions, disabled_collisions)
     assert len(joints) == len(end_conf)
     sample_fn = get_sample_fn(body, joints)
     distance_fn = get_distance_fn(body, joints)
@@ -1449,14 +1511,10 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
     # TODO: test self collision with the holding
 
     start_conf = get_joint_positions(body, joints)
-    if collision_fn(start_conf):
-        print("Warning: initial configuration is in collision")
+    if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
-    if collision_fn(end_conf):
-        print("Warning: end configuration is in collision")
-        return None
-    if direct:
-        return direct_path(start_conf, end_conf, extend_fn, collision_fn)
+    #if direct:
+    #    return direct_path(start_conf, end_conf, extend_fn, collision_fn)
     return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
 
 #####################################
@@ -1774,7 +1832,7 @@ def workspace_trajectory(robot, link, start_point, direction, quat, step_size=0.
     # TODO: check collisions?
     # TODO: lower intermediate tolerance
     distance = np.linalg.norm(direction)
-    unit_direction = np.array(direction) / distance
+    unit_direction = get_unit_vector(direction)
     traj = []
     for t in np.arange(0, distance, step_size):
         point = start_point + t*unit_direction
@@ -1828,12 +1886,22 @@ def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_ite
 
 #####################################
 
-def add_debug_text(text, position=(0, 0, 0), color=(0, 0, 0), lifetime=None, parent=-1):
+def get_lifetime(lifetime):
     if lifetime is None:
-        lifetime = 0
-    return p.addUserDebugText(text, textPosition=position, textColorRGB=color, # textSize=1,
-                       lifeTime=lifetime, parentObjectUniqueId=parent)
+        return 0
+    return lifetime
 
+def add_text(text, position=(0, 0, 0), color=(0, 0, 0), lifetime=None, parent=-1):
+    return p.addUserDebugText(text, textPosition=position, textColorRGB=color, # textSize=1,
+                              lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent,
+                              physicsClientId=CLIENT)
+
+def add_line(start, end, color=(0, 0, 0), width=1, lifetime=None):
+    return p.addUserDebugLine(start, end, lineColorRGB=color, lineWidth=width,
+                              lifeTime=get_lifetime(lifetime), physicsClientId=CLIENT)
+
+def remove_debug(debug): # removeAllUserDebugItems
+    p.removeUserDebugItem(debug, physicsClientId=CLIENT)
 
 def add_body_name(body, **kwargs):
     with PoseSaver(body):
@@ -1841,4 +1909,13 @@ def add_body_name(body, **kwargs):
         lower, upper = get_aabb(body)
     #position = (0, 0, upper[2])
     position = upper
-    return add_debug_text(get_name(body), position=position, parent=body, **kwargs)  # removeUserDebugItem
+    return add_text(get_name(body), position=position, parent=body, **kwargs)  # removeUserDebugItem
+
+
+def add_segments(points, closed=False, **kwargs):
+    lines = []
+    for v1, v2 in zip(points, points[1:]):
+        lines.append(add_line(v1, v2, **kwargs))
+    if closed:
+        lines.append(add_line(points[-1], points[0], **kwargs))
+    return lines

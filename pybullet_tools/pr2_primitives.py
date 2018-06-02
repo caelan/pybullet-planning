@@ -8,15 +8,16 @@ import numpy as np
 from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, \
     get_carry_conf, get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, ARM_NAMES
-from .utils import invert, multiply, get_name, set_pose, get_link_pose, \
-    link_from_name, \
-    pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
+from .utils import invert, multiply, get_name, set_pose, get_link_pose, link_from_name, BodySaver, \
+    pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, waypoints_from_path, \
     unit_quat, plan_base_motion, plan_joint_motion, base_values_from_pose, pose_from_base_values, \
-    uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, \
+    uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, point_from_pose, \
     remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
-    get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies
+    get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, add_segments
 from .pr2_problems import get_fixed_bodies
 
+BASE_EXTENT = 3.5 # 2.5
+BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
 
 class Pose(object):
     #def __init__(self, position, orientation):
@@ -64,10 +65,15 @@ class Command(object):
         raise NotImplementedError()
 
 class Trajectory(Command):
+    _draw = True
     def __init__(self, path):
         self.path = tuple(path)
+        link = BASE_LINK
+        #link = 1
+        self.points = self.to_points(link) if self._draw else None
         # TODO: constructor that takes in this info
     def apply(self, state, time_step=None, simulate=False, sample=1):
+        handles = [] if self.points is None else add_segments(self.points)
         for conf in self.path[1::sample]:
             conf.step()
             for attach in state.attachments.values():
@@ -82,6 +88,8 @@ class Trajectory(Command):
         end_conf = self.path[-1]
         if isinstance(end_conf, Pose):
             state.poses[end_conf.body] = end_conf
+        for handle in handles:
+            remove_debug(handle)
     def control(self, real_time=False, dt=0):
         # TODO: just waypoints
         if real_time:
@@ -96,6 +104,16 @@ class Trajectory(Command):
                 if not real_time:
                     step_simulation()
                 time.sleep(dt)
+    def to_points(self, link=BASE_LINK):
+        points = []
+        for conf in self.path:
+            with BodySaver(conf.body):
+                conf.step()
+                point = np.array(point_from_pose(get_link_pose(conf.body, link)))
+                point += 1e-2*np.array([0, 0, 1])
+                if not (points and np.allclose(points[-1], point, atol=1e-3, rtol=0)):
+                    points.append(point)
+        return waypoints_from_path(points)
     def reverse(self):
         return Trajectory(reversed(self.path))
     def __repr__(self):
@@ -207,13 +225,12 @@ class Cook(Command):
 def get_motion_gen(problem, teleport=False):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
-    base_limits = ([-2.5, -2.5], [2.5, 2.5])
     def fn(bq1, bq2):
         set_pose(robot, bq1.value)
         if teleport:
             path = [bq1, bq2]
         else:
-            raw_path = plan_base_motion(robot, base_values_from_pose(bq2.value), base_limits, obstacles=fixed)
+            raw_path = plan_base_motion(robot, base_values_from_pose(bq2.value), BASE_LIMITS, obstacles=fixed)
             if raw_path is None:
                 print('Failed motion plan!')
                 return None

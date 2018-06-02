@@ -6,7 +6,7 @@ from .utils import get_pose, set_pose, get_movable_joints, get_configuration, \
     enable_gravity, get_refine_fn, user_input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
     inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
-    step_simulation
+    step_simulation, refine_path
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
@@ -98,11 +98,7 @@ class BodyPath(object):
     # def full_path(self, q0=None):
     #     # TODO: could produce sequence of savers
     def refine(self, num_steps=0):
-        refine_fn = get_refine_fn(self.body, self.joints, num_steps)
-        refined_path = []
-        for v1, v2 in zip(self.path, self.path[1:]):
-            refined_path += list(refine_fn(v1, v2))
-        return self.__class__(self.body, refined_path, self.joints, self.attachments)
+        return self.__class__(self.body, refine_path(self.body, self.joints, self.path, num_steps), self.joints, self.attachments)
     def reverse(self):
         return self.__class__(self.body, self.path[::-1], self.joints, self.attachments)
     def __repr__(self):

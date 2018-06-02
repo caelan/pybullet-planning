@@ -11,7 +11,7 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
     unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
-    ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit
+    ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, violates_limits
 
 PR2_URDF = "models/pr2_description/pr2.urdf"
 DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
@@ -432,8 +432,9 @@ def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME):
     theta = np.math.atan2(dy, dx)  # TODO: might need to negate the minus for the default one
     phi = np.math.atan2(-dz, np.sqrt(dx ** 2 + dy ** 2))
     conf = [theta, phi]
-    # TODO: test joint limits
     #pose = Pose(point_from_pose(head_pose), Euler(pitch=phi, yaw=theta)) # TODO: initial roll?
+    if violates_limits(pr2, head_joints, conf):
+        return None
     return conf
 
 #####################################

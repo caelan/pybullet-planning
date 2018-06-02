@@ -16,7 +16,8 @@ def test_base_motion(pr2, base_start, base_goal):
     #disabled_collisions = get_disabled_collisions(pr2)
     set_base_values(pr2, base_start)
     input('Plan Base?')
-    base_path = plan_base_motion(pr2, base_goal)
+    base_limits = ((-2.5, -2.5), (2.5, 2.5))
+    base_path = plan_base_motion(pr2, base_goal, base_limits)
     print(base_path)
     if base_path is None:
         print('Unable to find a base path')
