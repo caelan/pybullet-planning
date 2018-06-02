@@ -116,8 +116,14 @@ class Trajectory(Command):
         return waypoints_from_path(points)
     def reverse(self):
         return Trajectory(reversed(self.path))
+    #def __repr__(self):
+    #    return 't{}'.format(id(self) % 1000)
     def __repr__(self):
-        return 't{}'.format(id(self) % 1000)
+        d = 0
+        if self.path:
+            conf = self.path[0]
+            d = 3 if isinstance(conf, Pose) else len(conf.joints)
+        return 't({},{})'.format(d, len(self.path))
 
 def create_trajectory(robot, joints, path):
     return Trajectory(Conf(robot, joints, q) for q in path)
@@ -440,3 +446,4 @@ def apply_commands(state, commands, **kwargs):
     for i, command in enumerate(commands):
         print(i, command)
         command.apply(state, **kwargs)
+        #user_input('Apply?')
