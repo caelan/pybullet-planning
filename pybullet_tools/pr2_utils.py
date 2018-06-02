@@ -3,6 +3,7 @@ import os
 import random
 import re
 from collections import namedtuple
+from itertools import combinations
 
 import numpy as np
 
@@ -11,7 +12,8 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
     unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
-    ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, violates_limits
+    ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, \
+    violates_limits, add_line
 
 PR2_URDF = "models/pr2_description/pr2.urdf"
 DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
@@ -337,13 +339,16 @@ def is_visible_point(camera_matrix, depth, point):
     if not (0 <= point[2] < depth):
         return False
     px, py = pixel_from_ray(camera_matrix, point)
+    # TODO: bounding box methods?
     return (0 <= px < WIDTH) and (0 <= py < HEIGHT)
 
 def is_visible_aabb(body_lower, body_upper):
+    # TODO: do intersect as well for identifying new obstacles
     z = body_lower[2]
     if z < 0:
         return False
     view_lower, view_upper = get_pr2_view_section(z)
+    # TODO: bounding box methods?
     return not (np.any(body_lower[:2] < view_lower[:2]) or
                 np.any(view_upper[:2] < body_upper[:2]))
 
@@ -353,9 +358,31 @@ def support_from_aabb(lower, upper):
     return [(min_x, min_y, z), (min_x, max_y, z),
             (max_x, max_y, z), (max_x, min_y, z)]
 
+#####################################
+
+def cone_vertices_from_base(base):
+    return [np.zeros(3)] + base
+
+def cone_wires_from_support(support):
+    #vertices = cone_vertices_from_base(support)
+    # TODO: could obtain from cone_mesh_from_support
+    # TODO: could also just return vertices and indices
+    apex = np.zeros(3)
+    lines = []
+    for vertex in support:
+        lines.append((apex, vertex))
+    #for i, v2 in enumerate(support):
+    #    v1 = support[i-1]
+    #    lines.append((v1, v2))
+    for v1, v2 in combinations(support, 2):
+        lines.append((v1, v2))
+    center = np.average(support, axis=0)
+    lines.append((apex, center))
+    return lines
+
 def cone_mesh_from_support(support):
     assert(len(support) == 4)
-    vertices = [np.zeros(3)] + support
+    vertices = cone_vertices_from_base(support)
     faces = [(1, 4, 3), (1, 3, 2)]
     for i in range(len(support)):
         index1 = 1+i
@@ -363,20 +390,7 @@ def cone_mesh_from_support(support):
         faces.append((0, index1, index2))
     return vertices, faces
 
-def get_detection_cone(pr2, body, depth=MAX_VISUAL_DISTANCE):
-    head_link = link_from_name(pr2, HEAD_LINK_NAME)
-    with PoseSaver(body):
-        body_head = multiply(invert(get_link_pose(pr2, head_link)), get_pose(body))
-        set_pose(body, body_head)
-        body_lower, body_upper = get_lower_upper(body)
-        z = body_lower[2]
-        if depth < z:
-            return None, z
-        if not is_visible_aabb(body_lower, body_upper):
-            return None, z
-        return cone_mesh_from_support(support_from_aabb(body_lower, body_upper)), z
-
-def get_cone_mesh(depth=MAX_VISUAL_DISTANCE):
+def get_viewcone_base(depth=MAX_VISUAL_DISTANCE):
     # TODO: attach to the pr2?
     cone = [(0, 0), (WIDTH, 0), (WIDTH, HEIGHT), (0, HEIGHT)]
     camera_matrix = get_pr2_camera_matrix()
@@ -384,32 +398,22 @@ def get_cone_mesh(depth=MAX_VISUAL_DISTANCE):
     for pixel in cone:
         ray = depth * ray_from_pixel(camera_matrix, pixel)
         vertices.append(ray[:3])
-    return cone_mesh_from_support(vertices)
+    return vertices
 
-def plan_scan_path(pr2, tilt=0):
-    head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
-    start_conf = get_joint_positions(pr2, head_joints)
-    lower_limit, upper_limit = get_joint_limits(pr2, head_joints[0])
+def get_viewcone(depth=MAX_VISUAL_DISTANCE, **kwargs):
+    # TODO: attach to the pr2?
+    mesh = cone_mesh_from_support(get_viewcone_base(depth=depth))
+    assert (mesh is not None)
+    return create_mesh(mesh, **kwargs)
 
-    first_conf = np.array([lower_limit, tilt])
-    second_conf = np.array([upper_limit, tilt])
-    if start_conf[0] > 0:
-        first_conf, second_conf = second_conf, first_conf
-    return [first_conf, second_conf]
-    #return [start_conf, first_conf, second_conf]
-    #third_conf = np.array([0, tilt])
-    #return [start_conf, first_conf, second_conf, third_conf]
+def attach_viewcone(robot, depth=MAX_VISUAL_DISTANCE, color=(1, 0, 0), **kwargs):
+    head_link = link_from_name(robot, HEAD_LINK_NAME)
+    lines = []
+    for v1, v2 in cone_wires_from_support(get_viewcone_base(depth=depth)):
+        lines.append(add_line(v1, v2, color=color, parent=robot, parent_link=head_link, **kwargs))
+    return lines
 
-def plan_pause_scan_path(pr2, tilt=0):
-    head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
-    assert(not violates_limit(pr2, head_joints[1], tilt))
-    theta, _ = get_pr2_field_of_view()
-    lower_limit, upper_limit = get_joint_limits(pr2, head_joints[0])
-    # Add one because half visible on limits
-    n = int(np.math.ceil((upper_limit - lower_limit) / theta) + 1)
-    epsilon = 1e-3
-    return [np.array([pan, tilt]) for pan in np.linspace(lower_limit + epsilon,
-                                                         upper_limit - epsilon, n, endpoint=True)]
+#####################################
 
 def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME):
     # TODO: test visibility by getting box
@@ -437,9 +441,47 @@ def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME):
         return None
     return conf
 
+def plan_scan_path(pr2, tilt=0):
+    head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
+    start_conf = get_joint_positions(pr2, head_joints)
+    lower_limit, upper_limit = get_joint_limits(pr2, head_joints[0])
+
+    first_conf = np.array([lower_limit, tilt])
+    second_conf = np.array([upper_limit, tilt])
+    if start_conf[0] > 0:
+        first_conf, second_conf = second_conf, first_conf
+    return [first_conf, second_conf]
+    #return [start_conf, first_conf, second_conf]
+    #third_conf = np.array([0, tilt])
+    #return [start_conf, first_conf, second_conf, third_conf]
+
+def plan_pause_scan_path(pr2, tilt=0):
+    head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
+    assert(not violates_limit(pr2, head_joints[1], tilt))
+    theta, _ = get_pr2_field_of_view()
+    lower_limit, upper_limit = get_joint_limits(pr2, head_joints[0])
+    # Add one because half visible on limits
+    n = int(np.math.ceil((upper_limit - lower_limit) / theta) + 1)
+    epsilon = 1e-3
+    return [np.array([pan, tilt]) for pan in np.linspace(lower_limit + epsilon,
+                                                         upper_limit - epsilon, n, endpoint=True)]
+
 #####################################
 
 Detection = namedtuple('Detection', ['body', 'distance'])
+
+def get_detection_cone(pr2, body, depth=MAX_VISUAL_DISTANCE):
+    head_link = link_from_name(pr2, HEAD_LINK_NAME)
+    with PoseSaver(body):
+        body_head = multiply(invert(get_link_pose(pr2, head_link)), get_pose(body))
+        set_pose(body, body_head)
+        body_lower, body_upper = get_lower_upper(body)
+        z = body_lower[2]
+        if depth < z:
+            return None, z
+        if not is_visible_aabb(body_lower, body_upper):
+            return None, z
+        return cone_mesh_from_support(support_from_aabb(body_lower, body_upper)), z
 
 def get_detections(pr2, p_false_neg=0, **kwargs):
     detections = []

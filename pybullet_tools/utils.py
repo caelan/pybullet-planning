@@ -1483,7 +1483,7 @@ def plan_waypoints_joint_motion(body, joints, waypoints, obstacles=None, attachm
     extend_fn = get_extend_fn(body, joints)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions)
     start_conf = get_joint_positions(body, joints)
-    if not check_initial_end(start_conf, waypoints[-1], collision_fn):
+    if not check_initial_end(start_conf, ([start_conf] + waypoints)[-1], collision_fn):
         return None
     path = [start_conf]
     for waypoint in waypoints:
@@ -1891,14 +1891,15 @@ def get_lifetime(lifetime):
         return 0
     return lifetime
 
-def add_text(text, position=(0, 0, 0), color=(0, 0, 0), lifetime=None, parent=-1):
+def add_text(text, position=(0, 0, 0), color=(0, 0, 0), lifetime=None, parent=-1, parent_link=BASE_LINK):
     return p.addUserDebugText(text, textPosition=position, textColorRGB=color, # textSize=1,
-                              lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent,
+                              lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
 
-def add_line(start, end, color=(0, 0, 0), width=1, lifetime=None):
+def add_line(start, end, color=(0, 0, 0), width=1, lifetime=None, parent=-1, parent_link=BASE_LINK):
     return p.addUserDebugLine(start, end, lineColorRGB=color, lineWidth=width,
-                              lifeTime=get_lifetime(lifetime), physicsClientId=CLIENT)
+                              lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
+                              physicsClientId=CLIENT)
 
 def remove_debug(debug): # removeAllUserDebugItems
     p.removeUserDebugItem(debug, physicsClientId=CLIENT)
