@@ -7,7 +7,7 @@ import numpy as np
 
 from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, \
     get_carry_conf, get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
-    learned_pose_generator, TOOL_DIRECTION, ARM_LINK_NAMES, get_x_presses, PR2_GROUPS, joints_from_names
+    learned_pose_generator, TOOL_DIRECTION, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, ARM_NAMES
 from .utils import invert, multiply, get_name, set_pose, get_link_pose, \
     link_from_name, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, \
@@ -101,6 +101,9 @@ class Trajectory(Command):
     def __repr__(self):
         return 't{}'.format(id(self) % 1000)
 
+def create_trajectory(robot, joints, path):
+    return Trajectory(Conf(robot, joints, q) for q in path)
+
 class Attach(Command):
     vacuum = True
     def __init__(self, robot, arm, grasp, body):
@@ -108,7 +111,7 @@ class Attach(Command):
         self.arm = arm
         self.grasp = grasp
         self.body = body
-        self.link = link_from_name(self.robot, ARM_LINK_NAMES[self.arm])
+        self.link = link_from_name(self.robot, PR2_TOOL_FRAMES[self.arm])
     def apply(self, state, **kwargs):
         state.attachments[self.body] = self
         del state.poses[self.body]
@@ -116,7 +119,8 @@ class Attach(Command):
         gripper_pose = get_link_pose(self.robot, self.link)
         body_pose = multiply(gripper_pose, self.grasp.value)
         set_pose(self.body, body_pose)
-        close_arm(self.robot, self.arm)
+        if self.arm in ARM_NAMES: # TODO: do I want this?
+            close_arm(self.robot, self.arm)
     def control(self, **kwargs):
         if self.vacuum:
             #add_fixed_constraint(self.body, self.robot, self.link)
@@ -144,13 +148,14 @@ class Detach(Command):
         self.robot = robot
         self.arm = arm
         self.body = body
-        self.link = link_from_name(self.robot, ARM_LINK_NAMES[self.arm])
+        self.link = link_from_name(self.robot, PR2_TOOL_FRAMES[self.arm])
         # TODO: pose argument to maintain same object
     def apply(self, state, **kwargs):
         del state.attachments[self.body]
         state.poses[self.body] = Pose(self.body, get_pose(self.body))
     def step(self):
-        open_arm(self.robot, self.arm)
+        if self.arm in ARM_NAMES: # TODO: do I want this?
+            open_arm(self.robot, self.arm)
     def control(self, **kwargs):
         remove_fixed_constraint(self.body, self.robot, self.link)
     def __repr__(self):
@@ -202,12 +207,13 @@ class Cook(Command):
 def get_motion_gen(problem, teleport=False):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
+    base_limits = ([-2.5, -2.5], [2.5, 2.5])
     def fn(bq1, bq2):
         set_pose(robot, bq1.value)
         if teleport:
             path = [bq1, bq2]
         else:
-            raw_path = plan_base_motion(robot, base_values_from_pose(bq2.value), obstacles=fixed)
+            raw_path = plan_base_motion(robot, base_values_from_pose(bq2.value), base_limits, obstacles=fixed)
             if raw_path is None:
                 print('Failed motion plan!')
                 return None

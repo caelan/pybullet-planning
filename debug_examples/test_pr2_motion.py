@@ -5,9 +5,9 @@ from __future__ import print_function
 import pybullet as p
 import time
 
-from examples.pybullet.utils.pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, TORSO_JOINT_NAME, \
+from pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, \
     SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, get_disabled_collisions, REST_LEFT_ARM, rightarm_from_leftarm
-from examples.pybullet.utils.pybullet_tools.utils import set_base_values, joint_from_name, set_joint_position, \
+from pybullet_tools.utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
     joint_controller, dump_body, load_model, joints_from_names
 
@@ -98,9 +98,10 @@ def main(use_pr2_drake=False):
 
     left_joints = joints_from_names(pr2, PR2_GROUPS['left_arm'])
     right_joints = joints_from_names(pr2, PR2_GROUPS['right_arm'])
+    torso_joints = joints_from_names(pr2, PR2_GROUPS['torso'])
     set_joint_positions(pr2, left_joints, arm_start)
     set_joint_positions(pr2, right_joints, rightarm_from_leftarm(REST_LEFT_ARM))
-    set_joint_position(pr2, joint_from_name(pr2, TORSO_JOINT_NAME), 0.2)
+    set_joint_positions(pr2, torso_joints, [0.2])
     open_arm(pr2, 'left')
 
     p.addUserDebugLine(base_start, base_goal, lineColorRGB=(1, 0, 0)) # addUserDebugText

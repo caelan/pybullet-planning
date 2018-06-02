@@ -11,7 +11,7 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
     unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
-    ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta
+    ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit
 
 PR2_URDF = "models/pr2_description/pr2.urdf"
 DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
@@ -29,35 +29,40 @@ PR2_LEFT_ARM_CONFS = {
     'top': TOP_HOLDING_LEFT_ARM,
 }
 
+ARM_NAMES = ('left', 'right')
+
+def arm_from_arm(arm): # TODO: rename
+    assert (arm in ARM_NAMES)
+    return '{}_arm'.format(arm)
+
+def gripper_from_arm(arm):
+    assert (arm in ARM_NAMES)
+    return '{}_gripper'.format(arm)
+
+
 PR2_GROUPS = {
     'base': ['x', 'y', 'theta'],
     'torso': ['torso_lift_joint'],
     'head': ['head_pan_joint', 'head_tilt_joint'],
-    'left_arm': ['l_shoulder_pan_joint', 'l_shoulder_lift_joint', 'l_upper_arm_roll_joint',
+    arm_from_arm('left'): ['l_shoulder_pan_joint', 'l_shoulder_lift_joint', 'l_upper_arm_roll_joint',
                  'l_elbow_flex_joint', 'l_forearm_roll_joint', 'l_wrist_flex_joint', 'l_wrist_roll_joint'],
-    'right_arm': ['r_shoulder_pan_joint', 'r_shoulder_lift_joint', 'r_upper_arm_roll_joint',
+    arm_from_arm('right'): ['r_shoulder_pan_joint', 'r_shoulder_lift_joint', 'r_upper_arm_roll_joint',
                   'r_elbow_flex_joint', 'r_forearm_roll_joint', 'r_wrist_flex_joint', 'r_wrist_roll_joint'],
-    'left_gripper': ['l_gripper_l_finger_joint', 'l_gripper_r_finger_joint',
+    gripper_from_arm('left'): ['l_gripper_l_finger_joint', 'l_gripper_r_finger_joint',
                      'l_gripper_l_finger_tip_joint', 'l_gripper_r_finger_tip_joint'],
-    'right_gripper': ['r_gripper_l_finger_joint', 'r_gripper_r_finger_joint',
+    gripper_from_arm('right'): ['r_gripper_l_finger_joint', 'r_gripper_r_finger_joint',
                       'r_gripper_l_finger_tip_joint', 'r_gripper_r_finger_tip_joint'],
-}
-PR2_TOOL_FRAMES = {
-    'left_gripper': 'l_gripper_palm_link',  # l_gripper_palm_link | l_gripper_tool_frame
-    'right_gripper': 'r_gripper_palm_link',  # r_gripper_palm_link | r_gripper_tool_frame
-}
-
-ARM_LINK_NAMES = {
-    'left': 'l_gripper_palm_link',  # l_gripper_tool_frame,
-    'right': 'r_gripper_palm_link',
 }
 
 HEAD_LINK_NAME = 'high_def_optical_frame' # high_def_optical_frame | high_def_frame | wide_stereo_l_stereo_camera_frame | ...
 # 'head_mount_kinect_rgb_optical_frame'
 # 'head_mount_kinect_rgb_link'
 
-TORSO_JOINT_NAME = 'torso_lift_joint'
-# LEFT_TOOL_NAME = 'l_gripper_tool_frame' # l_gripper_tool_joint | l_gripper_tool_frame
+PR2_TOOL_FRAMES = {
+    'left': 'l_gripper_palm_link',  # l_gripper_palm_link | l_gripper_tool_frame | l_gripper_tool_joint
+    'right': 'r_gripper_palm_link',  # r_gripper_palm_link | r_gripper_tool_frame
+    'head': HEAD_LINK_NAME,
+}
 
 TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678])
 TOOL_DIRECTION = [0., 0., 1.]
@@ -97,8 +102,6 @@ def get_carry_conf(arm, grasp_type):
         return arm_conf(arm, SIDE_HOLDING_LEFT_ARM)
     else:
         raise NotImplementedError()
-
-ARM_NAMES = ('left', 'right')
 
 def get_other_arm(arm):
     for other_arm in ARM_NAMES:
@@ -140,22 +143,27 @@ def load_srdf_collisions():
             disabled_collisions.append((link1, link2))
     return disabled_collisions
 
+#####################################
+
+def get_group_joints(robot, group):
+    return joints_from_names(robot, PR2_GROUPS[group])
+
+def get_group_conf(robot, group):
+    return get_joint_positions(robot, get_group_joints(robot, group))
+
+def set_group_conf(robot, group, positions):
+    set_joint_positions(robot, get_group_joints(robot, group), positions)
 
 #####################################
 
 # End-effectors
 
-def get_arm_group(arm):
-    assert (arm in ARM_NAMES)
-    return '{}_arm'.format(arm)
-
-
 def get_arm_joints(robot, arm):
-    return joints_from_names(robot, PR2_GROUPS[get_arm_group(arm)])
+    return get_group_joints(robot, arm_from_arm(arm))
 
 
-def get_arm_conf(robot, arm):
-    return get_joint_positions(robot, get_arm_joints(robot, arm))
+#def get_arm_conf(robot, arm):
+#    return get_joint_positions(robot, get_arm_joints(robot, arm))
 
 
 def set_arm_conf(robot, arm, conf):
@@ -163,8 +171,8 @@ def set_arm_conf(robot, arm, conf):
 
 
 def get_gripper_link(robot, arm):
-    assert arm in ARM_LINK_NAMES
-    return link_from_name(robot, ARM_LINK_NAMES[arm])
+    assert arm in ARM_NAMES
+    return link_from_name(robot, PR2_TOOL_FRAMES[arm])
 
 
 # def get_gripper_pose(robot):
@@ -173,22 +181,16 @@ def get_gripper_link(robot, arm):
 #    #pose = get_link_pose(robot, link_from_name(robot, LEFT_TOOL_NAME))
 #    return pose
 
-def get_group_conf(robot, group):
-    return get_joint_positions(robot, joints_from_names(robot, PR2_GROUPS[group]))
-
-def set_group_conf(robot, group, positions):
-    set_joint_positions(robot, joints_from_names(robot, PR2_GROUPS[group]), positions)
-
 def open_arm(robot, arm):  # TODO: these are mirrored on the pr2
-    gripper_name = '{}_gripper'.format(arm)
-    for name in PR2_GROUPS[gripper_name]:
+    gripper = gripper_from_arm(arm)
+    for name in PR2_GROUPS[gripper]:
         joint = joint_from_name(robot, name)
         set_joint_position(robot, joint, get_max_limit(robot, joint))
 
 
 def close_arm(robot, arm):
-    gripper_name = '{}_gripper'.format(arm)
-    for name in PR2_GROUPS[gripper_name]:
+    gripper = gripper_from_arm(arm)
+    for name in PR2_GROUPS[gripper]:
         joint = joint_from_name(robot, name)
         set_joint_position(robot, joint, get_min_limit(robot, joint))
 
@@ -324,6 +326,13 @@ def get_pr2_view_section(z):
     pixels = [(0, 0), (WIDTH, HEIGHT)]
     return [z*ray_from_pixel(camera_matrix, p) for p in pixels]
 
+def get_pr2_field_of_view():
+    z = 1
+    view_lower, view_upper = get_pr2_view_section(z=z)
+    theta = angle_between([view_lower[0], 0, z],  [view_upper[0], 0, z]) # 0.7853966439794928
+    phi = angle_between([0, view_lower[1], z],  [0, view_upper[1], z]) # 0.6024511557247721
+    return theta, phi
+
 def is_visible_point(camera_matrix, depth, point):
     if not (0 <= point[2] < depth):
         return False
@@ -380,14 +389,27 @@ def get_cone_mesh(depth=MAX_VISUAL_DISTANCE):
 def plan_scan_path(pr2, tilt=0):
     head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
     start_conf = get_joint_positions(pr2, head_joints)
-    lower_limit, upper_limit = get_joint_limits(pr2, head_joints)
+    lower_limit, upper_limit = get_joint_limits(pr2, head_joints[0])
 
-    first_conf = np.array([lower_limit[0], tilt])
-    second_conf = np.array([upper_limit[0], tilt])
+    first_conf = np.array([lower_limit, tilt])
+    second_conf = np.array([upper_limit, tilt])
     if start_conf[0] > 0:
         first_conf, second_conf = second_conf, first_conf
-    third_conf = np.array([0, tilt])
-    return [start_conf, first_conf, second_conf, third_conf]
+    return [first_conf, second_conf]
+    #return [start_conf, first_conf, second_conf]
+    #third_conf = np.array([0, tilt])
+    #return [start_conf, first_conf, second_conf, third_conf]
+
+def plan_pause_scan_path(pr2, tilt=0):
+    head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
+    assert(not violates_limit(pr2, head_joints[1], tilt))
+    theta, _ = get_pr2_field_of_view()
+    lower_limit, upper_limit = get_joint_limits(pr2, head_joints[0])
+    # Add one because half visible on limits
+    n = int(np.math.ceil((upper_limit - lower_limit) / theta) + 1)
+    epsilon = 1e-3
+    return [np.array([pan, tilt]) for pan in np.linspace(lower_limit + epsilon,
+                                                         upper_limit - epsilon, n, endpoint=True)]
 
 def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME):
     # TODO: test visibility by getting box

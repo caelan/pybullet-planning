@@ -426,6 +426,9 @@ def unit_quat():
 def unit_pose():
     return (unit_point(), unit_quat())
 
+def angle_between(vec1, vec2):
+    return np.math.acos(np.dot(vec1, vec2) / (np.linalg.norm(vec1) *  np.linalg.norm(vec2)))
+
 def z_rotation(theta):
     return quat_from_euler([0, 0, theta])
 
@@ -1308,7 +1311,7 @@ def ray_collision(rays):
 
 #####################################
 
-# Motion
+# Joint motion planning
 
 def get_sample_fn(body, joints):
     def fn():
@@ -1398,31 +1401,27 @@ def get_moving_pairs(body, moving_joints):
             if ancestors1 != ancestors2:
                 yield link1, link2
 
-def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
-                      self_collisions=True, disabled_collisions=set(), direct=False, **kwargs):
-    assert len(joints) == len(end_conf)
+
+def get_self_link_pairs(body, joints, disabled_collisions=set()):
+    moving_links = get_moving_links(body, joints)
+    fixed_links = list(set(get_links(body)) - set(moving_links))
+    check_link_pairs = list(product(moving_links, fixed_links))
+    if True:
+        check_link_pairs += list(get_moving_pairs(body, joints))
+    else:
+        check_link_pairs += list(combinations(moving_links, 2))
+    check_link_pairs = list(filter(lambda pair: not are_links_adjacent(body, *pair), check_link_pairs))
+    check_link_pairs = list(filter(lambda pair: (pair not in disabled_collisions) and
+                                                (pair[::-1] not in disabled_collisions), check_link_pairs))
+    return check_link_pairs
+
+
+def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions):
+    check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
     moving_bodies = [body] + [attachment.child for attachment in attachments]
-    sample_fn = get_sample_fn(body, joints)
-    distance_fn = get_distance_fn(body, joints)
-    extend_fn = get_extend_fn(body, joints)
-    # TODO: test self collision with the holding
-
-    check_link_pairs = []
-    if self_collisions:
-        moving_links = get_moving_links(body, joints)
-        fixed_links = list(set(get_links(body)) - set(moving_links))
-        check_link_pairs = list(product(moving_links, fixed_links))
-        if True:
-            check_link_pairs += list(get_moving_pairs(body, joints))
-        else:
-            check_link_pairs += list(combinations(moving_links, 2))
-        check_link_pairs = list(filter(lambda pair: not are_links_adjacent(body, *pair), check_link_pairs))
-        check_link_pairs = list(filter(lambda pair: (pair not in disabled_collisions) and
-                                               (pair[::-1] not in disabled_collisions), check_link_pairs))
-
     if obstacles is None:
         obstacles = list(set(get_bodies()) - set(moving_bodies))
-    check_body_pairs = list(product(moving_bodies, obstacles)) #+ list(combinations(moving_bodies, 2))
+    check_body_pairs = list(product(moving_bodies, obstacles))  # + list(combinations(moving_bodies, 2))
     # TODO: maybe prune the link adjacent to the robot
 
     # TODO: end-effector constraints
@@ -1438,6 +1437,16 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
             if pairwise_link_collision(body, link1, body, link2):
                 return True
         return any(pairwise_collision(*pair) for pair in check_body_pairs)
+    return collision_fn
+
+def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
+                      self_collisions=True, disabled_collisions=set(), direct=False, **kwargs):
+    assert len(joints) == len(end_conf)
+    sample_fn = get_sample_fn(body, joints)
+    distance_fn = get_distance_fn(body, joints)
+    extend_fn = get_extend_fn(body, joints)
+    collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions)
+    # TODO: test self collision with the holding
 
     start_conf = get_joint_positions(body, joints)
     if collision_fn(start_conf):
@@ -1448,14 +1457,14 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
         return None
     if direct:
         return direct_path(start_conf, end_conf, extend_fn, collision_fn)
-    return birrt(start_conf, end_conf, distance_fn,
-                 sample_fn, extend_fn, collision_fn, **kwargs)
+    return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
 
-def plan_base_motion(body, end_conf, obstacles=None, direct=False,
-                     base_limits=([-2.5, -2.5], [2.5, 2.5]),
-                     weights=1*np.ones(3),
-                     resolutions=0.05*np.ones(3),
-                     **kwargs):
+#####################################
+
+# Pose motion planning
+
+def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
+                     weights=1*np.ones(3), resolutions=0.05*np.ones(3), **kwargs):
     def sample_fn():
         x, y = np.random.uniform(*base_limits)
         theta = np.random.uniform(*CIRCULAR_LIMITS)
@@ -1480,6 +1489,7 @@ def plan_base_motion(body, end_conf, obstacles=None, direct=False,
             # TODO: should wrap these joints
 
     def collision_fn(q):
+        # TODO: update this function
         set_base_values(body, q)
         if obstacles is None:
             return single_collision(body)
