@@ -1232,13 +1232,14 @@ def set_color(body, color, link=BASE_LINK, shape_index=-1):
 
 # Bounding box
 
-def get_lower_upper(body):
-    return p.getAABB(body, physicsClientId=CLIENT)
+def get_lower_upper(body, link=BASE_LINK):
+    # TODO: only gets AABB for a single link
+    return p.getAABB(body, linkIndex=link, physicsClientId=CLIENT)
 
 get_aabb = get_lower_upper
 
 def get_center_extent(body):
-    lower, upper = get_lower_upper(body)
+    lower, upper = get_aabb(body)
     center = (np.array(lower) + upper) / 2
     extents = (np.array(upper) - lower)
     return center, extents
