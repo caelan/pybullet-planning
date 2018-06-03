@@ -295,8 +295,9 @@ def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
         x, y, _ = base_point
         _, _, theta = euler_from_quat(base_quat)
         base_values = (x, y, theta)
-        set_base_values(robot, base_values)
-        yield get_pose(robot)
+        #set_base_values(robot, base_values)
+        #yield get_pose(robot)
+        yield base_values
 
 #####################################
 

@@ -4,11 +4,11 @@ import argparse
 import pybullet as p
 import random
 
-from examples.pybullet.utils.pybullet_tools.pr2_utils import set_arm_conf, get_other_arm, arm_conf, REST_LEFT_ARM, \
+from pybullet_tools.pr2_utils import set_arm_conf, get_other_arm, arm_conf, REST_LEFT_ARM, \
     get_carry_conf, get_gripper_link, GET_GRASPS, IR_FILENAME, get_database_file
-from examples.pybullet.utils.pybullet_tools.utils import create_box, disconnect, add_data_path, connect, get_movable_joints, get_joint_positions, \
+from pybullet_tools.utils import create_box, disconnect, add_data_path, connect, get_movable_joints, get_joint_positions, \
     sample_placement, set_pose, multiply, invert, set_joint_positions, pairwise_collision, inverse_kinematics, \
-    get_link_pose, get_pose, get_body_name, write_pickle, uniform_pose_generator
+    get_link_pose, get_pose, get_body_name, write_pickle, uniform_pose_generator, set_base_values
 
 
 def create_inverse_reachability(robot, body, table, arm, grasp_type, num_samples=500):
@@ -24,7 +24,8 @@ def create_inverse_reachability(robot, body, table, arm, grasp_type, num_samples
         grasp_pose = random.choice(grasps)
         gripper_pose = multiply(box_pose, invert(grasp_pose))
         set_joint_positions(robot, movable_joints, default_conf)
-        set_pose(robot, next(uniform_pose_generator(robot, gripper_pose)))
+        base_conf = next(uniform_pose_generator(robot, gripper_pose))
+        set_base_values(robot, base_conf)
         if pairwise_collision(robot, table):
             continue
         conf = inverse_kinematics(robot, link, gripper_pose)

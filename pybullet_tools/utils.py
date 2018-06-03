@@ -1631,8 +1631,9 @@ def uniform_pose_generator(robot, gripper_pose, **kwargs):
         base_values = sample_reachable_base(robot, point)
         if base_values is None:
             break
-        set_base_values(robot, base_values)
-        yield get_pose(robot)
+        yield base_values
+        #set_base_values(robot, base_values)
+        #yield get_pose(robot)
 
 #####################################
 
