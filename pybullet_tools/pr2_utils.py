@@ -7,6 +7,7 @@ from itertools import combinations
 
 import numpy as np
 
+from examples.pybullet.utils.pybullet_tools.utils import get_body_name, get_num_joints
 from .pr2_never_collisions import NEVER_COLLISIONS
 from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, \
     set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
@@ -517,3 +518,7 @@ def visible_base_generator(robot, target_point, base_range):
         base_theta = np.math.atan2(base_from_table[1], base_from_table[0]) # TODO: stochastic orientation?
         base_q = np.append(base_xy, base_theta)
         yield base_q
+
+
+def is_drake_pr2(robot): # 87
+    return (get_body_name(robot) == 'pr2') and (get_num_joints(robot) == 82)

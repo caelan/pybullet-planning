@@ -7,13 +7,15 @@ import numpy as np
 
 from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, \
     get_carry_conf, get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
-    learned_pose_generator, TOOL_DIRECTION, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, ARM_NAMES
+    learned_pose_generator, TOOL_DIRECTION, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, \
+    ARM_NAMES, is_drake_pr2, get_group_joints, set_group_conf
 from .utils import invert, multiply, get_name, set_pose, get_link_pose, link_from_name, BodySaver, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, waypoints_from_path, \
     unit_quat, plan_base_motion, plan_joint_motion, base_values_from_pose, pose_from_base_values, \
     uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, point_from_pose, \
     remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
-    get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, add_segments
+    get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, \
+    add_segments, unit_pose
 from .pr2_problems import get_fixed_bodies
 
 BASE_EXTENT = 3.5 # 2.5
@@ -28,7 +30,7 @@ class Pose(object):
         self.value = tuple(value)
     def step(self):
         set_pose(self.body, self.value)
-    def to_pose(self):
+    def to_base_conf(self):
         value = base_values_from_pose(self.value)
         return Conf(self.body, range(len(value)), value)
     def __repr__(self):
@@ -98,7 +100,7 @@ class Trajectory(Command):
             disable_real_time()
         for conf in self.path:
             if isinstance(conf, Pose):
-                conf = conf.to_pose()
+                conf = conf.to_base_conf()
             for _ in joint_controller_hold(conf.body, conf.joints, conf.values):
                 enable_gravity()
                 if not real_time:
@@ -233,10 +235,23 @@ def get_motion_gen(problem, teleport=False):
     fixed = get_fixed_bodies(problem)
     def fn(bq1, bq2):
         set_pose(robot, bq1.value)
+        start_conf = base_values_from_pose(bq1.value)
+        goal_conf = base_values_from_pose(bq2.value)
         if teleport:
             path = [bq1, bq2]
+        #elif not is_drake_pr2(robot):
+        elif True:
+            raw_path = plan_base_motion(robot, goal_conf, BASE_LIMITS, obstacles=fixed)
+            if raw_path is None:
+                print('Failed motion plan!')
+                return None
+            path = [Pose(robot, pose_from_base_values(q, bq1.value)) for q in raw_path]
         else:
-            raw_path = plan_base_motion(robot, base_values_from_pose(bq2.value), BASE_LIMITS, obstacles=fixed)
+            # TODO: operate on just joint values here...
+            set_pose(robot, unit_pose())
+            set_group_conf(robot, 'base', start_conf)
+            raw_path = plan_joint_motion(robot, get_group_joints(robot, 'base'), goal_conf,
+                                         obstacles=fixed, self_collisions=False)
             if raw_path is None:
                 print('Failed motion plan!')
                 return None

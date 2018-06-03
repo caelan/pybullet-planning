@@ -26,7 +26,7 @@ class Problem(object):
         self.goal_cooked = goal_cooked
 
 
-def get_fixed_bodies(problem):
+def get_fixed_bodies(problem): # TODO: move to problem?
     movable = [problem.robot] + list(problem.movable)
     return list(filter(lambda b: b not in movable, get_bodies()))
 
