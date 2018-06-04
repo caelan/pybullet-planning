@@ -5,21 +5,33 @@ import random
 import time
 import numpy as np
 
+from examples.pybullet.utils.pybullet_tools.utils import link_from_name, BodySaver, get_aabb
 from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, \
     get_carry_conf, get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, \
-    ARM_NAMES, is_drake_pr2, get_group_joints, set_group_conf
+    ARM_NAMES, is_drake_pr2, get_group_joints, set_group_conf, get_group_conf
 from .utils import invert, multiply, get_name, set_pose, get_link_pose, link_from_name, BodySaver, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, waypoints_from_path, \
     unit_quat, plan_base_motion, plan_joint_motion, base_values_from_pose, pose_from_base_values, \
     uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, point_from_pose, \
     remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
     get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, \
-    add_segments, unit_pose, set_base_values
+    add_segments, unit_pose, set_base_values, get_max_limit
 from .pr2_problems import get_fixed_bodies
 
 BASE_EXTENT = 3.5 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
+PLAN_JOINTS = True
+
+def get_base_limits(robot):
+    if PLAN_JOINTS and is_drake_pr2(robot):
+        joints = get_group_joints(robot, 'base')[:2]
+        lower = [get_min_limit(robot, j) for j in joints]
+        upper = [get_max_limit(robot, j) for j in joints]
+        return lower, upper
+    return BASE_LIMITS
+
+##################################################
 
 class Pose(object):
     #def __init__(self, position, orientation):
@@ -76,6 +88,7 @@ class Trajectory(Command):
         # TODO: constructor that takes in this info
     def apply(self, state, time_step=None, simulate=False, sample=1):
         handles = [] if self.points is None else add_segments(self.points)
+        #user_input('Execute?')
         for conf in self.path[1::sample]:
             conf.step()
             for attach in state.attachments.values():
@@ -111,10 +124,13 @@ class Trajectory(Command):
         for conf in self.path:
             with BodySaver(conf.body):
                 conf.step()
-                point = np.array(point_from_pose(get_link_pose(conf.body, link)))
+                #point = np.array(point_from_pose(get_link_pose(conf.body, link)))
+                point = np.array(get_group_conf(conf.body, 'base'))
+                point[2] = 0
                 point += 1e-2*np.array([0, 0, 1])
                 if not (points and np.allclose(points[-1], point, atol=1e-3, rtol=0)):
                     points.append(point)
+        points = get_target_path(self)
         return waypoints_from_path(points)
     def reverse(self):
         return Trajectory(reversed(self.path))
@@ -129,6 +145,8 @@ class Trajectory(Command):
 
 def create_trajectory(robot, joints, path):
     return Trajectory(Conf(robot, joints, q) for q in path)
+
+##################################################
 
 class Attach(Command):
     vacuum = True
@@ -188,6 +206,8 @@ class Detach(Command):
         return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
                                      self.arm, get_name(self.body))
 
+##################################################
+
 class Clean(Command):
     def __init__(self, body):
         self.body = body
@@ -237,7 +257,6 @@ def get_motion_gen(problem, teleport=False):
         if teleport:
             path = [bq1, bq2]
         elif not is_drake_pr2(robot):
-        #elif True:
             set_pose(robot, bq1.value)
             #start_conf = base_values_from_pose(bq1.value)
             goal_conf = base_values_from_pose(bq2.value)
@@ -248,8 +267,7 @@ def get_motion_gen(problem, teleport=False):
             path = [Pose(robot, pose_from_base_values(q, bq1.value)) for q in raw_path]
         else:
             base_joints = get_group_joints(robot, 'base')
-            plan_joints = True
-            if plan_joints:
+            if PLAN_JOINTS:
                 # set_pose(robot, unit_pose())
                 # set_group_conf(robot, 'base', start_conf)
                 set_joint_positions(robot, base_joints, bq1.values)
@@ -268,6 +286,8 @@ def get_motion_gen(problem, teleport=False):
         bt = Trajectory(path)
         return (bt,)
     return fn
+
+##################################################
 
 APPROACH_DISTANCE = 0.1
 
@@ -301,6 +321,8 @@ def get_stable_gen(problem):
             yield [(p,)]
     return gen
 
+##################################################
+
 def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
@@ -325,7 +347,6 @@ def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False):
                 base_conf = next(base_generator)
                 #base_pose = next(base_generator)
                 #set_pose(robot, base_pose)
-                print(get_pose(robot))
                 set_joint_positions(robot, base_joints, base_conf)
                 if any(pairwise_collision(robot, b) for b in fixed):
                     continue
@@ -360,6 +381,8 @@ def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False):
             else:
                 yield None
     return gen
+
+##################################################
 
 def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
     robot = problem.robot
@@ -478,3 +501,33 @@ def apply_commands(state, commands, **kwargs):
         print(i, command)
         command.apply(state, **kwargs)
         #user_input('Apply?')
+
+#####################################
+
+def get_target_point(conf):
+    # TODO: use full body aabb
+    robot = conf.body
+    link = link_from_name(robot, 'torso_lift_link')
+    #link = BASE_LINK
+    # TODO: center of mass instead?
+    # TODO: look such that cone bottom touches at bottom
+    # TODO: the target isn't the center which causes it to drift
+    with BodySaver(conf.body):
+        conf.step()
+        lower, upper = get_aabb(robot, link)
+        center = np.average([lower, upper], axis=0)
+        point = np.array(get_group_conf(conf.body, 'base'))
+        #point[2] = upper[2]
+        point[2] = center[2]
+        #center, _ = get_center_extent(conf.body)
+        return point
+
+
+def get_target_path(trajectory):
+    # TODO: only do bounding boxes for moving links on the trajectory
+    target_path = []
+    for conf in trajectory.path:
+        # TODO: could draw the target point path sequence
+        target_path.append(get_target_point(conf))
+    #add_segments(target_path)
+    return target_path

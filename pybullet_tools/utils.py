@@ -5,12 +5,12 @@ import os
 import pickle
 import platform
 import pybullet as p
+import numpy as np
 import sys
 import time
+
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
-
-import numpy as np
 
 from .transformations import quaternion_from_matrix
 
@@ -208,6 +208,7 @@ class WorldSaver(Saver):
 # Simulation
 
 CLIENT = 0
+# TODO: keep track of all the clients?
 
 def get_client(client=None):
     if client is None:
@@ -218,8 +219,20 @@ def set_client(client):
     global CLIENT
     CLIENT = client
 
+BODIES = defaultdict(dict)
+# TODO: update delete as well
+
+URDFInfo = namedtuple('URDFInfo', ['name', 'path'])
+
 def load_pybullet(filename, fixed_base=False):
-    return p.loadURDF(filename, useFixedBase=fixed_base, physicsClientId=CLIENT)
+    body = p.loadURDF(filename, useFixedBase=fixed_base, physicsClientId=CLIENT)
+    BODIES[CLIENT][body] = URDFInfo(None, filename)
+    return body
+
+URDF_FLAGS = [p.URDF_USE_INERTIA_FROM_FILE,
+              p.URDF_USE_SELF_COLLISION,
+              p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT,
+              p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS]
 
 def load_model(rel_path, pose=None, fixed_base=True):
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
@@ -227,11 +240,6 @@ def load_model(rel_path, pose=None, fixed_base=True):
     abs_path = os.path.join(directory, '..', rel_path)
 
     flags = 0 # by default, Bullet disables self-collision
-    #flags = p.URDF_USE_INERTIA_FROM_FILE
-    #flags = p.URDF_USE_SELF_COLLISION
-    #flags = p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
-    #flags = p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
-
     add_data_path()
     if abs_path.endswith('.urdf'):
         body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags, physicsClientId=CLIENT)
@@ -245,7 +253,10 @@ def load_model(rel_path, pose=None, fixed_base=True):
         raise ValueError(abs_path)
     if pose is not None:
         set_pose(body, pose)
+    BODIES[CLIENT][body] = URDFInfo(None, abs_path)
     return body
+
+#####################################
 
 def wait_for_duration(duration): #, dt=0):
     t0 = time.time()
@@ -308,6 +319,7 @@ def connect(use_gui=True, shadows=True):
     return sim_id
 
 def disconnect():
+    # TODO: change CLIENT?
     return p.disconnect(physicsClientId=CLIENT)
 
 def is_connected():
@@ -342,6 +354,7 @@ def disable_real_time():
     p.setRealTimeSimulation(0, physicsClientId=CLIENT)
 
 def update_state():
+    # TODO: this doesn't seem to automatically update still
     disable_gravity()
     #step_simulation()
     #for body in get_bodies():
@@ -430,7 +443,10 @@ def angle_between(vec1, vec2):
     return np.math.acos(np.dot(vec1, vec2) / (np.linalg.norm(vec1) *  np.linalg.norm(vec2)))
 
 def get_unit_vector(vec):
-    return np.array(vec) / np.linalg.norm(vec)
+    norm = np.linalg.norm(vec)
+    if norm == 0:
+        return vec
+    return np.array(vec) / norm
 
 def z_rotation(theta):
     return quat_from_euler([0, 0, theta])
@@ -692,6 +708,7 @@ def is_circular(body, joint):
     return joint_info.jointUpperLimit < joint_info.jointLowerLimit
 
 def get_joint_limits(body, joint):
+    # TODO: make a version for several joints?
     if is_circular(body, joint):
         return CIRCULAR_LIMITS
     joint_info = get_joint_info(body, joint)
@@ -1922,3 +1939,10 @@ def add_segments(points, closed=False, **kwargs):
     if closed:
         lines.append(add_line(points[-1], points[0], **kwargs))
     return lines
+
+
+def draw_base_limits(limits, z=1e-2, **kwargs):
+    lower, upper = limits
+    vertices = [(lower[0], lower[1], z), (lower[0], upper[1], z),
+                (upper[0], upper[1], z), (upper[0], lower[1], z)]
+    return add_segments(vertices, closed=True, **kwargs)

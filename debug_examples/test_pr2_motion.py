@@ -9,13 +9,13 @@ from pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, \
     SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, get_disabled_collisions, REST_LEFT_ARM, rightarm_from_leftarm
 from pybullet_tools.utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
-    joint_controller, dump_body, load_model, joints_from_names
+    joint_controller, dump_body, load_model, joints_from_names, user_input, disconnect
 
 
 def test_base_motion(pr2, base_start, base_goal):
     #disabled_collisions = get_disabled_collisions(pr2)
     set_base_values(pr2, base_start)
-    input('Plan Base?')
+    user_input('Plan Base?')
     base_limits = ((-2.5, -2.5), (2.5, 2.5))
     base_path = plan_base_motion(pr2, base_goal, base_limits)
     if base_path is None:
@@ -24,7 +24,7 @@ def test_base_motion(pr2, base_start, base_goal):
     print(len(base_path))
     for bq in base_path:
         set_base_values(pr2, bq)
-        input('Continue?')
+        user_input('Continue?')
         # time.sleep(0.05)
 
 def test_drake_base_motion(pr2, base_start, base_goal):
@@ -35,7 +35,7 @@ def test_drake_base_motion(pr2, base_start, base_goal):
     disabled_collisions = get_disabled_collisions(pr2)
     base_joints = [joint_from_name(pr2, name) for name in PR2_GROUPS['base']]
     set_joint_positions(pr2, base_joints, base_start)
-    input('Plan Base?')
+    user_input('Plan Base?')
     base_path = plan_joint_motion(pr2, base_joints, base_goal, disabled_collisions=disabled_collisions)
     if base_path is None:
         print('Unable to find a base path')
@@ -43,12 +43,12 @@ def test_drake_base_motion(pr2, base_start, base_goal):
     print(len(base_path))
     for bq in base_path:
         set_joint_positions(pr2, base_joints, bq)
-        input('Continue?')
+        user_input('Continue?')
         # time.sleep(0.05)
 
 def test_arm_motion(pr2, left_joints, arm_goal):
     disabled_collisions = get_disabled_collisions(pr2)
-    input('Plan Arm?')
+    user_input('Plan Arm?')
     arm_path = plan_joint_motion(pr2, left_joints, arm_goal, disabled_collisions=disabled_collisions)
     if arm_path is None:
         print('Unable to find an arm path')
@@ -60,7 +60,7 @@ def test_arm_motion(pr2, left_joints, arm_goal):
         time.sleep(0.01)
 
 def test_arm_control(pr2, left_joints, arm_start):
-    input('Control Arm?')
+    user_input('Control Arm?')
     real_time = False
     enable_gravity()
     p.setRealTimeSimulation(real_time)
@@ -114,8 +114,8 @@ def main(use_pr2_drake=False):
     test_arm_motion(pr2, left_joints, arm_goal)
     test_arm_control(pr2, left_joints, arm_start)
 
-    input('Finish?')
-    p.disconnect()
+    user_input('Finish?')
+    disconnect()
 
 if __name__ == '__main__':
     main()

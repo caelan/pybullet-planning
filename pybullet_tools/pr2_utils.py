@@ -16,22 +16,6 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, \
     violates_limits, add_line
 
-PR2_URDF = "models/pr2_description/pr2.urdf"
-DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
-
-TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
-SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
-REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
-WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -1.4851759349218694, 1.3911839347271555,
-                 -1.6531320011389408, -2.978586584568441]
-CENTER_LEFT_ARM = [-0.07133691252641006, -0.052973836083405494, 1.5741805775919033, -1.4481146328076862,
-                   1.571782540186805, -1.4891468812835686, -9.413338322697955]
-# WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296, -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
-
-PR2_LEFT_ARM_CONFS = {
-    'top': TOP_HOLDING_LEFT_ARM,
-}
-
 ARM_NAMES = ('left', 'right')
 
 def arm_from_arm(arm): # TODO: rename
@@ -58,8 +42,7 @@ PR2_GROUPS = {
 }
 
 HEAD_LINK_NAME = 'high_def_optical_frame' # high_def_optical_frame | high_def_frame | wide_stereo_l_stereo_camera_frame | ...
-# 'head_mount_kinect_rgb_optical_frame'
-# 'head_mount_kinect_rgb_link'
+# kinect - 'head_mount_kinect_rgb_optical_frame' | 'head_mount_kinect_rgb_link'
 
 PR2_TOOL_FRAMES = {
     'left': 'l_gripper_palm_link',  # l_gripper_palm_link | l_gripper_tool_frame | l_gripper_tool_joint
@@ -67,20 +50,47 @@ PR2_TOOL_FRAMES = {
     'head': HEAD_LINK_NAME,
 }
 
+# Arm tool poses
 TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678])
 TOOL_DIRECTION = [0., 0., 1.]
 
 #####################################
 
-PR2_JOINT_NAMES = []
+# Special configurations
 
-def set_pr2_joint_names(pr2):
-    for joint in get_joints(pr2):
-        PR2_JOINT_NAMES.append(joint)
+TOP_HOLDING_LEFT_ARM = [0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
+SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
+REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
+WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -1.4851759349218694, 1.3911839347271555,
+                 -1.6531320011389408, -2.978586584568441]
+CENTER_LEFT_ARM = [-0.07133691252641006, -0.052973836083405494, 1.5741805775919033, -1.4481146328076862,
+                   1.571782540186805, -1.4891468812835686, -9.413338322697955]
+# WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296, -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
 
-def get_pr2_joints(joint_names):
-    joint_from_name = dict(zip(PR2_JOINT_NAMES, range(len(PR2_JOINT_NAMES))))
-    return [joint_from_name[name] for name in joint_names]
+PR2_LEFT_ARM_CONFS = {
+    'top': TOP_HOLDING_LEFT_ARM,
+}
+
+#####################################
+
+PR2_URDF = "models/pr2_description/pr2.urdf" # 87 joints
+DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf" # 82 joints
+
+def is_drake_pr2(robot): # 87
+    return (get_body_name(robot) == 'pr2') and (get_num_joints(robot) == 82)
+
+#####################################
+
+# TODO: for when the PR2 is copied and loses it's joint names
+# PR2_JOINT_NAMES = []
+#
+# def set_pr2_joint_names(pr2):
+#     for joint in get_joints(pr2):
+#         PR2_JOINT_NAMES.append(joint)
+#
+# def get_pr2_joints(joint_names):
+#     joint_from_name = dict(zip(PR2_JOINT_NAMES, range(len(PR2_JOINT_NAMES))))
+#     return [joint_from_name[name] for name in joint_names]
 
 #####################################
 
@@ -104,7 +114,7 @@ def get_carry_conf(arm, grasp_type):
     elif grasp_type == 'side':
         return arm_conf(arm, SIDE_HOLDING_LEFT_ARM)
     else:
-        raise NotImplementedError()
+        raise NotImplementedError(grasp_type)
 
 def get_other_arm(arm):
     for other_arm in ARM_NAMES:
@@ -112,6 +122,7 @@ def get_other_arm(arm):
             return other_arm
     raise ValueError(arm)
 
+#####################################
 
 def get_disabled_collisions(pr2):
     #disabled_names = PR2_ADJACENT_LINKS
@@ -521,5 +532,7 @@ def visible_base_generator(robot, target_point, base_range):
         yield base_q
 
 
-def is_drake_pr2(robot): # 87
-    return (get_body_name(robot) == 'pr2') and (get_num_joints(robot) == 82)
+def get_base_extend_fn(robot):
+    # TODO: rotate such that in field of view of the camera first
+    # TODO: plan base movements while checking edge feasibility with camera
+    raise NotImplementedError()
