@@ -3,7 +3,6 @@
 from __future__ import print_function
 
 import argparse
-import pybullet as p
 import time
 
 from ss.algorithms.dual_focused import dual_focused
@@ -231,7 +230,7 @@ def main(execute='execute'):
     print_plan(plan, evaluations)
     print(time.time() - t0)
     if (not display) or (plan is None):
-        p.disconnect()
+        disconnect()
         return
 
     paths = []
