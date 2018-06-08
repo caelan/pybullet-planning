@@ -5,19 +5,18 @@ import random
 import time
 import numpy as np
 
-from examples.pybullet.utils.pybullet_tools.utils import link_from_name, BodySaver, get_aabb
+from .pr2_problems import get_fixed_bodies
 from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, \
     get_carry_conf, get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, \
-    ARM_NAMES, is_drake_pr2, get_group_joints, set_group_conf, get_group_conf
+    ARM_NAMES, is_drake_pr2, get_group_joints, get_group_conf
 from .utils import invert, multiply, get_name, set_pose, get_link_pose, link_from_name, BodySaver, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, waypoints_from_path, \
     unit_quat, plan_base_motion, plan_joint_motion, base_values_from_pose, pose_from_base_values, \
-    uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, point_from_pose, \
-    remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
+    uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, remove_fixed_constraint, \
+    enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
     get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, \
-    add_segments, unit_pose, set_base_values, get_max_limit
-from .pr2_problems import get_fixed_bodies
+    add_segments, set_base_values, get_max_limit, get_aabb
 
 BASE_EXTENT = 3.5 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
@@ -325,86 +324,34 @@ def get_stable_gen(problem):
 
 ##################################################
 
-
-
-def gen_from_fn(fn, max_attempts=1, max_time=None):
-    while True:
-        for i in range(max_attempts):
-            outputs = fn()
-            if outputs is not None:
-                yield outputs
-                break
-        else:
-            yield None
-
-def list_gen_from_fn(fn, num_elements=1, max_attempts=1, max_time=None):
-    while True:
-        elements = []
-        for i in range(max_attempts):
-            if num_elements <= len(elements):
-                break
-            outputs = fn() # TODO: include inputs?
-            if outputs is not None:
-                elements.append(elements)
-        yield elements
-
-# Types of generator independences
-# - each trial independent
-# - each generator independent
-# - other
-
-def compose_fns(fns, max_attempts=1): # Compose samplers
-    # Assumes consistent ordering of inputs/outputs
-    def gen_fn(*input_values):
-        while True:
-            # for i in range(max_attempts):
-            output_values = []
-            for fn in fns:
-                new_outputs = fn(*(list(input_values) + output_values))
-                if new_outputs is None:
-                    yield None
-                    break
-                output_values.extend(new_outputs)
-            else:
-                yield output_values
-    return gen_fn
-
-def compose_gens(fns, max_attempts=1):
-    # TODO: could also do a diagonalization version of this
-    raise NotImplementedError()
-
-##################################################
-
-def get_ir_gen(problem, learned=True, max_attempts=25):
+def get_ir_sampler(problem, learned=True):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
-    def gen(a, o, p, g):
+    def sampler(a, o, p, g):
         gripper_pose = multiply(p.value, invert(g.value)) # w_f_g = w_f_o * (g_f_o)^-1
         default_conf = arm_conf(a, g.carry)
         arm_joints = get_arm_joints(robot, a)
         base_joints = get_group_joints(robot, 'base')
-        if learned:
+        if learned: # TODO: cache the learned distribution
             base_generator = learned_pose_generator(robot, gripper_pose, arm=a, grasp_type=g.grasp_type)
         else:
             base_generator = uniform_pose_generator(robot, gripper_pose)
-        def trial():
-            base_conf = next(base_generator, None)
-            if base_conf is None:
-                return
-            bq = Conf(robot, base_joints, base_conf)
-            p.assign()
-            bq.assign()
-            set_joint_positions(robot, arm_joints, default_conf)
-            if any(pairwise_collision(robot, b) for b in fixed):
-                return
-            return bq,
-        return gen_from_fn(trial, max_attempts=max_attempts)
-    return gen
+        base_conf = next(base_generator, None)
+        if base_conf is None:
+            return None
+        bq = Conf(robot, base_joints, base_conf)
+        p.assign()
+        bq.assign()
+        set_joint_positions(robot, arm_joints, default_conf)
+        if any(pairwise_collision(robot, b) for b in fixed):
+            return None
+        return (bq,)
+    return sampler
 
-def get_ik_gen(problem, teleport=False, max_attempts=25):
+def get_ik_fn(problem, teleport=False):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
-    def gen(a, o, p, g, bq):
+    def fn(a, o, p, g, bq):
         gripper_pose = multiply(p.value, invert(g.value)) # w_f_g = w_f_o * (g_f_o)^-1
         approach_pose = multiply(g.approach, gripper_pose)
         link = get_gripper_link(robot, a)
@@ -416,58 +363,49 @@ def get_ik_gen(problem, teleport=False, max_attempts=25):
             conf = get_joint_positions(robot, arm_joints)
             return conf
         default_conf = arm_conf(a, g.carry)
-        def trial():
-            p.assign()
-            bq.assign()
-            # TODO: randomly sample initial position?
-            set_joint_positions(robot, arm_joints, default_conf)
-            approach_conf = ik_fn(approach_pose)
-            if approach_conf is None:
-                return
-            grasp_conf = ik_fn(gripper_pose)
-            if grasp_conf is None:
-                return
-            if teleport:
-                path = [default_conf, approach_conf, grasp_conf]
-            else:
-                #set_joint_positions(robot, arm_joints, approach_conf)
-                control_path = plan_joint_motion(robot, arm_joints, approach_conf,
-                                                 obstacles=fixed, self_collisions=False, direct=True)
-                set_joint_positions(robot, arm_joints, approach_conf)
-                retreat_path = plan_joint_motion(robot, arm_joints, default_conf,
-                                                 obstacles=fixed, self_collisions=False)
-                path = retreat_path[::-1] + control_path[::-1]
-            mt = create_trajectory(robot, arm_joints, path)
-            return mt,
-        return gen_from_fn(trial, max_attempts=max_attempts)
-    return gen
+        p.assign()
+        bq.assign()
+        # TODO: randomly sample initial position to make sampler?
+        set_joint_positions(robot, arm_joints, default_conf)
+        approach_conf = ik_fn(approach_pose)
+        if approach_conf is None:
+            return None
+        grasp_conf = ik_fn(gripper_pose)
+        if grasp_conf is None:
+            return None
+        if teleport:
+            path = [default_conf, approach_conf, grasp_conf]
+        else:
+            #set_joint_positions(robot, arm_joints, approach_conf)
+            control_path = plan_joint_motion(robot, arm_joints, approach_conf,
+                                             obstacles=fixed, self_collisions=False, direct=True)
+            set_joint_positions(robot, arm_joints, approach_conf)
+            retreat_path = plan_joint_motion(robot, arm_joints, default_conf,
+                                             obstacles=fixed, self_collisions=False)
+            path = retreat_path[::-1] + control_path[::-1]
+        mt = create_trajectory(robot, arm_joints, path)
+        return (mt,)
+    return fn
 
+##################################################
 
 def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False):
-    # TODO: generic combination fn?
-    # TODO: fns that automatically apply max attempts and things
-
-
-    ir_gen = get_ir_gen(problem, max_attempts=1, learned=learned)
-    ##ir_gen = get_ir_gen(problem, max_attempts=max_attempts, learned=learned)
-    ik_gen = get_ik_gen(problem, max_attempts=1, teleport=teleport)
-    #return compose_fns([ir_gen, ik_gen], max_attempts=max_attempts)
-
-    def gen(a, o, p, g):
-        #while True:
-        #    for i in range(max_attempts):
-        #        ir_outputs = ir_gen(a, o, p, g)
-        # TODO: fn that mimics the initial one in which max_attempts is
-
-        for ir_outputs in ir_gen(a, o, p, g):
-            if ir_outputs is None:
-                yield ir_outputs
+    # TODO: compose using general fn
+    ir_sampler = get_ir_sampler(problem, learned)
+    ik_fn = get_ik_fn(problem, teleport)
+    def gen(*inputs):
+        while True:
+            for _ in range(max_attempts):
+                ir_outputs = ir_sampler(*inputs)
+                if ir_outputs is None:
+                    continue
+                ik_outputs = ik_fn(*(inputs + ir_outputs))
+                if ik_outputs is None:
+                    continue
+                yield (ir_outputs + ik_outputs)
+                break
             else:
-                for ik_outputs in ik_gen(a, o, p, g, *ir_outputs):
-                    if ik_outputs is None:
-                        yield ik_outputs
-                    else:
-                        yield ir_outputs + ik_outputs
+                yield None
     return gen
 
 ##################################################
