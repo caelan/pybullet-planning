@@ -12,7 +12,7 @@ from ss.model.problem import Problem
 from ss.model.streams import Stream, ListStream, GenStream, FnStream
 
 from pybullet_tools.pr2_problems import cooking_problem
-from pybullet_tools.pr2_utils import get_arm_joints, PR2_GROUPS
+from pybullet_tools.pr2_utils import get_arm_joints, PR2_GROUPS, get_group_joints, get_group_conf
 from pybullet_tools.utils import connect, add_data_path, disconnect, get_pose, enable_gravity, is_placement, joints_from_names, \
     get_joint_positions, set_client, clone_body ,ClientSaver, step_simulation, user_input, \
     save_state, restore_state, save_bullet, restore_bullet, clone_world, get_bodies, get_joints, \
@@ -75,7 +75,8 @@ rename_functions(locals())
 def ss_from_problem(problem, bound='shared', remote=False, teleport=False, movable_collisions=False):
     robot = problem.robot
 
-    initial_bq = Pose(robot, get_pose(robot))
+    #initial_bq = Pose(robot, get_pose(robot))
+    initial_bq = Conf(robot, get_group_joints(robot, 'base'), get_group_conf(robot, 'base'))
     initial_atoms = [
         CanMove(),
         IsBConf(initial_bq), AtBConf(initial_bq),

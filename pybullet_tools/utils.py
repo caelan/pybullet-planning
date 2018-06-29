@@ -408,7 +408,7 @@ def set_default_camera():
     set_camera(160, -35, 2.5, Point())
 
 def save_state():
-    return p.saveState(clientServerId=CLIENT)
+    return p.saveState(physicsClientId=CLIENT)
 
 def restore_state(state_id):
     p.restoreState(stateId=state_id, clientServerId=CLIENT)
@@ -465,11 +465,14 @@ def unit_quat():
 def unit_pose():
     return (unit_point(), unit_quat())
 
+def get_length(vec):
+    return np.linalg.norm(vec)
+
 def angle_between(vec1, vec2):
-    return np.math.acos(np.dot(vec1, vec2) / (np.linalg.norm(vec1) *  np.linalg.norm(vec2)))
+    return np.math.acos(np.dot(vec1, vec2) / (get_length(vec1) *  get_length(vec2)))
 
 def get_unit_vector(vec):
-    norm = np.linalg.norm(vec)
+    norm = get_length(vec)
     if norm == 0:
         return vec
     return np.array(vec) / norm
@@ -787,6 +790,7 @@ def wrap_joint(body, joint, value):
 BASE_LINK = -1
 STATIC_MASS = 0
 
+get_num_links = get_num_joints
 get_links = get_joints
 
 def get_link_name(body, link):
@@ -1096,28 +1100,16 @@ def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(.5, .5, .5, 1)):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
 
-def obj_from_mesh(mesh):
-    vertices, faces = mesh
-    s = 'g Mesh\n' # TODO: string writer
-    for v in vertices:
-        assert(len(v) == 3)
-        s += '\nv {}'.format(' '.join(map(str, v)))
-    for f in faces:
-        assert(len(f) == 3)
-        f = [i+1 for i in f]
-        #s += '\nf {}'.format(' '.join(map(str, f)))
-        s += '\nf {}'.format(' '.join(map(str, reversed(f))))
-    return s
-
 mesh_count = count()
 MESH_DIR = 'temp/'
 
 def create_mesh(mesh, scale=1, mass=STATIC_MASS, color=(.5, .5, .5, 1)):
     # http://people.sc.fsu.edu/~jburkardt/data/obj/obj.html
     # TODO: read OFF / WRL / OBJ files
+    # TODO: maintain dict to file
     ensure_dir(MESH_DIR)
     path = os.path.join(MESH_DIR, 'mesh{}.obj'.format(next(mesh_count)))
-    write(path, obj_from_mesh(mesh))
+    write(path, obj_file_from_mesh(mesh))
     mesh_scale = scale*np.ones(3)
     collision_id = p.createVisualShape(p.GEOM_MESH, fileName=path, meshScale=mesh_scale, physicsClientId=CLIENT)
     if (color is None) or not has_gui():
@@ -1211,7 +1203,7 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
     client = get_client(client)
     if links is None:
         links = get_links(body)
-    movable_joints = [joint for joint in links if is_movable(body, joint)]
+    #movable_joints = [joint for joint in links if is_movable(body, joint)]
     new_from_original = {}
     base_link = get_link_parent(body, links[0]) if links else BASE_LINK
     new_from_original[base_link] = -1
@@ -1990,7 +1982,7 @@ def workspace_trajectory(robot, link, start_point, direction, quat, step_size=0.
     # TODO: just use current configuration?
     # TODO: check collisions?
     # TODO: lower intermediate tolerance
-    distance = np.linalg.norm(direction)
+    distance = get_length(direction)
     unit_direction = get_unit_vector(direction)
     traj = []
     for t in np.arange(0, distance, step_size):
@@ -2086,3 +2078,245 @@ def draw_base_limits(limits, z=1e-2, **kwargs):
     vertices = [(lower[0], lower[1], z), (lower[0], upper[1], z),
                 (upper[0], upper[1], z), (upper[0], lower[1], z)]
     return add_segments(vertices, closed=True, **kwargs)
+
+#####################################
+
+# Polygonal surfaces
+
+def create_rectangular_surface(width, length):
+    extents = np.array([width, length, 0]) / 2.
+    unit_corners = [(-1, -1), (+1, -1), (+1, +1), (-1, +1)]
+    return [np.append(c, 0) * extents for c in unit_corners]
+
+def is_point_in_polygon(point, polygon):
+    sign = None
+    for i in range(len(polygon)):
+        v1, v2 = polygon[i - 1][:2], polygon[i][:2]
+        delta = v2 - v1
+        normal = np.array([-delta[1], delta[0]])
+        dist = normal.dot(point[:2] - v1)
+        if i == 0:  # TODO: equality?
+            sign = np.sign(dist)
+        elif np.sign(dist) != sign:
+            return False
+    return True
+
+def apply_affine(affine, points):
+    # TODO: version which applies to one point
+    return [point_from_pose(multiply(affine, Pose(point=p))) for p in points]
+
+def is_mesh_on_surface(polygon, world_from_surface, mesh, world_from_mesh, epsilon=1e-2):
+    surface_from_mesh = multiply(invert(world_from_surface), world_from_mesh)
+    points_surface = apply_affine(surface_from_mesh, mesh.vertices)
+    min_z = np.min(points_surface[:, 2])
+    return (abs(min_z) < epsilon) and \
+           all(is_point_in_polygon(p, polygon) for p in points_surface)
+
+def is_point_on_surface(polygon, world_from_surface, point_world):
+    [point_surface] = apply_affine(invert(world_from_surface), [point_world])
+    return is_point_in_polygon(point_surface, polygon[::-1])
+
+def sample_polygon_tform(polygon, points):
+    min_z = np.min(points[:, 2])
+    aabb_min = np.min(polygon, axis=0)
+    aabb_max = np.max(polygon, axis=0)
+    while True:
+        x = np.random.uniform(aabb_min[0], aabb_max[0])
+        y = np.random.uniform(aabb_min[1], aabb_max[1])
+        theta = np.random.uniform(0, 2 * np.pi)
+        point = Point(x, y, -min_z)
+        quat = Euler(yaw=theta)
+        surface_from_origin = Pose(point, quat)
+        yield surface_from_origin
+        # if all(is_point_in_polygon(p, polygon) for p in apply_affine(surface_from_origin, points)):
+        #  yield surface_from_origin
+
+def sample_surface_pose(polygon, world_from_surface, mesh):
+    for surface_from_origin in sample_polygon_tform(polygon, mesh.vertices):
+        world_from_mesh = multiply(world_from_surface, surface_from_origin)
+        if is_mesh_on_surface(polygon, world_from_surface, mesh, world_from_mesh):
+            yield world_from_mesh
+
+#####################################
+
+# Sampling edges
+
+def sample_categorical(categories):
+    from bisect import bisect
+    names = categories.keys()
+    cutoffs = np.cumsum([categories[name] for name in names])/sum(categories.values())
+    return names[bisect(cutoffs, np.random.random())]
+
+def sample_edge_point(polygon, radius):
+    edges = zip(polygon, polygon[-1:] + polygon[:-1])
+    edge_weights = {i: max(get_length(v2 - v1) - 2 * radius, 0) for i, (v1, v2) in enumerate(edges)}
+    # TODO: fail if no options
+    while True:
+        index = sample_categorical(edge_weights)
+        v1, v2 = edges[index]
+        t = np.random.uniform(radius, get_length(v2 - v1) - 2 * radius)
+        yield t * get_unit_vector(v2 - v1) + v1
+
+def get_closest_edge_point(polygon, point):
+    # TODO: always pick perpendicular to the edge
+    edges = zip(polygon, polygon[-1:] + polygon[:-1])
+    best = None
+    for v1, v2 in edges:
+        proj = (v2 - v1)[:2].dot((point - v1)[:2])
+        if proj <= 0:
+            closest = v1
+        elif get_length((v2 - v1)[:2]) <= proj:
+            closest = v2
+        else:
+            closest = proj * get_unit_vector((v2 - v1))
+        if (best is None) or (get_length((point - closest)[:2]) < get_length((point - best)[:2])):
+            best = closest
+    return best
+
+def sample_edge_pose(polygon, world_from_surface, mesh):
+    radius = max(get_length(v[:2]) for v in mesh.vertices)
+    origin_from_base = Pose(Point(z=p.min(mesh.vertices[:, 2])))
+    for point in sample_edge_point(polygon, radius):
+        theta = np.random.uniform(0, 2 * np.pi)
+        surface_from_origin = Pose(point, Euler(yaw=theta))
+        yield multiply(world_from_surface, surface_from_origin, origin_from_base)
+
+#####################################
+
+# Convex Hulls
+
+def convex_hull(points):
+    # TODO: 2D convex hull
+    from scipy.spatial import ConvexHull
+    # TODO: cKDTree is faster, but KDTree can do all pairs closest
+    hull = ConvexHull(points)
+    new_indices = {i: ni for ni, i in enumerate(hull.vertices)}
+    vertices = hull.points[hull.vertices, :]
+    faces = np.vectorize(lambda i: new_indices[i])(hull.simplices)
+    return vertices, faces
+
+def mesh_from_points(points):
+    vertices, indices = convex_hull(points)
+    new_indices = []
+    for triplet in indices:
+        centroid = np.average(vertices[triplet], axis=0)
+        v1, v2, v3 = vertices[triplet]
+        normal = np.cross(v3 - v1, v2 - v1)
+        if normal.dot(centroid) > 0:
+            # if normal.dot(centroid) < 0:
+            triplet = triplet[::-1]
+        new_indices.append(tuple(triplet))
+    return vertices.tolist(), new_indices
+
+def mesh_from_body(body, link=BASE_LINK):
+    # TODO: read obj files so I can always obtain the pointcloud
+    # TODO: approximate cylindrical/spherical using convex hull
+    # TODO: change based on geom_type
+    print(get_collision_data(body, link))
+    print(get_visual_data(body, link))
+    # TODO: these aren't working...
+
+#####################################
+
+# Mesh & Pointcloud Files
+
+def obj_file_from_mesh(mesh):
+    """
+    Creates a *.obj mesh string
+    :param mesh: tuple of list of vertices and list of faces
+    :return: *.obj mesh string
+    """
+    vertices, faces = mesh
+    s = 'g Mesh\n' # TODO: string writer
+    for v in vertices:
+        assert(len(v) == 3)
+        s += '\nv {}'.format(' '.join(map(str, v)))
+    for f in faces:
+        assert(len(f) == 3)
+        f = [i+1 for i in f]
+        s += '\nf {}'.format(' '.join(map(str, f)))
+        s += '\nf {}'.format(' '.join(map(str, reversed(f))))
+    return s
+
+def read_mesh_off(path, scale=1.0):
+    """
+    Reads a *.off mesh file
+    :param path: path to the *.off mesh file
+    :return: tuple of list of vertices and list of faces
+    """
+    with open(path) as f:
+        assert (f.readline().split()[0] == 'OFF'), 'Not OFF file'
+        nv, nf, ne = [int(x) for x in f.readline().split()]
+        verts = [tuple(scale * float(v) for v in f.readline().split()) for _ in range(nv)]
+        faces = [tuple(map(int, f.readline().split()[1:])) for _ in range(nf)]
+        return verts, faces
+
+
+def read_pcd_file(path):
+    """
+    Reads a *.pcd pointcloud file
+    :param path: path to the *.pcd pointcloud file
+    :return: list of points
+    """
+    with open(path) as f:
+        data = f.readline().split()
+        num_points = 0
+        while data[0] != 'DATA':
+            if data[0] == 'POINTS':
+                num_points = int(data[1])
+            data = f.readline().split()
+            continue
+        return [tuple(map(float, f.readline().split())) for _ in range(num_points)]
+
+# TODO: factor out things that don't depend on pybullet
+
+#####################################
+
+"""
+def readWrl(filename, name='wrlObj', scale=1.0, color='black'):
+    def readOneObj():
+        vl = []
+        while True:
+            line = fl.readline()
+            split = line.split(',')
+            if len(split) != 2:
+                break
+            split = split[0].split()
+            if len(split) == 3:
+                vl.append(np.array([scale*float(x) for x in split]+[1.0]))
+            else:
+                break
+        print '    verts', len(vl),
+        verts = np.vstack(vl).T
+        while line.split()[0] != 'coordIndex':
+            line = fl.readline()
+        line = fl.readline()
+        faces = []
+        while True:
+            line = fl.readline()
+            split = line.split(',')
+            if len(split) > 3:
+                faces.append(np.array([int(x) for x in split[:3]]))
+            else:
+                break
+        print 'faces', len(faces)
+        return Prim(verts, faces, hu.Pose(0,0,0,0), None,
+                    name=name+str(len(prims)))
+
+    fl = open(filename)
+    assert fl.readline().split()[0] == '#VRML', 'Not VRML file?'
+    prims = []
+    while True:
+        line = fl.readline()
+        if not line: break
+        split = line.split()
+        if not split or split[0] != 'point':
+            continue
+        else:
+            print 'Object', len(prims)
+            prims.append(readOneObj())
+    # Have one "part" so that shadows are simpler
+    part = Shape(prims, None, name=name+'_part')
+    # Keep color only in top entry.
+    return Shape([part], None, name=name, color=color)
+"""
