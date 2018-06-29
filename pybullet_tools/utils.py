@@ -393,7 +393,7 @@ def set_camera_pose(camera_point, target_point=np.zeros(3)):
     pitch = get_pitch(delta_point)
     p.resetDebugVisualizerCamera(distance, math.degrees(yaw), math.degrees(pitch),
                                  target_point, physicsClientId=CLIENT)
-                                 #point, physicsClientId=CLIENT)
+                                #point, physicsClientId=CLIENT)
 
 def get_image(width=640, height=480):
     import scipy.misc
@@ -994,6 +994,7 @@ def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
     }
     collision_args.update(geometry)
     collision_id = p.createCollisionShape(**collision_args)
+
     if (color is None) or not has_gui():
         return collision_id, NULL_ID
     if 'height' in geometry: # TODO: pybullet bug
