@@ -1,0 +1,272 @@
+<problem>
+   <objects>
+
+      <obj>
+         <name>blue_tray</name>
+         <geom>tray_blue.obj</geom>
+         <pose>1.000 0.000 0.000 0.450 0.000 1.000 0.000 0.450 0.000 0.000 1.000 -0.205</pose>
+         <moveable>false</moveable>
+         <sssp>
+            <xmin>-0.3</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.3</ymax>
+            <zmin>0.0</zmin><zmax>0.0</zmax>
+         </sssp>
+      </obj>
+
+      <obj>
+         <name>red_tray</name>
+         <geom>tray_red.obj</geom>
+         <pose>1.000 0.000 0.000 0.450 0.000 1.000 0.000 -0.750 0.000 0.000 1.000 -0.655</pose>
+         <moveable>false</moveable>
+         <sssp>
+            <xmin>-0.3</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.3</ymax>
+            <zmin>0.0</zmin><zmax>0.0</zmax>
+         </sssp>
+      </obj>
+
+      <obj>
+         <name>block_a</name>
+         <geom>cubeA.obj</geom>
+         <pose>1.000 0.000 0.000 0.600 0.000 1.000 0.000 -0.100 0.000 0.000 1.000 -0.195</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <gc type="top">
+               <template>0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 0.060</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point on top -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.08</zmin><zmax>0.08</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template> <!-- all z-rotations of the -->
+            <axis>0.0 0.0 1.0</axis>                                 <!-- "natural" position     -->
+            <distance>0.0</distance>
+         </sop>         
+      </obj>
+
+      <obj>
+         <name>block_b</name>
+         <geom>cubeB.obj</geom>
+         <pose>1.000 0.000 0.000 0.300 0.000 1.000 0.000 0.600 0.000 0.000 1.000 -0.200</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <gc type="top">
+               <template>0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 0.060</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point on top -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.08</zmin><zmax>0.08</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template> <!-- all z-rotations of the -->
+            <axis>0.0 0.0 1.0</axis>                                 <!-- "natural" position     -->
+            <distance>0.0</distance>
+         </sop>         
+      </obj>
+
+      <obj>
+         <name>block_c</name>
+         <geom>cubeC.obj</geom>
+         <pose>1.000 0.000 0.000 0.300 0.000 1.000 0.000 -0.600 0.000 0.000 1.000 -0.650</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <gc type="top">
+               <template>0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 0.060</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point on top -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.08</zmin><zmax>0.08</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template> <!-- all z-rotations of the -->
+            <axis>0.0 0.0 1.0</axis>                                 <!-- "natural" position     -->
+            <distance>0.0</distance>
+         </sop>         
+      </obj>
+
+      <obj>
+         <name>block_d</name>
+         <geom>cubeD.obj</geom>
+         <pose>1.000 0.000 0.000 0.300 0.000 1.000 0.000 0.600 0.000 0.000 1.000 -0.115</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <gc type="top">
+               <template>0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 0.060</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point on top -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.08</zmin><zmax>0.08</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template> <!-- all z-rotations of the -->
+            <axis>0.0 0.0 1.0</axis>                                 <!-- "natural" position     -->
+            <distance>0.0</distance>
+         </sop>         
+      </obj>
+
+      <obj>
+         <name>block_e</name>
+         <geom>cubeE.obj</geom>
+         <pose>1.000 0.000 0.000 0.300 0.000 1.000 0.000 -0.600 0.000 0.000 1.000 -0.565</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <gc type="top">
+               <template>0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 0.060</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point on top -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.08</zmin><zmax>0.08</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template> <!-- all z-rotations of the -->
+            <axis>0.0 0.0 1.0</axis>                                 <!-- "natural" position     -->
+            <distance>0.0</distance>
+         </sop>         
+      </obj>
+
+      <obj>
+         <name>block_f</name>
+         <geom>cubeF.obj</geom>
+         <pose>1.000 0.000 0.000 0.300 0.000 1.000 0.000 0.600 0.000 0.000 1.000 -0.030</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <gc type="top">
+               <template>0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 0.060</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point on top -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.08</zmin><zmax>0.08</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template> <!-- all z-rotations of the -->
+            <axis>0.0 0.0 1.0</axis>                                 <!-- "natural" position     -->
+            <distance>0.0</distance>
+         </sop>         
+      </obj>
+
+      <obj>
+         <name>block_g</name>
+         <geom>cubeG.obj</geom>
+         <pose>1.000 0.000 0.000 0.300 0.000 1.000 0.000 -0.600 0.000 0.000 1.000 -0.480</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <gc type="top">
+               <template>0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 0.060</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point on top -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.08</zmin><zmax>0.08</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template> <!-- all z-rotations of the -->
+            <axis>0.0 0.0 1.0</axis>                                 <!-- "natural" position     -->
+            <distance>0.0</distance>
+         </sop>         
+      </obj>
+
+      <obj>
+         <name>block_h</name>
+         <geom>cubeH.obj</geom>
+         <pose>1.000 0.000 0.000 0.300 0.000 1.000 0.000 0.600 0.000 0.000 1.000 0.055</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <gc type="top">
+               <template>0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 0.060</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point on top -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.08</zmin><zmax>0.08</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template> <!-- all z-rotations of the -->
+            <axis>0.0 0.0 1.0</axis>                                 <!-- "natural" position     -->
+            <distance>0.0</distance>
+         </sop>         
+      </obj>
+
+      <obj>
+         <name>block_i</name>
+         <geom>cubeI.obj</geom>
+         <pose>1.000 0.000 0.000 0.300 0.000 1.000 0.000 -0.600 0.000 0.000 1.000 -0.395</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <gc type="top">
+               <template>0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 -1.000 0.000 0.000 0.060</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point on top -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.08</zmin><zmax>0.08</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template> <!-- all z-rotations of the -->
+            <axis>0.0 0.0 1.0</axis>                                 <!-- "natural" position     -->
+            <distance>0.0</distance>
+         </sop>         
+      </obj>
+
+      <obj>
+         <name>table</name>
+         <geom>table_narrow.obj</geom>
+         <pose>1.000 0.000 0.000 0.900 0.000 1.000 0.000 -0.400 0.000 0.000 1.000 -0.970</pose>
+         <moveable>false</moveable>
+         <sssp> <!-- sssp = horizontal rectangular region -->
+            <xmin>-0.58</xmin><xmax>-0.1</xmax>
+            <ymin>0.1</ymin><ymax>0.73</ymax>
+            <zmin>0.78</zmin><zmax>0.78</zmax>
+         </sssp>
+     </obj>
+
+      <obj>
+         <name>table_ceiling</name>
+         <geom>table_ceiling.obj</geom>
+         <pose>1.000 0.000 0.000 0.950 0.000 1.000 0.000 -0.430 0.000 0.000 1.000 0.330</pose>
+         <moveable>false</moveable>
+     </obj>
+
+   </objects>
+
+
+   <robots>
+
+      <robot>
+         <name>pr2</name>
+         <urdf>models/pr2.urdf</urdf> <!-- or some other format you may use -->
+         <basepose>1.000 0.000 0.000 0.100 0.000 1.000 0.000 0.000 0.000 0.000 1.000 -1.670</basepose>
+         <movebase>false</movebase> <!-- the base should not move -->
+         <torso>0.1</torso>
+         <left_arm>0.5 0.0 0.0 -0.16 0.0 -0.11 0.0</left_arm>
+         <right_arm>-0.5 0.0 0.0 -0.16 0.0 -0.11 0.0</right_arm>
+      </robot>
+
+   </robots>
+
+
+</problem>
