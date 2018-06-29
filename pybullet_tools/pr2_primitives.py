@@ -5,7 +5,6 @@ import random
 import time
 import numpy as np
 
-from examples.pybullet.utils.pybullet_tools.utils import link_from_name, BodySaver, get_aabb
 from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, \
     get_carry_conf, get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, \
@@ -16,7 +15,7 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, link_fro
     uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, point_from_pose, \
     remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
     get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, \
-    add_segments, unit_pose, set_base_values, get_max_limit
+    add_segments, unit_pose, set_base_values, get_max_limit, link_from_name, BodySaver, get_aabb
 from .pr2_problems import get_fixed_bodies
 
 BASE_EXTENT = 3.5 # 2.5

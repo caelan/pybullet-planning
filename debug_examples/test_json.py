@@ -5,9 +5,10 @@ from __future__ import print_function
 import json
 import os
 
-from pybullet_tools.utils import create_box_shape, STATIC_MASS, CLIENT, user_input, connect, \
+from pybullet_tools.utils import STATIC_MASS, CLIENT, user_input, connect, \
     disconnect, set_point, set_quat, set_pose, wait_for_interrupt, load_model, set_joint_position, \
-    joint_from_name, has_joint, create_cylinder_shape, get_bodies, HideOutput, base_values_from_pose, get_image
+    joint_from_name, has_joint, get_bodies, HideOutput, base_values_from_pose, \
+    get_image, create_shape, get_box_geometry, get_cylinder_geometry
 from pybullet_tools.pr2_utils import DRAKE_PR2_URDF, set_group_conf
 import pybullet as p
 import numpy as np
@@ -56,24 +57,22 @@ def main():
             #for geometry in link['geometries']:
             for geometry in link:
                 # TODO: can also just make fixed lengths
-
-                r, g, b, a = geometry['color']
+                r, g, b, a = geometry['rgba']
                 a = 1 - a
                 color = [r, g, b, a]
                 if geometry['type'] == 'box':
                     w, l, h = 2*np.array(geometry['extents'])
+                    geom = get_box_geometry(w, l, h)
                     # createCollisionShapeArray
-                    collision_id, visual_id = create_box_shape(w, l, h, pose=parse_pose(geometry), color=color)
                 elif geometry['type'] == 'cylinder':
-                    collision_id, visual_id = create_cylinder_shape(geometry['radius'], geometry['height'],
-                                                                    pose=parse_pose(geometry), color=color)
+                    geom = get_cylinder_geometry(geometry['radius'], geometry['height'])
                 else:
-                    continue
+                    raise NotImplementedError(geometry['type'])
+                collision_id, visual_id = create_shape(geom, pose=parse_pose(geometry),
+                                                       color=color) #, specular=geometry['specular'])
                 body_id = p.createMultiBody(baseMass=STATIC_MASS, baseCollisionShapeIndex=collision_id,
                                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
                 set_pose(body_id, parse_pose(body))
-                #set_point(body_id, parse_point(body['point']))
-                #set_quat(body_id, parse_quat(body['quat']))
                 body_from_name[body['name']] = body_id
     print(get_bodies())
 

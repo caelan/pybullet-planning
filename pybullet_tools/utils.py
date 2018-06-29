@@ -378,6 +378,15 @@ def get_camera():
 def set_camera(yaw, pitch, distance, target_position=np.zeros(3)):
     p.resetDebugVisualizerCamera(distance, yaw, pitch, target_position, physicsClientId=CLIENT)
 
+def get_image(width=640, height=480):
+    import scipy.misc
+    rgb, depth, _ = p.getCameraImage(width, height, physicsClientId=CLIENT)[2:]
+    print(rgb.shape) # (480, 640, 4)
+    print(depth.shape) # (480, 640)
+    scipy.misc.imsave('image.jpg', rgb[:,:,:3])
+    # scipy.misc.toimage(image_array, cmin=0.0, cmax=...).save('outfile.jpg')
+    return rgb # np.reshape(rgb, [width, height, 4])
+
 def set_default_camera():
     set_camera(160, -35, 2.5, Point())
 
@@ -931,18 +940,71 @@ SHAPE_TYPES = {
 
 # TODO: clean this up to avoid repeated work
 
-def create_box(w, l, h, mass=STATIC_MASS, color=(1, 0, 0, 1)):
-    half_extents = [w/2., l/2., h/2.]
-    collision_id = p.createCollisionShape(p.GEOM_BOX, halfExtents=half_extents, physicsClientId=CLIENT)
+def get_box_geometry(width, length, height):
+    return {
+        'shapeType': p.GEOM_BOX,
+        'halfExtents': [width/2., length/2., height/2.]
+    }
+
+def get_cylinder_geometry(radius, height):
+    return {
+        'shapeType': p.GEOM_CYLINDER,
+        'radius': radius,
+        'height': height,
+    }
+
+def get_sphere_geometry(radius):
+    return {
+        'shapeType': p.GEOM_SPHERE,
+        'radius': radius,
+    }
+
+def get_capsule_geometry(radius, height):
+    return {
+        'shapeType': p.GEOM_CAPSULE,
+        'radius': radius,
+        'length': height,
+    }
+
+NULL_ID = -1
+
+def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
+    point, quat = pose
+    collision_args = {
+        'collisionFramePosition': point,
+        'collisionFrameOrientation': quat,
+        'physicsClientId': CLIENT,
+    }
+    collision_args.update(geometry)
+    collision_id = p.createCollisionShape(**collision_args)
     if (color is None) or not has_gui():
-        visual_id = -1
-    else:
-        visual_id = p.createVisualShape(p.GEOM_BOX, halfExtents=half_extents, rgbaColor=color, physicsClientId=CLIENT)
+        return collision_id, NULL_ID
+    if 'height' in geometry: # TODO: pybullet bug
+        geometry['length'] = geometry['height']
+        del geometry['height']
+    visual_args = {
+        'rgbaColor': color,
+        'visualFramePosition': point,
+        'visualFrameOrientation': quat,
+        'physicsClientId': CLIENT,
+    }
+    visual_args.update(geometry)
+    if specular is not None:
+        visual_args['specularColor'] = specular
+    visual_id = p.createVisualShape(**visual_args)
+    return collision_id, visual_id
+
+#####################################
+
+def create_box(w, l, h, mass=STATIC_MASS, color=(1, 0, 0, 1)):
+    collision_id, visual_id = create_shape(get_box_geometry(w, l, h), color=color)
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
+                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
+    # basePosition | baseOrientation
     # linkCollisionShapeIndices | linkVisualShapeIndices
 
 def create_cylinder(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
+    # TODO: combine this
     collision_id =  p.createCollisionShape(p.GEOM_CYLINDER, radius=radius, height=height, physicsClientId=CLIENT)
     if (color is None) or not has_gui():
         visual_id = -1
@@ -1243,6 +1305,7 @@ def set_color(body, color, link=BASE_LINK, shape_index=-1):
     :param shape_index:
     :return:
     """
+    # specularColor
     return p.changeVisualShape(body, link, rgbaColor=color, physicsClientId=CLIENT)
 
 #####################################
