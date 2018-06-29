@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import json
 import os
+import time
 
 from pybullet_tools.utils import STATIC_MASS, CLIENT, user_input, connect, \
     disconnect, set_point, set_quat, set_pose, wait_for_interrupt, load_model, set_joint_position, \
@@ -145,11 +146,21 @@ def main():
     problem_filenames = sorted(os.listdir(openrave_directory))
     #problem_filenames = ['sink_stove_4_30.json'] # 'dinner.json' | 'simple.json'
 
+    width = 2560
+    height = 1600
+    #640, 480
+
     for problem_filename in problem_filenames:
+        problem_name = problem_filename.split('.')[0]
         path = os.path.join(openrave_directory, problem_filename)
         print(path)
         load(path)
-        wait_for_interrupt()
+        image_name = "stuff/{}.png".format(problem_name)
+        wait_for_interrupt(max_time=0.5)
+        os.system("screencapture -R {},{},{},{} {}".format(
+            #0, 0, height, height,
+            225, 200, 600, 500,
+            image_name))
     disconnect()
 
 if __name__ == '__main__':
