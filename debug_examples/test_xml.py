@@ -11,6 +11,9 @@ def find_insensitive(elem, pattern):
         return result1
     return elem.find(pattern.lower())
 
+# https://github.mit.edu/mtoussai/KOMO-stream/blob/master/01-basicKOMOinTheKitchen/env2rai.py
+# https://github.mit.edu/mtoussai/KOMO-stream/blob/master/01-basicKOMOinTheKitchen/collada2rai.py
+
 def parse_shape(link):
     elem = link.find("origin")
     if elem is not None:
@@ -97,11 +100,6 @@ def main():
     parse_path(path)
 
     #connect(use_gui=True)
-
-    #with HideOutput():
-    #    pr2 = load_model("models/pr2_description/pr2.urdf")
-
-
     #user_input('Finish?')
     #disconnect()
 
