@@ -987,6 +987,13 @@ def get_capsule_geometry(radius, height):
         'length': height,
     }
 
+def get_mesh_geometry(path, scale=1.0):
+    return {
+        'shapeType': p.GEOM_MESH,
+        'fileName': path,
+        'meshScale': scale,
+    }
+
 NULL_ID = -1
 
 def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
@@ -1000,6 +1007,7 @@ def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
     collision_id = p.createCollisionShape(**collision_args)
 
     if (color is None) or not has_gui():
+    #if not has_gui():
         return collision_id, NULL_ID
     if 'height' in geometry: # TODO: pybullet bug
         geometry['length'] = geometry['height']
