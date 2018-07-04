@@ -24,7 +24,8 @@ class Problem(object):
         self.goal_on = goal_on
         self.goal_cleaned = goal_cleaned
         self.goal_cooked = goal_cooked
-
+    def __repr__(self):
+        return repr(self.__dict__)
 
 def get_fixed_bodies(problem): # TODO: move to problem?
     movable = [problem.robot] + list(problem.movable)

@@ -16,9 +16,10 @@ from pybullet_tools.pr2_utils import get_arm_joints, PR2_GROUPS, get_group_joint
 from pybullet_tools.utils import connect, add_data_path, disconnect, get_pose, enable_gravity, is_placement, joints_from_names, \
     get_joint_positions, set_client, clone_body ,ClientSaver, step_simulation, user_input, \
     save_state, restore_state, save_bullet, restore_bullet, clone_world, get_bodies, get_joints, \
-    update_state, wait_for_interrupt, get_min_limit, joint_controller_hold, enable_gravity
+    update_state, wait_for_interrupt, get_min_limit, joint_controller_hold, enable_gravity, wait_for_duration
 from pybullet_tools.pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, apply_commands, \
     get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, step_commands, control_commands, State
+from debug_examples.test_json import load
 
 A = '?a'
 O = '?o'; O2 = '?o2'
@@ -265,66 +266,84 @@ def close_gripper_test(problem):
         #    p.stepSimulation()
         # time.sleep(dt)
 
-def main(search='ff-astar', max_time=60, verbose=True, execute='apply'):
+def clone_test(problem_fn):
+    sim_world = connect(use_gui=True)
+    add_data_path()
+    problem = problem_fn()
+    real_world = connect(use_gui=False)
+    clone_world(real_world)
+    set_client(real_world)
+    # TODO: the cloning doesn't preserve joint names (joint77...)
+
+
+def clone_real_world_test(problem_fn):
+    real_world = connect(use_gui=True)
+    add_data_path()
+    # world_file = 'test_world.py'
+    # p.saveWorld(world_file) # Saves a Python file to be executed
+    # state_id = p.saveState()
+    # test_bullet = 'test_world.bullet'
+    # save_bullet(test_bullet)
+    # clone_world(real_world)
+    with ClientSaver(real_world):
+        # pass
+        # restore_bullet(test_bullet)
+        problem_fn()  # TODO: way of doing this without reloading?
+        update_state()
+
+def plan_commands(problem, search='ff-astar', max_time=60, verbose=True):
+    ss_problem = ss_from_problem(problem, remote=True, teleport=False)
+    print(ss_problem)
+    # ss_problem.dump()
+
+    t0 = time.time()
+    pr = cProfile.Profile()
+    pr.enable()
+    # plan, evaluations = incremental(ss_problem, planner=search, max_time=max_time,
+    #                                verbose=verbose, terminate_cost=terminate_cost)
+    plan, evaluations = dual_focused(ss_problem, planner=search, max_time=max_time,
+                                     effort_weight=None, verbose=verbose)
+    pr.disable()
+    pstats.Stats(pr).sort_stats('tottime').print_stats(10)  # tottime | cumtime
+
+    print('Time:', time.time() - t0)
+    # print_plan(plan, evaluations)
+    if plan is None:
+        return None
+    return post_process(problem, plan)
+
+def main(execute='apply'):
     #parser = argparse.ArgumentParser()  # Automatically includes help
     #parser.add_argument('-display', action='store_true', help='enable viewer.')
     #args = parser.parse_args()
     #display = args.display
     display = True
 
-    problem_fn = cooking_problem
+    problem_fn = lambda: load('simple.json')
+
+    #problem_fn = cooking_problem
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem
     # cleaning_button_problem | cooking_button_problem
-
-    #sim_world = connect(use_gui=True)
-    #add_data_path()
-    #problem = problem_fn()
-    #real_world = connect(use_gui=False)
-    #clone_world(real_world)
-    #set_client(real_world)
-    # TODO: the cloning doesn't preserve joint names (joint77...)
 
     sim_world = connect(use_gui=False)
     set_client(sim_world)
     add_data_path()
     problem = problem_fn()
+    print(problem)
     #state_id = save_state()
 
     if display:
         real_world = connect(use_gui=True)
         add_data_path()
-        # world_file = 'test_world.py'
-        # p.saveWorld(world_file) # Saves a Python file to be executed
-        # state_id = p.saveState()
-        #test_bullet = 'test_world.bullet'
-        #save_bullet(test_bullet)
-        #clone_world(real_world)
         with ClientSaver(real_world):
-            # pass
-            # restore_bullet(test_bullet)
             problem_fn()  # TODO: way of doing this without reloading?
             update_state()
+            wait_for_duration(0.1)
 
-    ss_problem = ss_from_problem(problem, remote=True, teleport=False)
-    print(ss_problem)
-    #ss_problem.dump()
-
-    t0 = time.time()
-    pr = cProfile.Profile()
-    pr.enable()
-    #plan, evaluations = incremental(ss_problem, planner=search, max_time=max_time,
-    #                                verbose=verbose, terminate_cost=terminate_cost)
-    plan, evaluations = dual_focused(ss_problem, planner=search, max_time=max_time,
-                                     effort_weight=None, verbose=verbose)
-    pr.disable()
-    pstats.Stats(pr).sort_stats('tottime').print_stats(10) # tottime | cumtime
-
-    print('Time:', time.time() - t0)
-    #print_plan(plan, evaluations)
-    if (plan is None) or not display:
+    commands = plan_commands(problem)
+    if (commands is None) or not display:
         disconnect()
         return
-    commands = post_process(problem, plan)
 
     time_step = 0.01
     set_client(real_world)

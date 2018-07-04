@@ -2,32 +2,24 @@
 
 from __future__ import print_function
 
-import json
-import os
-import time
 import colorsys
-import sys
-import random
-
-from pybullet_tools.utils import STATIC_MASS, CLIENT, user_input, connect, \
-    disconnect, set_point, set_quat, set_pose, wait_for_interrupt, load_model, set_joint_position, \
-    joint_from_name, has_joint, get_bodies, HideOutput, base_values_from_pose, set_camera, \
-    get_image, create_shape, create_shape_array, get_box_geometry, get_cylinder_geometry, \
-    Point, Pose, NULL_ID, euler_from_quat, quat_from_pose, point_from_pose, set_camera_pose, \
-    get_sphere_geometry, reset_simulation, create_mesh, get_mesh_geometry, create_sphere, create_mesh, \
-    load_pybullet, add_data_path, Point
-from pybullet_tools.pr2_utils import DRAKE_PR2_URDF, set_group_conf, REST_LEFT_ARM, rightarm_from_leftarm
-from pybullet_tools.pr2_problems import create_floor
-
-import pybullet as p
-import numpy as np
 import glob
+import os
+import pybullet as p
+import random
+import sys
+
+import numpy as np
 from lxml import etree
+
+from pybullet_tools.pr2_utils import DRAKE_PR2_URDF, set_group_conf
+from pybullet_tools.utils import STATIC_MASS, CLIENT, connect, \
+    disconnect, set_pose, wait_for_interrupt, load_model, HideOutput, base_values_from_pose, create_shape, \
+    get_mesh_geometry
 from pybullet_tools.utils import quaternion_from_matrix
 
 # https://docs.python.org/3.5/library/xml.etree.elementtree.html
-
-# colorsys.hsv_to_rgb(h, s, v)
+# https://lxml.de/tutorial.html
 
 def spaced_colors(n, s=1, v=1):
     return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]

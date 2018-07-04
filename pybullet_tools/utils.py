@@ -1025,16 +1025,14 @@ def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
     return collision_id, visual_id
 
 def plural(word):
-    exceptions = {
-        'radius': 'radii',
-    }
+    exceptions = {'radius': 'radii'}
     if word in exceptions:
         return exceptions[word]
     if word.endswith('s'):
         return word
     return word + 's'
 
-def create_shape_array(geoms, poses, colors):
+def create_shape_array(geoms, poses, colors=None):
     mega_geom = defaultdict(list)
     for geom in geoms:
         extended_geom = get_default_geometry()
@@ -1051,6 +1049,8 @@ def create_shape_array(geoms, poses, colors):
         collision_args['collisionFramePositions'].append(point)
         collision_args['collisionFrameOrientations'].append(quat)
     collision_id = p.createCollisionShapeArray(physicsClientId=CLIENT, **collision_args)
+    if (colors is None) or not has_gui():
+        return collision_id, NULL_ID
 
     visual_args = mega_geom.copy()
     for pose, color in zip(poses, colors):
@@ -1062,6 +1062,11 @@ def create_shape_array(geoms, poses, colors):
     return collision_id, visual_id
 
 #####################################
+
+def create_body(collision_id, visual_id):
+    return p.createMultiBody(baseMass=STATIC_MASS, baseCollisionShapeIndex=collision_id,
+                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
+
 
 def create_box(w, l, h, mass=STATIC_MASS, color=(1, 0, 0, 1)):
     collision_id, visual_id = create_shape(get_box_geometry(w, l, h), color=color)

@@ -13,6 +13,10 @@ def find_insensitive(elem, pattern):
 
 # https://github.mit.edu/mtoussai/KOMO-stream/blob/master/01-basicKOMOinTheKitchen/env2rai.py
 # https://github.mit.edu/mtoussai/KOMO-stream/blob/master/01-basicKOMOinTheKitchen/collada2rai.py
+# http://openrave.programmingvision.com/wiki/index.php/Format:XML
+# http://wiki.ros.org/collada_urdf
+# http://openrave.org/docs/latest_stable/collada_robot_extensions/
+# http://openrave.org/docs/0.8.2/robots_overview/#openrave-xml
 
 def parse_shape(link):
     elem = link.find("origin")
