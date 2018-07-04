@@ -137,13 +137,20 @@ def load(path):
     robot = parse_robot(problem['robots'][0])
     #print(get_image())
 
+HPN = ['blocks_row', 'bury', 'clean', 'cook', 'dig',
+       'invert', 'move', 'move_distractions',
+       'organize', 'panel', 'real_regrasp',
+       'regrasp', 'regrasp_distractions',
+       'table', 'transporter', 'walls']
+
 
 def main():
     root_directory = os.path.dirname(os.path.abspath(__file__))
     openrave_directory = os.path.join(root_directory, '../problems/json')
     connect(use_gui=True)
 
-    problem_filenames = sorted(os.listdir(openrave_directory))
+    #problem_filenames = sorted(os.listdir(openrave_directory))
+    problem_filenames = ['{}.json'.format(name) for name in HPN]
     #problem_filenames = ['sink_stove_4_30.json'] # 'dinner.json' | 'simple.json'
 
     width = 2560
