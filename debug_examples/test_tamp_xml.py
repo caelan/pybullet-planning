@@ -12,7 +12,7 @@ from pybullet_tools.utils import STATIC_MASS, CLIENT, user_input, connect, \
     get_image, create_shape, create_shape_array, get_box_geometry, get_cylinder_geometry, \
     Point, Pose, NULL_ID, euler_from_quat, quat_from_pose, point_from_pose, set_camera_pose, \
     get_sphere_geometry, reset_simulation, create_mesh, get_mesh_geometry, create_sphere, create_mesh, \
-    load_pybullet, add_data_path
+    load_pybullet, add_data_path, Point
 from pybullet_tools.pr2_utils import DRAKE_PR2_URDF, set_group_conf, REST_LEFT_ARM, rightarm_from_leftarm
 from pybullet_tools.pr2_problems import create_floor
 
@@ -45,11 +45,8 @@ def parse_boolean(element):
 def parse_object(obj, mesh_directory):
     name = obj.find('name').text
     mesh_filename = obj.find('geom').text
+    geom = get_mesh_geometry(os.path.join(mesh_directory, mesh_filename))
     pose = parse_pose(obj.find('pose'))
-
-    mesh_path = os.path.join(mesh_directory, mesh_filename)
-    print(mesh_path)
-    geom = get_mesh_geometry(mesh_path)
     movable = parse_boolean(obj.find('moveable'))
 
     color = (.75, .75, .75, 1)
@@ -70,8 +67,9 @@ def parse_object(obj, mesh_directory):
 
 def parse_robot(robot):
     name = robot.find('name').text
-    # urdf = robot.find('name').text
-    # fixed_base = not parse_boolean(robot.find('movebase'))
+    urdf = robot.find('urdf').text
+    fixed_base = not parse_boolean(robot.find('movebase'))
+    print(name, urdf, fixed_base)
     pose = parse_pose(robot.find('basepose'))
     torso = parse_array(robot.find('torso'))
     left_arm = parse_array(robot.find('left_arm'))
@@ -84,6 +82,7 @@ def parse_robot(robot):
     set_group_conf(robot_id, 'torso', torso)
     set_group_conf(robot_id, 'left_arm', left_arm)
     set_group_conf(robot_id, 'right_arm', right_arm)
+    #set_point(robot_id, Point(z=point_from_pose(pose)[2]))
     # print(robot.tag)
     # print(robot.attrib)
     # print(list(robot.iter('basepose')))
@@ -91,7 +90,8 @@ def parse_robot(robot):
 
 def main():
     benchmark = 'tmp-benchmark-data'
-    problem = 'problem2'
+    #problem = 'problem1' # Hanoi
+    problem = 'problem2' # Blocksworld
     #problem = 'problem3' # Clutter
     #problem = 'problem4' # Nonmono
 
@@ -99,13 +99,20 @@ def main():
     directory = os.path.join(root_directory, '..', 'problems', benchmark, problem)
     [mesh_directory] = list(filter(os.path.isdir, (os.path.join(directory, o)
                                                  for o in os.listdir(directory) if o.endswith('meshes'))))
-    print(mesh_directory)
-    [path] = glob.glob(os.path.join(directory, '*.xml'))
-    connect(use_gui=True)
-    add_data_path()
-    load_pybullet("plane.urdf")
+    [xml_path] = [os.path.join(directory, o) for o in os.listdir(directory) if o.endswith('xml')]
+    if os.path.isdir(xml_path):
+        xml_path = glob.glob(os.path.join(xml_path, '*.xml'))[0]
 
-    xmlData = etree.parse(path)
+    print(mesh_directory)
+    print(xml_path)
+
+    xmlData = etree.parse(xml_path)
+
+
+    connect(use_gui=True)
+    #add_data_path()
+    #load_pybullet("plane.urdf")
+
     #root = xmlData.getroot()
     #print(root.items())
     for obj in xmlData.findall('/objects/obj'):
