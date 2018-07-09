@@ -1,0 +1,198 @@
+<problem>
+   <objects>
+
+      <obj>
+         <name>disc1</name>
+         <geom>cylinder1.obj</geom>
+         <pose>1.000 0.000 0.000 0.750 0.000 1.000 0.000 0.075 0.000 0.000 1.000 0.364</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <gc type="side">
+               <template>1.000 0.000 0.000 0.000 0.000 1.000 0.000 0.000 0.000 0.000 1.000 0.120</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <!-- no sssp needed for disc1  -->
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template> <!-- all z-rotations of the -->
+            <axis>0.0 0.0 1.0</axis>                                 <!-- "natural" position     -->
+            <distance>0.0</distance>
+         </sop>         
+      </obj>
+
+      <obj>
+         <name>disc2</name>
+         <geom>cylinder2.obj</geom>
+         <pose>1.000 0.000 0.000 0.750 0.000 1.000 0.000 0.075 0.000 0.000 1.000 0.298</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <!-- continuous set of grasps for that object -->
+            <gc type="side">
+               <template>1.000 0.000 0.000 0.000 0.000 1.000 0.000 0.000 0.000 0.000 1.000 0.120</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.065</zmin><zmax>0.065</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template>
+            <axis>0.0 0.0 1.0</axis>
+            <distance>0.0</distance>
+         </sop>
+         <attachments> <!-- disc1 attached to disc2 -->
+            <name>disc1</name>
+         </attachments>
+      </obj>
+
+      <obj>
+         <name>disc3</name>
+         <geom>cylinder3.obj</geom>
+         <pose>1.000 0.000 0.000 0.750 0.000 1.000 0.000 0.075 0.000 0.000 1.000 0.232</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <!-- continuous set of grasps for that object -->
+            <gc type="side">
+               <template>1.000 0.000 0.000 0.000 0.000 1.000 0.000 0.000 0.000 0.000 1.000 0.120</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.065</zmin><zmax>0.065</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template>
+            <axis>0.0 0.0 1.0</axis>
+            <distance>0.0</distance>
+         </sop>
+         <attachments> <!-- disc2 attached to disc3 -->
+            <name>disc2</name>
+         </attachments>
+      </obj>
+
+      <obj>
+         <name>disc4</name>
+         <geom>cylinder4.obj</geom>
+         <pose>1.000 0.000 0.000 0.750 0.000 1.000 0.000 0.075 0.000 0.000 1.000 0.166</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <!-- continuous set of grasps for that object -->
+            <gc type="side">
+               <template>1.000 0.000 0.000 0.000 0.000 1.000 0.000 0.000 0.000 0.000 1.000 0.120</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.065</zmin><zmax>0.065</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template>
+            <axis>0.0 0.0 1.0</axis>
+            <distance>0.0</distance>
+         </sop>
+         <attachments> <!-- disc3 attached to disc4 -->
+            <name>disc3</name>
+         </attachments>
+      </obj>
+
+      <obj>
+         <name>disc5</name>
+         <geom>cylinder5.obj</geom>
+         <pose>1.000 0.000 0.000 0.750 0.000 1.000 0.000 0.075 0.000 0.000 1.000 0.100</pose>
+         <moveable>true</moveable>
+         <grasps>
+            <!-- continuous set of grasps for that object -->
+            <gc type="side">
+               <template>1.000 0.000 0.000 0.000 0.000 1.000 0.000 0.000 0.000 0.000 1.000 0.120</template>
+               <axis>0.0 0.0 1.0</axis>
+            </gc>
+         </grasps>
+         <sssp> <!-- sssp = single point -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.065</zmin><zmax>0.065</zmax>
+         </sssp>
+         <sop>
+            <template>1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0</template>
+            <axis>0.0 0.0 1.0</axis>
+            <distance>0.0</distance>
+         </sop>
+         <attachments> <!-- disc4 attached to disc5 -->
+            <name>disc4</name>
+         </attachments>
+      </obj>
+
+      <obj>
+         <name>table</name>
+         <geom>table_narrow.obj</geom>
+         <pose>1.000 0.000 0.000 0.900 0.000 1.000 0.000 -0.400 0.000 0.000 1.000 -0.670</pose>
+         <moveable>false</moveable>
+         <sssp> <!-- sssp = horizontal rectangular region -->
+            <xmin>-0.58</xmin><xmax>-0.1</xmax>
+            <ymin>0.1</ymin><ymax>0.73</ymax>
+            <zmin>0.78</zmin><zmax>0.78</zmax>
+         </sssp>
+     </obj>
+
+      <obj>
+         <name>peg1</name>
+         <geom>rod.obj</geom>
+         <pose>1.000 0.000 0.000 0.750 0.000 1.000 0.000 0.075 0.000 0.000 1.000 0.100</pose>
+         <moveable>false</moveable>
+         <sssp> <!-- sssp = single point -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.0</zmin><zmax>0.0</zmax>
+         </sssp>
+     </obj>
+
+      <obj>
+         <name>peg2</name>
+         <geom>rod.obj</geom>
+         <pose>1.000 0.000 0.000 0.850 0.000 1.000 0.000 0.000 0.000 0.000 1.000 0.100</pose>
+         <moveable>false</moveable>
+         <sssp> <!-- sssp = single point -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.0</zmin><zmax>0.0</zmax>
+         </sssp>
+     </obj>
+
+      <obj>
+         <name>peg3</name>
+         <geom>rod.obj</geom>
+         <pose>1.000 0.000 0.000 0.750 0.000 1.000 0.000 -0.075 0.000 0.000 1.000 0.100</pose>
+         <moveable>false</moveable>
+         <sssp> <!-- sssp = single point -->
+            <xmin>0.0</xmin><xmax>0.0</xmax>
+            <ymin>0.0</ymin><ymax>0.0</ymax>
+            <zmin>0.0</zmin><zmax>0.0</zmax>
+         </sssp>
+     </obj>
+
+
+   </objects>
+
+
+   <robots>
+
+      <robot>
+         <name>pr2</name>
+         <urdf>models/pr2.urdf</urdf> <!-- or some other format you may use -->
+         <basepose>1.000 0.000 0.000 0.000 0.000 1.000 0.000 0.000 0.000 0.000 1.000 -0.670</basepose>
+         <movebase>false</movebase> <!-- the base should not move -->
+         <torso>0.1</torso>
+         <left_arm>0.5 0.0 0.0 -0.16 0.0 -0.11 0.0</left_arm>
+         <right_arm>-0.5 0.0 0.0 -0.16 0.0 -0.11 0.0</right_arm>
+      </robot>
+
+   </robots>
+
+
+</problem>

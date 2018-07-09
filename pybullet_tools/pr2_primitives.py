@@ -5,18 +5,18 @@ import random
 import time
 import numpy as np
 
-from .pr2_problems import get_fixed_bodies
-from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, \
+from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, GET_GRASPS, \
     get_carry_conf, get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, \
     ARM_NAMES, is_drake_pr2, get_group_joints, get_group_conf
-from .utils import invert, multiply, get_name, set_pose, get_link_pose, link_from_name, BodySaver, \
+from .utils import invert, multiply, get_name, set_pose, get_link_pose, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, waypoints_from_path, \
     unit_quat, plan_base_motion, plan_joint_motion, base_values_from_pose, pose_from_base_values, \
     uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, remove_fixed_constraint, \
     enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
     get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, \
-    add_segments, set_base_values, get_max_limit, get_aabb
+    add_segments, set_base_values, get_max_limit, link_from_name, BodySaver, get_aabb
+from .pr2_problems import get_fixed_bodies
 
 BASE_EXTENT = 3.5 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
@@ -293,6 +293,9 @@ def get_motion_gen(problem, teleport=False):
 APPROACH_DISTANCE = 0.1
 
 def get_grasp_gen(problem, randomize=True):
+    for grasp_type in problem.grasp_types:
+        if grasp_type not in GET_GRASPS:
+            raise ValueError('Unexpected grasp type:', grasp_type)
     def fn(body):
         grasps = []
         if 'top' in problem.grasp_types:
@@ -366,6 +369,7 @@ def get_ik_fn(problem, teleport=False):
         p.assign()
         bq.assign()
         # TODO: randomly sample initial position to make sampler?
+        # TODO: perturb this randomly
         set_joint_positions(robot, arm_joints, default_conf)
         approach_conf = ik_fn(approach_pose)
         if approach_conf is None:
