@@ -212,10 +212,13 @@ def close_arm(robot, arm):
 
 # Grasps
 
+# TODO: touch grasps
+# TODO: test if grasp is in collision
 #GRASP_LENGTH = 0.04
 GRASP_LENGTH = 0.
 #GRASP_LENGTH = -0.01
-MAX_GRASP_WIDTH = 0.07
+#MAX_GRASP_WIDTH = 0.07
+MAX_GRASP_WIDTH = np.inf
 
 
 def get_top_grasps(body, under=False, tool_pose=TOOL_POSE,
@@ -224,16 +227,19 @@ def get_top_grasps(body, under=False, tool_pose=TOOL_POSE,
     set_pose(body, unit_pose())
     center, (w, l, h) = get_center_extent(body)
     reflect_z = (np.zeros(3), quat_from_euler([0, math.pi, 0]))
-    translate = ([0, 0, h / 2 - grasp_length], unit_quat())
+    translate_z = ([0, 0, h / 2 - grasp_length], unit_quat())
+    translate_center = Pose(-center)
     grasps = []
     if w <= max_width:
         for i in range(1 + under):
             rotate_z = (unit_point(), quat_from_euler([0, 0, math.pi / 2 + i * math.pi]))
-            grasps += [multiply(tool_pose, translate, rotate_z, reflect_z)]
+            grasps += [multiply(tool_pose, translate_z, rotate_z,
+                                reflect_z, translate_center)]
     if l <= max_width:
         for i in range(1 + under):
             rotate_z = (unit_point(), quat_from_euler([0, 0, i * math.pi]))
-            grasps += [multiply(tool_pose, translate, rotate_z, reflect_z)]
+            grasps += [multiply(tool_pose, translate_z, rotate_z,
+                                reflect_z, translate_center)]
     set_pose(body, pose)
     return grasps
 
@@ -241,22 +247,23 @@ def get_top_grasps(body, under=False, tool_pose=TOOL_POSE,
 def get_side_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
     pose = get_pose(body)
     set_pose(body, unit_pose())
-    center, (w, l, h) = get_center_extent(body)
+    center, (w, l, _) = get_center_extent(body)
+    translate_center = Pose(-center)
     grasps = []
     for j in range(1 + under):
         swap_xz = (unit_point(), quat_from_euler([0, -math.pi / 2 + j * math.pi, 0]))
-        # if not limits or (w <= MAX_GRASP_WIDTH):
-        if True:
-            translate = ([0, 0, l / 2 - grasp_length], unit_quat())
+        if not limits or (w <= MAX_GRASP_WIDTH):
+            translate_z = ([0, 0, l / 2 - grasp_length], unit_quat())
             for i in range(2):
                 rotate_z = (unit_point(), quat_from_euler([math.pi / 2 + i * math.pi, 0, 0]))
-                grasps += [multiply(TOOL_POSE, translate, rotate_z, swap_xz)]  # , np.array([w])
-        if True:
-            # if not limits or (l <= MAX_GRASP_WIDTH):
-            translate = ([0, 0, w / 2 - grasp_length], unit_quat())
+                grasps += [multiply(TOOL_POSE, translate_z, rotate_z,
+                                    swap_xz, translate_center)]  # , np.array([w])
+        if not limits or (l <= MAX_GRASP_WIDTH):
+            translate_z = ([0, 0, w / 2 - grasp_length], unit_quat())
             for i in range(2):
                 rotate_z = (unit_point(), quat_from_euler([i * math.pi, 0, 0]))
-                grasps += [multiply(TOOL_POSE, translate, rotate_z, swap_xz)]  # , np.array([l])
+                grasps += [multiply(TOOL_POSE, translate_z, rotate_z,
+                                    swap_xz, translate_center)]  # , np.array([l])
     set_pose(body, pose)
     return grasps
 
@@ -265,11 +272,12 @@ def get_x_presses(body, max_orientations=1):  # g_f_o
     pose = get_pose(body)
     set_pose(body, unit_pose())
     center, (w, l, h) = get_center_extent(body)
+    translate_center = Pose(-center)
     press_poses = []
     for j in range(max_orientations):
         swap_xz = (unit_point(), quat_from_euler([0, -math.pi / 2 + j * math.pi, 0]))
         translate = ([0, 0, w / 2], unit_quat())
-        press_poses += [multiply(TOOL_POSE, translate, swap_xz)]
+        press_poses += [multiply(TOOL_POSE, translate, swap_xz, translate_center)]
     set_pose(body, pose)
     return press_poses
 
@@ -279,6 +287,7 @@ GET_GRASPS = {
     'side': get_side_grasps,
     # 'press': get_x_presses,
 }
+# TODO: include approach/carry info
 
 #####################################
 

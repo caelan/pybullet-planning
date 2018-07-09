@@ -5,7 +5,7 @@ import random
 import time
 import numpy as np
 
-from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, \
+from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, GET_GRASPS, \
     get_carry_conf, get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, \
     ARM_NAMES, is_drake_pr2, get_group_joints, set_group_conf, get_group_conf
@@ -291,6 +291,9 @@ def get_motion_gen(problem, teleport=False):
 APPROACH_DISTANCE = 0.1
 
 def get_grasp_gen(problem, randomize=True):
+    for grasp_type in problem.grasp_types:
+        if grasp_type not in GET_GRASPS:
+            raise ValueError('Unexpected grasp type:', grasp_type)
     def fn(body):
         grasps = []
         if 'top' in problem.grasp_types:
@@ -343,6 +346,7 @@ def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False):
             for _ in range(max_attempts):
                 set_pose(o, p.value)
                 set_joint_positions(robot, arm_joints, default_conf)
+                # TODO: pertrub this randomly
                 base_conf = next(base_generator)
                 #base_pose = next(base_generator)
                 #set_pose(robot, base_pose)

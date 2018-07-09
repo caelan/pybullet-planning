@@ -1413,7 +1413,8 @@ def aabb2d_from_aabb(aabb):
 def aabb_contains_aabb(contained, container):
     lower1, upper1 = contained
     lower2, upper2 = container
-    return np.all(lower2 <= lower1) and np.all(upper1 <= upper2)
+    return np.greater_equal(lower1, lower2).all() and np.greater_equal(upper2, upper1).all()
+    #return np.all(lower2 <= lower1) and np.all(upper1 <= upper2)
 
 def aabb_contains_point(point, container):
     lower, upper = container
