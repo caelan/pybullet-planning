@@ -8,14 +8,14 @@ import numpy as np
 from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, GET_GRASPS, \
     get_carry_conf, get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, \
-    ARM_NAMES, is_drake_pr2, get_group_joints, set_group_conf, get_group_conf
-from .utils import invert, multiply, get_name, set_pose, get_link_pose, link_from_name, BodySaver, \
+    ARM_NAMES, is_drake_pr2, get_group_joints, get_group_conf
+from .utils import invert, multiply, get_name, set_pose, get_link_pose, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, waypoints_from_path, \
     unit_quat, plan_base_motion, plan_joint_motion, base_values_from_pose, pose_from_base_values, \
-    uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, point_from_pose, \
-    remove_fixed_constraint, enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
+    uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, remove_fixed_constraint, \
+    enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
     get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, \
-    add_segments, unit_pose, set_base_values, get_max_limit, link_from_name, BodySaver, get_aabb
+    add_segments, set_base_values, get_max_limit, link_from_name, BodySaver, get_aabb
 from .pr2_problems import get_fixed_bodies
 
 BASE_EXTENT = 3.5 # 2.5
@@ -39,11 +39,12 @@ class Pose(object):
     def __init__(self, body, value):
         self.body = body
         self.value = tuple(value)
-    def step(self):
+    def assign(self):
         set_pose(self.body, self.value)
+    step = assign
     def to_base_conf(self):
-        value = base_values_from_pose(self.value)
-        return Conf(self.body, range(len(value)), value)
+        values = base_values_from_pose(self.value)
+        return Conf(self.body, range(len(values)), values)
     def __repr__(self):
         return 'p{}'.format(id(self) % 1000)
 
@@ -62,8 +63,9 @@ class Conf(object):
         self.body = body
         self.joints = joints
         self.values = tuple(values)
-    def step(self):
+    def assign(self):
         set_joint_positions(self.body, self.joints, self.values)
+    step = assign
     def __repr__(self):
         return 'q{}'.format(id(self) % 1000)
 
@@ -325,61 +327,86 @@ def get_stable_gen(problem):
 
 ##################################################
 
-def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False):
+def get_ir_sampler(problem, learned=True):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
-
-    def gen(a, o, p, g):
+    def sampler(a, o, p, g):
         gripper_pose = multiply(p.value, invert(g.value)) # w_f_g = w_f_o * (g_f_o)^-1
-        approach_pose = multiply(g.approach, gripper_pose)
-
-        link = get_gripper_link(robot, a)
         default_conf = arm_conf(a, g.carry)
         arm_joints = get_arm_joints(robot, a)
         base_joints = get_group_joints(robot, 'base')
-
-        if learned:
+        if learned: # TODO: cache the learned distribution
             base_generator = learned_pose_generator(robot, gripper_pose, arm=a, grasp_type=g.grasp_type)
         else:
             base_generator = uniform_pose_generator(robot, gripper_pose)
+        base_conf = next(base_generator, None)
+        if base_conf is None:
+            return None
+        bq = Conf(robot, base_joints, base_conf)
+        p.assign()
+        bq.assign()
+        set_joint_positions(robot, arm_joints, default_conf)
+        if any(pairwise_collision(robot, b) for b in fixed):
+            return None
+        return (bq,)
+    return sampler
+
+def get_ik_fn(problem, teleport=False):
+    robot = problem.robot
+    fixed = get_fixed_bodies(problem)
+    def fn(a, o, p, g, bq):
+        gripper_pose = multiply(p.value, invert(g.value)) # w_f_g = w_f_o * (g_f_o)^-1
+        approach_pose = multiply(g.approach, gripper_pose)
+        link = get_gripper_link(robot, a)
+        arm_joints = get_arm_joints(robot, a)
+        def ik_fn(target_pose):
+            movable_conf = sub_inverse_kinematics(robot, arm_joints[0], link, target_pose)
+            if (movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
+                return None
+            conf = get_joint_positions(robot, arm_joints)
+            return conf
+        default_conf = arm_conf(a, g.carry)
+        p.assign()
+        bq.assign()
+        # TODO: randomly sample initial position to make sampler?
+        # TODO: perturb this randomly
+        set_joint_positions(robot, arm_joints, default_conf)
+        approach_conf = ik_fn(approach_pose)
+        if approach_conf is None:
+            return None
+        grasp_conf = ik_fn(gripper_pose)
+        if grasp_conf is None:
+            return None
+        if teleport:
+            path = [default_conf, approach_conf, grasp_conf]
+        else:
+            #set_joint_positions(robot, arm_joints, approach_conf)
+            control_path = plan_joint_motion(robot, arm_joints, approach_conf,
+                                             obstacles=fixed, self_collisions=False, direct=True)
+            set_joint_positions(robot, arm_joints, approach_conf)
+            retreat_path = plan_joint_motion(robot, arm_joints, default_conf,
+                                             obstacles=fixed, self_collisions=False)
+            path = retreat_path[::-1] + control_path[::-1]
+        mt = create_trajectory(robot, arm_joints, path)
+        return (mt,)
+    return fn
+
+##################################################
+
+def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False):
+    # TODO: compose using general fn
+    ir_sampler = get_ir_sampler(problem, learned)
+    ik_fn = get_ik_fn(problem, teleport)
+    def gen(*inputs):
         while True:
             for _ in range(max_attempts):
-                set_pose(o, p.value)
-                set_joint_positions(robot, arm_joints, default_conf)
-                # TODO: pertrub this randomly
-                base_conf = next(base_generator)
-                #base_pose = next(base_generator)
-                #set_pose(robot, base_pose)
-                set_joint_positions(robot, base_joints, base_conf)
-                if any(pairwise_collision(robot, b) for b in fixed):
+                ir_outputs = ir_sampler(*inputs)
+                if ir_outputs is None:
                     continue
-
-                approach_movable_conf = sub_inverse_kinematics(robot, arm_joints[0], link, approach_pose)
-                #approach_movable_conf = inverse_kinematics(robot, link, approach_pose)
-                if (approach_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
+                ik_outputs = ik_fn(*(inputs + ir_outputs))
+                if ik_outputs is None:
                     continue
-                approach_conf = get_joint_positions(robot, arm_joints)
-
-                grasp_movable_conf = sub_inverse_kinematics(robot, arm_joints[0], link, gripper_pose)
-                #grasp_movable_conf = inverse_kinematics(robot, link, gripper_pose)
-                if (grasp_movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
-                    continue
-                grasp_conf = get_joint_positions(robot, arm_joints)
-                #bq = Pose(robot, get_pose(robot))
-                bq = Conf(robot, base_joints, base_conf)
-
-                if teleport:
-                    path = [default_conf, approach_conf, grasp_conf]
-                else:
-                    #set_joint_positions(robot, arm_joints, approach_conf)
-                    control_path = plan_joint_motion(robot, arm_joints, approach_conf,
-                                                     obstacles=fixed, self_collisions=False, direct=True)
-                    set_joint_positions(robot, arm_joints, approach_conf)
-                    retreat_path = plan_joint_motion(robot, arm_joints, default_conf,
-                                                     obstacles=fixed, self_collisions=False)
-                    path = retreat_path[::-1] + control_path[::-1]
-                mt = Trajectory(Conf(robot, arm_joints, q) for q in path)
-                yield (bq, mt)
+                yield (ir_outputs + ik_outputs)
                 break
             else:
                 yield None
