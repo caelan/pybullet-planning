@@ -5,10 +5,10 @@ from __future__ import print_function
 import pybullet as p
 import time
 
-from pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, \
+from pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, PR2_URDF, DRAKE_PR2_URDF, \
     SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, get_disabled_collisions, REST_LEFT_ARM, rightarm_from_leftarm
 from pybullet_tools.utils import set_base_values, joint_from_name, set_joint_position, \
-    set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, input, \
+    set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, \
     joint_controller, dump_body, load_model, joints_from_names, user_input, disconnect
 
 
@@ -81,10 +81,7 @@ def main(use_pr2_drake=False):
     table = p.loadURDF(table_path, 0, 0, 0, 0, 0, 0.707107, 0.707107)
     # table_square/table_square.urdf, cube.urdf, block.urdf, door.urdf
 
-    if use_pr2_drake:
-        pr2_urdf = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
-    else:
-        pr2_urdf = "models/pr2_description/pr2.urdf"
+    pr2_urdf = PR2_URDF if use_pr2_drake else DRAKE_PR2_URDF
     pr2 = load_model(pr2_urdf, fixed_base=True) # TODO: suppress warnings?
     dump_body(pr2)
 

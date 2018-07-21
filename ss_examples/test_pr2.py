@@ -19,7 +19,7 @@ from pybullet_tools.utils import connect, add_data_path, disconnect, get_pose, e
     update_state, wait_for_interrupt, get_min_limit, joint_controller_hold, enable_gravity, wait_for_duration
 from pybullet_tools.pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, apply_commands, \
     get_grasp_gen, get_press_gen, Attach, Detach, Clean, Cook, step_commands, control_commands, State
-from debug_examples.test_json import load
+from debug_examples.test_json import load_json_problem
 
 A = '?a'
 O = '?o'; O2 = '?o2'
@@ -318,10 +318,11 @@ def main(execute='apply'):
     #args = parser.parse_args()
     #display = args.display
     display = True
+    #display = False
 
-    problem_fn = lambda: load('simple.json')
-
-    #problem_fn = cooking_problem
+    #filename = 'transporter.json' # simple | simple2 | cook | invert | kitchen | nonmonotonic_4_1
+    #problem_fn = lambda: load_json_problem(filename)
+    problem_fn = cooking_problem
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem
     # cleaning_button_problem | cooking_button_problem
 
@@ -340,6 +341,7 @@ def main(execute='apply'):
             update_state()
             wait_for_duration(0.1)
 
+    #wait_for_interrupt()
     commands = plan_commands(problem)
     if (commands is None) or not display:
         disconnect()
