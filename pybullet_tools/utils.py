@@ -1419,7 +1419,8 @@ def aabb_contains_aabb(contained, container):
 
 def aabb_contains_point(point, container):
     lower, upper = container
-    return np.all(lower <= point) and np.all(point <= upper)
+    return np.greater_equal(point, lower).all() and np.greater_equal(upper, point).all()
+    #return np.all(lower <= point) and np.all(point <= upper)
 
 def get_bodies_in_region(aabb):
     (lower, upper) = aabb
