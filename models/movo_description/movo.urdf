@@ -74,13 +74,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     </inertial>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/movo_components/collision/vector_base_collision.stl"/>
+        <mesh filename="meshes/movo_components/collision/vector_base_collision.stl"/>
       </geometry>
     </collision>
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="../movo_description/meshes/movo_components/visual/vector_base.dae"/>
+        <mesh filename="meshes/movo_components/visual/vector_base.dae"/>
       </geometry>
     </visual>
   </link>
@@ -103,13 +103,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     </inertial>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/movo_components/collision/movo_fixed_body_collision.stl"/>
+        <mesh filename="meshes/movo_components/collision/movo_fixed_body_collision.stl"/>
       </geometry>
     </collision>
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="../movo_description/meshes/movo_components/visual/movo_fixed_payload.dae"/>
+        <mesh filename="meshes/movo_components/visual/movo_fixed_payload.dae"/>
       </geometry>
     </visual>
   </link>
@@ -127,12 +127,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="linear_actuator_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/movo_components/visual/movo_moving_payload.dae"/>
+        <mesh filename="meshes/movo_components/visual/movo_moving_payload.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/movo_components/collision/movo_upper_body_collision.stl"/>
+        <mesh filename="meshes/movo_components/collision/movo_upper_body_collision.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -181,7 +181,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="front_laser_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/sensors/visual/sick_tim.dae"/>
+        <mesh filename="meshes/sensors/visual/sick_tim.dae"/>
       </geometry>
     </visual>
     <collision>
@@ -229,7 +229,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="rear_laser_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/sensors/visual/sick_tim.dae"/>
+        <mesh filename="meshes/sensors/visual/sick_tim.dae"/>
       </geometry>
     </visual>
     <collision>
@@ -277,12 +277,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="pan_base_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/pan_tilt/visual/pan_tilt_base.dae"/>
+        <mesh filename="meshes/pan_tilt/visual/pan_tilt_base.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/pan_tilt/collision/pan_tilt_base.stl"/>
+        <mesh filename="meshes/pan_tilt/collision/pan_tilt_base.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -310,13 +310,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="pan_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/pan_tilt/visual/pan_link.dae"/>
+        <mesh filename="meshes/pan_tilt/visual/pan_link.dae"/>
       </geometry>
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="../movo_description/meshes/pan_tilt/collision/pan_link.stl"/>
+        <mesh filename="meshes/pan_tilt/collision/pan_link.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -344,12 +344,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="tilt_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/pan_tilt/visual/tilt_link.dae"/>
+        <mesh filename="meshes/pan_tilt/visual/tilt_link.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/pan_tilt/collision/tilt_link.stl"/>
+        <mesh filename="meshes/pan_tilt/collision/tilt_link.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -371,12 +371,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/sensors/visual/kinect_one.dae"/>
+        <mesh filename="meshes/sensors/visual/kinect_one.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/sensors/collision/kinect_one_collision.stl"/>
+        <mesh filename="meshes/sensors/collision/kinect_one_collision.stl"/>
       </geometry>
     </collision>
   </link>
@@ -461,7 +461,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="../movo_description/meshes/movo_body/movo_lower_body.dae"/>
+        <mesh filename="meshes/movo_body/movo_lower_body.dae"/>
       </geometry>
     </visual>
   </link>
@@ -479,7 +479,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="../movo_description/meshes/movo_body/movo_upper_body.dae"/>
+        <mesh filename="meshes/movo_body/movo_upper_body.dae"/>
       </geometry>
     </visual>
   </link>
@@ -501,7 +501,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="../movo_description/meshes/movo_body/movo_mid_body.dae"/>
+        <mesh filename="meshes/movo_body/movo_mid_body.dae"/>
       </geometry>
     </visual>
   </link>
@@ -526,12 +526,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_base_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/base.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/base.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/base.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/base.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -560,12 +560,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_shoulder_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/shoulder_7dof.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/shoulder_7dof.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/shoulder_7dof.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/shoulder_7dof.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -594,12 +594,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_arm_half_1_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/arm_half_1.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/arm_half_1.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/arm_half_1.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/arm_half_1.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -628,12 +628,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_arm_half_2_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/arm_half_2.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/arm_half_2.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/arm_half_2.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/arm_half_2.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -662,12 +662,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_forearm_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/forearm_7dof.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/forearm_7dof.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/forearm_7dof.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/forearm_7dof.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -688,12 +688,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_wrist_spherical_1_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/wrist_spherical_1.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/wrist_spherical_1.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/wrist_spherical_1.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/wrist_spherical_1.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -722,12 +722,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_wrist_spherical_2_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/wrist_spherical_2.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/wrist_spherical_2.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/wrist_spherical_2.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/wrist_spherical_2.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -756,12 +756,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_wrist_3_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/kinova_actuator_gearing.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/kinova_actuator_gearing.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/kinova_actuator_gearing.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/kinova_actuator_gearing.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -857,12 +857,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_base_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/base.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/base.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/base.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/base.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -891,12 +891,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_shoulder_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/shoulder_7dof.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/shoulder_7dof.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/shoulder_7dof.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/shoulder_7dof.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -925,12 +925,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_arm_half_1_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/arm_half_1.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/arm_half_1.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/arm_half_1.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/arm_half_1.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -959,12 +959,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_arm_half_2_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/arm_half_2.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/arm_half_2.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/arm_half_2.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/arm_half_2.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -993,12 +993,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_forearm_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/forearm_7dof.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/forearm_7dof.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/forearm_7dof.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/forearm_7dof.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1019,12 +1019,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_wrist_spherical_1_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/wrist_spherical_1.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/wrist_spherical_1.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/wrist_spherical_1.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/wrist_spherical_1.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1053,12 +1053,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_wrist_spherical_2_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/wrist_spherical_2.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/wrist_spherical_2.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/wrist_spherical_2.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/wrist_spherical_2.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1087,12 +1087,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_wrist_3_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/visual/kinova_actuator_gearing.dae"/>
+        <mesh filename="meshes/manipulation/jaco/visual/kinova_actuator_gearing.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/jaco/collision/kinova_actuator_gearing.stl"/>
+        <mesh filename="meshes/manipulation/jaco/collision/kinova_actuator_gearing.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1187,12 +1187,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_gripper_base_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/kg3_base_link.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/kg3_base_link.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/kg3_base_link.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/kg3_base_link.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1220,12 +1220,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_gripper_finger1_knuckle_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1254,12 +1254,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_gripper_finger2_knuckle_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1288,12 +1288,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_gripper_finger3_knuckle_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1319,12 +1319,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_gripper_finger1_finger_tip_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1350,12 +1350,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_gripper_finger2_finger_tip_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1381,12 +1381,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="right_gripper_finger3_finger_tip_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1434,12 +1434,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_gripper_base_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/kg3_base_link.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/kg3_base_link.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/kg3_base_link.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/kg3_base_link.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1467,12 +1467,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_gripper_finger1_knuckle_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1501,12 +1501,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_gripper_finger2_knuckle_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1535,12 +1535,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_gripper_finger3_knuckle_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_knuckle.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_knuckle.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1566,12 +1566,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_gripper_finger1_finger_tip_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1597,12 +1597,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_gripper_finger2_finger_tip_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
       </geometry>
     </collision>
     <inertial>
@@ -1628,12 +1628,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   <link name="left_gripper_finger3_finger_tip_link">
     <visual>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/visual/finger_tip.dae"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="../movo_description/meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
+        <mesh filename="meshes/manipulation/kinova_grippers/collision/finger_tip.stl"/>
       </geometry>
     </collision>
     <inertial>

@@ -21,6 +21,7 @@ TORSO_JOINTS = ['linear_joint']
 # TODO: mid_body_joint - might be passive
 # https://github.com/Kinovarobotics/kinova-movo/blob/master/movo_moveit_config/config/movo_kg2.srdf
 def main():
+    # The URDF loader seems robust to package:// and slightly wrong relative paths?
     connect(use_gui=True)
     add_data_path()
 
