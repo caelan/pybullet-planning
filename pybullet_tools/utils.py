@@ -615,9 +615,10 @@ def dump_body(body):
     print('Body id: {} | Name: {} | Rigid: {} | Fixed: {}'.format(
         body, get_body_name(body), is_rigid_body(body), is_fixed_base(body)))
     for joint in get_joints(body):
-        print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
-            joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
-            is_circular(body, joint), get_joint_limits(body, joint)))
+        if is_movable(body, joint):
+            print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
+                joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
+                is_circular(body, joint), get_joint_limits(body, joint)))
     print('Link id: {} | Name: {} | Mass: {}'.format(-1, get_base_name(body), get_mass(body)))
     for link in get_links(body):
         print('Link id: {} | Name: {} | Parent: {} | Mass: {}'.format(
@@ -1416,7 +1417,8 @@ def aabb_contains_aabb(contained, container):
 
 def aabb_contains_point(point, container):
     lower, upper = container
-    return np.all(lower <= point) and np.all(point <= upper)
+    return np.greater_equal(point, lower).all() and np.greater_equal(upper, point).all()
+    #return np.all(lower <= point) and np.all(point <= upper)
 
 def get_bodies_in_region(aabb):
     (lower, upper) = aabb
