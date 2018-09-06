@@ -13,7 +13,7 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, waypoints_from_path, \
     unit_quat, plan_base_motion, plan_joint_motion, base_values_from_pose, pose_from_base_values, \
     uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, remove_fixed_constraint, \
-    enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, \
+    enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, get_distance, \
     get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, \
     add_segments, set_base_values, get_max_limit, link_from_name, BodySaver, get_aabb
 from .pr2_problems import get_fixed_bodies
@@ -133,6 +133,11 @@ class Trajectory(Command):
                     points.append(point)
         points = get_target_path(self)
         return waypoints_from_path(points)
+    def distance(self, distance_fn=get_distance):
+        total = 0.
+        for q1, q2 in zip(self.path, self.path[1:]):
+            total += distance_fn(q1.values, q2.values)
+        return total
     def reverse(self):
         return Trajectory(reversed(self.path))
     #def __repr__(self):
