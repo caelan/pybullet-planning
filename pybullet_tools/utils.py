@@ -468,6 +468,9 @@ def unit_pose():
 def get_length(vec):
     return np.linalg.norm(vec)
 
+def get_distance(p1, p2):
+    return get_length(np.array(p2) - np.array(p1))
+
 def angle_between(vec1, vec2):
     return np.math.acos(np.dot(vec1, vec2) / (get_length(vec1) *  get_length(vec2)))
 
@@ -1064,8 +1067,8 @@ def create_shape_array(geoms, poses, colors=None):
 
 #####################################
 
-def create_body(collision_id, visual_id):
-    return p.createMultiBody(baseMass=STATIC_MASS, baseCollisionShapeIndex=collision_id,
+def create_body(collision_id, visual_id, mass=STATIC_MASS):
+    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
 
 
@@ -1077,16 +1080,11 @@ def create_box(w, l, h, mass=STATIC_MASS, color=(1, 0, 0, 1)):
     # linkCollisionShapeIndices | linkVisualShapeIndices
 
 def create_cylinder(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
-    # TODO: combine this
-    collision_id =  p.createCollisionShape(p.GEOM_CYLINDER, radius=radius, height=height, physicsClientId=CLIENT)
-    if (color is None) or not has_gui():
-        visual_id = -1
-    else:
-        visual_id = p.createVisualShape(p.GEOM_CYLINDER, radius=radius, height=height, rgbaColor=color, physicsClientId=CLIENT)
-    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
+    collision_id, visual_id = create_shape(get_cylinder_geometry(radius, height), color=color)
+    return create_body(collision_id, visual_id, mass=mass)
 
 def create_capsule(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
+    # TODO: combine this
     collision_id = p.createCollisionShape(p.GEOM_CAPSULE, radius=radius, height=height, physicsClientId=CLIENT)
     if (color is None) or not has_gui():
         visual_id = -1
@@ -1978,14 +1976,16 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
     for iterations in range(max_iterations):
         # TODO: stop is no progress
         # TODO: stop if collision or invalid joint limits
-        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, target_quat,
-                                                      physicsClientId=CLIENT)
+        if target_quat is None:
+            kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, physicsClientId=CLIENT)
+        else:
+            kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, target_quat, physicsClientId=CLIENT)
         if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
             return None
         set_joint_positions(robot, movable_joints, kinematic_conf)
         link_point, link_quat = get_link_pose(robot, link)
         if np.allclose(link_point, target_point, atol=tolerance, rtol=0) and \
-                np.allclose(link_quat, target_quat, atol=tolerance, rtol=0):
+                ((target_quat is None) or np.allclose(link_quat, target_quat, atol=tolerance, rtol=0)):
             break
     else:
         return None

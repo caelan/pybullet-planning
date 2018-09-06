@@ -231,16 +231,27 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10):
         return None
     return fn
 
+def assign_fluent_state(fluents):
+    obstacles = []
+    for fluent in fluents:
+        name, args = fluent[0], fluent[1:]
+        if name == 'atpose':
+            o, p = args
+            obstacles.append(o)
+            p.assign()
+        else:
+            raise ValueError(name)
+    return obstacles
 
 def get_free_motion_gen(robot, fixed=[], teleport=False):
-    def fn(conf1, conf2):
+    def fn(conf1, conf2, fluents=[]):
         assert ((conf1.body == conf2.body) and (conf1.joints == conf2.joints))
         if teleport:
             path = [conf1.configuration, conf2.configuration]
         else:
             conf1.assign()
-            path = plan_joint_motion(robot, conf2.joints, conf2.configuration,
-                                     obstacles=fixed)
+            obstacles = fixed + assign_fluent_state(fluents)
+            path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=obstacles)
             if path is None:
                 if DEBUG_FAILURE: user_input('Free motion failed')
                 return None
@@ -250,14 +261,15 @@ def get_free_motion_gen(robot, fixed=[], teleport=False):
 
 
 def get_holding_motion_gen(robot, fixed=[], teleport=False):
-    def fn(conf1, conf2, body, grasp):
+    def fn(conf1, conf2, body, grasp, fluents=[]):
         assert ((conf1.body == conf2.body) and (conf1.joints == conf2.joints))
         if teleport:
             path = [conf1.configuration, conf2.configuration]
         else:
             conf1.assign()
+            obstacles = fixed + assign_fluent_state(fluents)
             path = plan_joint_motion(robot, conf2.joints, conf2.configuration,
-                                     obstacles=fixed, attachments=[grasp.attachment()])
+                                     obstacles=obstacles, attachments=[grasp.attachment()])
             if path is None:
                 if DEBUG_FAILURE: user_input('Holding motion failed')
                 return None
