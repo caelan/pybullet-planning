@@ -1610,7 +1610,7 @@ def get_self_link_pairs(body, joints, disabled_collisions=set()):
     return check_link_pairs
 
 
-def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions):
+def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions, use_limits=True):
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
     moving_bodies = [body] + [attachment.child for attachment in attachments]
     if obstacles is None:
@@ -1620,7 +1620,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
 
     # TODO: end-effector constraints
     def collision_fn(q):
-        if violates_limits(body, joints, q):
+        if use_limits and violates_limits(body, joints, q):
             return True
         set_joint_positions(body, joints, q)
         for attachment in attachments:
