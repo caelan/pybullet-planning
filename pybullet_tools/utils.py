@@ -258,15 +258,18 @@ def load_model(rel_path, pose=None, fixed_base=True):
 
 #####################################
 
+def elapsed_time(start_time):
+    return time.time() - start_time
+
 def wait_for_duration(duration): #, dt=0):
     t0 = time.time()
-    while (time.time() - t0) <= duration:
+    while elapsed_time(t0) <= duration:
         disable_gravity()
     # TODO: wait until keypress
 
 def simulate_for_duration(duration, dt=0):
     t0 = time.time()
-    while (time.time() - t0) <= duration:
+    while elapsed_time(t0) <= duration:
         step_simulation()
         time.sleep(dt)
 
@@ -484,7 +487,7 @@ def z_rotation(theta):
     return quat_from_euler([0, 0, theta])
 
 def matrix_from_quat(quat):
-    return p.getMatrixFromQuaternion(quat, physicsClientId=CLIENT)
+    return np.array(p.getMatrixFromQuaternion(quat, physicsClientId=CLIENT)).reshape(3, 3)
 
 def quat_from_matrix(mat):
     matrix = np.eye(4)
