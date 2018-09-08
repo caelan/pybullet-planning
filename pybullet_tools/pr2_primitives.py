@@ -365,9 +365,17 @@ def get_ik_fn(problem, teleport=False):
         link = get_gripper_link(robot, a)
         arm_joints = get_arm_joints(robot, a)
         def ik_fn(target_pose):
-            movable_conf = sub_inverse_kinematics(robot, arm_joints[0], link, target_pose)
-            if (movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
-                return None
+            try:
+                from .pr2_ik.ik import sample_tool_ik, get_torso_arm_joints
+                joints = get_torso_arm_joints(robot, a)
+                torso_arm_conf = sample_tool_ik(robot, a, target_pose, torso_limits=None)
+                if torso_arm_conf is None:
+                    return None
+                set_joint_positions(robot, joints, torso_arm_conf)
+            except ImportError:
+                movable_conf = sub_inverse_kinematics(robot, arm_joints[0], link, target_pose)
+                if (movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
+                    return None
             return get_joint_positions(robot, arm_joints)
         default_conf = arm_conf(a, g.carry)
         p.assign()

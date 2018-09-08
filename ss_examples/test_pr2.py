@@ -14,7 +14,7 @@ from ss.model.streams import Stream, ListStream, GenStream, FnStream
 from pybullet_tools.pr2_problems import cooking_problem
 from pybullet_tools.pr2_utils import get_arm_joints, PR2_GROUPS, get_group_joints, get_group_conf
 from pybullet_tools.utils import connect, add_data_path, disconnect, get_pose, enable_gravity, is_placement, joints_from_names, \
-    get_joint_positions, set_client, clone_body ,ClientSaver, step_simulation, user_input, \
+    get_joint_positions, set_client, clone_body ,ClientSaver, step_simulation, user_input, HideOutput, \
     save_state, restore_state, save_bullet, restore_bullet, clone_world, get_bodies, get_joints, \
     update_state, wait_for_interrupt, get_min_limit, joint_controller_hold, enable_gravity, wait_for_duration
 from pybullet_tools.pr2_primitives import Pose, Conf, get_ik_ir_gen, get_motion_gen, get_stable_gen, apply_commands, \
@@ -326,7 +326,8 @@ def main(execute='apply'):
     # holding_problem | stacking_problem | cleaning_problem | cooking_problem
     # cleaning_button_problem | cooking_button_problem
 
-    sim_world = connect(use_gui=False)
+    with HideOutput():
+        sim_world = connect(use_gui=False)
     set_client(sim_world)
     add_data_path()
     problem = problem_fn()
@@ -334,7 +335,8 @@ def main(execute='apply'):
     #state_id = save_state()
 
     if display:
-        real_world = connect(use_gui=True)
+        with HideOutput():
+            real_world = connect(use_gui=True)
         add_data_path()
         with ClientSaver(real_world):
             problem_fn()  # TODO: way of doing this without reloading?
@@ -344,7 +346,8 @@ def main(execute='apply'):
     #wait_for_interrupt()
     commands = plan_commands(problem)
     if (commands is None) or not display:
-        disconnect()
+        with HideOutput():
+            disconnect()
         return
 
     time_step = 0.01
@@ -363,7 +366,8 @@ def main(execute='apply'):
         raise ValueError(execute)
 
     wait_for_interrupt()
-    disconnect()
+    with HideOutput():
+        disconnect()
 
 
 if __name__ == '__main__':

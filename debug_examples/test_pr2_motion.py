@@ -9,7 +9,8 @@ from pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, PR2_URDF, DRAKE_PR2_U
     SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, get_disabled_collisions, REST_LEFT_ARM, rightarm_from_leftarm
 from pybullet_tools.utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, \
-    joint_controller, dump_body, load_model, joints_from_names, user_input, disconnect
+    joint_controller, dump_body, load_model, joints_from_names, user_input, disconnect, get_joint_positions, \
+    get_link_pose, link_from_name, HideOutput, get_pose, wait_for_interrupt
 
 
 def test_base_motion(pr2, base_start, base_goal):
@@ -69,6 +70,26 @@ def test_arm_control(pr2, left_joints, arm_start):
             p.stepSimulation()
         #time.sleep(0.01)
 
+def test_ikfast(pr2):
+    from pybullet_tools.pr2_ik.ik import forward_kinematics, inverse_kinematics, get_tool_pose, get_ik_generator
+    left_joints = joints_from_names(pr2, PR2_GROUPS['left_arm'])
+    #right_joints = joints_from_names(pr2, PR2_GROUPS['right_arm'])
+    torso_joints = joints_from_names(pr2, PR2_GROUPS['torso'])
+    torso_left = torso_joints + left_joints
+    print(get_link_pose(pr2, link_from_name(pr2, 'l_gripper_tool_frame')))
+    print(forward_kinematics('left', get_joint_positions(pr2, torso_left)))
+    print(get_tool_pose(pr2, 'left'))
+
+    arm = 'left'
+    pose = get_tool_pose(pr2, arm)
+    generator = get_ik_generator(pr2, arm, pose, torso_limits=False)
+    for i in range(100):
+        solutions = next(generator)
+        print(i, len(solutions))
+        for q in solutions:
+            set_joint_positions(pr2, torso_left, q)
+            wait_for_interrupt()
+
 #####################################
 
 def main(use_pr2_drake=False):
@@ -82,7 +103,8 @@ def main(use_pr2_drake=False):
     # table_square/table_square.urdf, cube.urdf, block.urdf, door.urdf
 
     pr2_urdf = PR2_URDF if use_pr2_drake else DRAKE_PR2_URDF
-    pr2 = load_model(pr2_urdf, fixed_base=True) # TODO: suppress warnings?
+    with HideOutput():
+        pr2 = load_model(pr2_urdf, fixed_base=True) # TODO: suppress warnings?
     dump_body(pr2)
 
     base_start = (-2, -2, 0)
@@ -100,6 +122,7 @@ def main(use_pr2_drake=False):
     set_joint_positions(pr2, right_joints, rightarm_from_leftarm(REST_LEFT_ARM))
     set_joint_positions(pr2, torso_joints, [0.2])
     open_arm(pr2, 'left')
+    #test_ikfast(pr2)
 
     p.addUserDebugLine(base_start, base_goal, lineColorRGB=(1, 0, 0)) # addUserDebugText
     print(base_start, base_goal)
