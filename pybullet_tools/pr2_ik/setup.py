@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 
-from distutils.core import setup, Extension
+from __future__ import print_function
+
 import os, shutil, sys
+#sys.args.append('build')
+
+from distutils.core import setup, Extension
 
 # pr2_without_sensor_ik_files
 # python setup.py build
@@ -27,6 +31,7 @@ LEFT_LIBRARY = LIBRARY_TEMPLATE.format(LEFT_IK)
 RIGHT_LIBRARY = LIBRARY_TEMPLATE.format(RIGHT_IK)
 ik_folder = os.getcwd()
 
+# TODO: refactor
 left_path = None
 right_path = None
 for dirpath, _, filenames in os.walk(os.getcwd()):
@@ -54,5 +59,5 @@ try:
 	import ikLeft, ikRight
 	print('IK Successful')
 except ImportError as e:
-	raise e
 	print('IK Failed')
+	raise e

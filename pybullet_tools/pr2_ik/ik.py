@@ -2,10 +2,9 @@ from pybullet_tools.pr2_ik.ikLeft import leftIK, leftFK
 from pybullet_tools.pr2_ik.ikRight import rightIK, rightFK
 from pybullet_tools.utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, Pose, multiply, elapsed_time, \
     get_link_pose, link_from_name, joints_from_names, get_joint_positions, get_joint_limits, joint_from_name, invert, \
-    get_joint_position, violates_limits
+    get_joint_position, violates_limits, INF
 from pybullet_tools.pr2_utils import PR2_GROUPS, arm_from_arm
 
-import numpy as np
 import random
 import time
 
@@ -55,7 +54,6 @@ def forward_kinematics(arm, conf):
     fk_fn = ARM_FK[arm]
     pose = fk_fn(list(conf))
     pos, rot = pose
-    print(pos, rot)
     quat = quat_from_matrix(rot) # [X,Y,Z,W]
     return pos, quat
     # switch from [r, i, j, k] to [i, j, k, r]
@@ -71,27 +69,31 @@ def get_tool_pose(robot, arm):
 def inverse_kinematics(arm, pose, torso, upper):
     ik_fn = ARM_IK[arm]
     pos = point_from_pose(pose)
-    quat = quat_from_pose(pose)
-    rot = matrix_from_quat(quat).tolist()
+    rot = matrix_from_quat(quat_from_pose(pose)).tolist()
     solutions = ik_fn(list(rot), list(pos), [torso, upper])
     if solutions is None:
         return []
     return solutions
 
+def get_limits(robot, joint, limits):
+    if limits is False:
+        return get_joint_limits(robot, joint)
+    elif limits is None:
+        torso_value = get_joint_position(robot, joint)
+        return torso_value, torso_value
+    return limits
+
+#def sample_ik(robot, arm, target_pose, torso_limits, upper_limits):
+#    arm_joints = get_arm_joints(robot, arm)
+#    torso = random.uniform(*torso_limits)
+#    upper = random.uniform(*upper_limits)
+#    return [q for q in inverse_kinematics(arm, target_pose, torso, upper)
+#           if not violates_limits(robot, arm_joints, q)]
+
 def get_ik_generator(robot, arm, world_pose, torso_limits=False, upper_limits=False):
     target_pose = multiply(invert(get_base_pose(robot)), world_pose)
-    torso_joint = joint_from_name(robot, TORSO_JOINT)
-    if torso_limits is False:
-        torso_limits = get_joint_limits(robot, torso_joint)
-    elif torso_limits is None:
-        torso_value = get_joint_position(robot, torso_joint)
-        torso_limits = (torso_value, torso_value)
-    upper_joint = joint_from_name(robot, UPPER_JOINT[arm])
-    if upper_limits is False:
-        upper_limits = get_joint_limits(robot, upper_joint)
-    elif upper_limits is None:
-        upper_value = get_joint_position(robot, upper_joint)
-        upper_limits = (upper_value, upper_value)
+    torso_limits = get_limits(robot, joint_from_name(robot, TORSO_JOINT), torso_limits)
+    upper_limits = get_limits(robot, joint_from_name(robot, UPPER_JOINT[arm]), upper_limits)
     arm_joints = get_arm_joints(robot, arm)
     while True:
         torso = random.uniform(*torso_limits)
@@ -99,15 +101,26 @@ def get_ik_generator(robot, arm, world_pose, torso_limits=False, upper_limits=Fa
         yield [q for q in inverse_kinematics(arm, target_pose, torso, upper)
                if not violates_limits(robot, arm_joints, q)]
 
+def sample_tool_ik(robot, arm, tool_pose, max_attempts=10, **kwargs):
+    generator = get_ik_generator(robot, arm, tool_pose, **kwargs)
+    for _ in range(max_attempts):
+        try:
+            solutions = next(generator)
+            if solutions:
+                return random.sample(solutions)
+        except StopIteration:
+            break
+    return None
+
 #####################################
 
-def accelerate_list_generator(generator, max_attempts=1, max_time=np.inf):
-    while True:
-        start_time = time.time()
-        for i in range(max_attempts):
-            if max_time <= elapsed_time(start_time):
-                break
-            sequence = next(generator)
-            if sequence:
-                yield sequence
-                break
+# def accelerate_list_generator(generator, max_attempts=1, max_time=np.inf):
+#     while True:
+#         start_time = time.time()
+#         for i in range(max_attempts):
+#             if max_time <= elapsed_time(start_time):
+#                 break
+#             sequence = next(generator)
+#             if sequence:
+#                 yield sequence
+#                 break

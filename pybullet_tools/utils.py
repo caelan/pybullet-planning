@@ -2052,7 +2052,8 @@ def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_ite
     kinematic_conf = get_configuration(robot)
     if violates_limits(robot, get_movable_joints(robot), kinematic_conf):
         return None
-    return kinematic_conf
+    #return kinematic_conf
+    return sub_kinematic_conf
 
 #####################################
 

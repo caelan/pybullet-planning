@@ -3,7 +3,7 @@ import numpy as np
 from .pr2_utils import set_arm_conf, REST_LEFT_ARM, open_arm, \
     close_arm, get_carry_conf, arm_conf, get_other_arm, set_group_conf
 from .utils import create_box, set_base_values, set_point, set_pose, get_pose, \
-    get_bodies, z_rotation, load_model, load_pybullet
+    get_bodies, z_rotation, load_model, load_pybullet, HideOutput
 
 
 class Problem(object):
@@ -38,7 +38,8 @@ def create_pr2(use_drake=True, fixed_base=True):
         pr2_path = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
     else:
         pr2_path = "models/pr2_description/pr2.urdf"
-    pr2 = load_model(pr2_path, fixed_base=fixed_base)
+    with HideOutput():
+        pr2 = load_model(pr2_path, fixed_base=fixed_base)
     set_group_conf(pr2, 'torso', [0.2])
     return pr2
 

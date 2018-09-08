@@ -368,8 +368,7 @@ def get_ik_fn(problem, teleport=False):
             movable_conf = sub_inverse_kinematics(robot, arm_joints[0], link, target_pose)
             if (movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                 return None
-            conf = get_joint_positions(robot, arm_joints)
-            return conf
+            return get_joint_positions(robot, arm_joints)
         default_conf = arm_conf(a, g.carry)
         p.assign()
         bq.assign()
