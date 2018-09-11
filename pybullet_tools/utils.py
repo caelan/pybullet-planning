@@ -465,6 +465,9 @@ def unit_point():
 def unit_quat():
     return quat_from_euler([0, 0, 0]) # [X,Y,Z,W]
 
+def quat_from_vector_angle(vec, angle):
+    return get_unit_vector(np.append(vec, [angle]))
+
 def unit_pose():
     return (unit_point(), unit_quat())
 
@@ -2092,6 +2095,15 @@ def add_segments(points, closed=False, **kwargs):
         lines.append(add_line(points[-1], points[0], **kwargs))
     return lines
 
+def draw_pose(pose, length=0.1, **kwargs):
+    origin_world = tform_point(pose, np.zeros(3))
+    handles = []
+    for k in range(3):
+        axis = np.zeros(3)
+        axis[k] = 1
+        axis_world = tform_point(pose, length*axis)
+        handles.append(add_line(origin_world, axis_world, color=axis, **kwargs))
+    return handles
 
 def draw_base_limits(limits, z=1e-2, **kwargs):
     lower, upper = limits
@@ -2121,9 +2133,11 @@ def is_point_in_polygon(point, polygon):
             return False
     return True
 
+def tform_point(affine, point):
+    return point_from_pose(multiply(affine, Pose(point=point)))
+
 def apply_affine(affine, points):
-    # TODO: version which applies to one point
-    return [point_from_pose(multiply(affine, Pose(point=p))) for p in points]
+    return [tform_point(affine, p) for p in points]
 
 def is_mesh_on_surface(polygon, world_from_surface, mesh, world_from_mesh, epsilon=1e-2):
     surface_from_mesh = multiply(invert(world_from_surface), world_from_mesh)
