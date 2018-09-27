@@ -220,10 +220,10 @@ GRASP_LENGTH = 0.
 MAX_GRASP_WIDTH = np.inf
 
 
-def get_top_grasps(body, under=False, tool_pose=TOOL_POSE,
+def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
-    pose = get_pose(body)
-    set_pose(body, unit_pose())
+    initial_pose = get_pose(body)
+    set_pose(body, body_pose)
     center, (w, l, h) = get_center_extent(body)
     reflect_z = (np.zeros(3), quat_from_euler([0, math.pi, 0]))
     translate_z = ([0, 0, h / 2 - grasp_length], unit_quat())
@@ -239,31 +239,35 @@ def get_top_grasps(body, under=False, tool_pose=TOOL_POSE,
             rotate_z = (unit_point(), quat_from_euler([0, 0, i * math.pi]))
             grasps += [multiply(tool_pose, translate_z, rotate_z,
                                 reflect_z, translate_center)]
-    set_pose(body, pose)
+    set_pose(body, initial_pose)
     return grasps
 
 
-def get_side_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
-    pose = get_pose(body)
-    set_pose(body, unit_pose())
-    center, (w, l, _) = get_center_extent(body)
+def get_side_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
+                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+    # TODO: compute bounding box width wrt tool frame
+    initial_pose = get_pose(body)
+    set_pose(body, body_pose)
+    center, (w, l, h) = get_center_extent(body)
     translate_center = Pose(-center)
     grasps = []
+    #x_offset = 0
+    x_offset = h/2 - 0.02
     for j in range(1 + under):
         swap_xz = (unit_point(), quat_from_euler([0, -math.pi / 2 + j * math.pi, 0]))
-        if not limits or (w <= MAX_GRASP_WIDTH):
-            translate_z = ([0, 0, l / 2 - grasp_length], unit_quat())
+        if w <= max_width:
+            translate_z = ([x_offset, 0, l / 2 - grasp_length], unit_quat())
             for i in range(2):
                 rotate_z = (unit_point(), quat_from_euler([math.pi / 2 + i * math.pi, 0, 0]))
-                grasps += [multiply(TOOL_POSE, translate_z, rotate_z,
+                grasps += [multiply(tool_pose, translate_z, rotate_z,
                                     swap_xz, translate_center)]  # , np.array([w])
-        if not limits or (l <= MAX_GRASP_WIDTH):
-            translate_z = ([0, 0, w / 2 - grasp_length], unit_quat())
+        if l <= max_width:
+            translate_z = ([x_offset, 0, w / 2 - grasp_length], unit_quat())
             for i in range(2):
                 rotate_z = (unit_point(), quat_from_euler([i * math.pi, 0, 0]))
-                grasps += [multiply(TOOL_POSE, translate_z, rotate_z,
+                grasps += [multiply(tool_pose, translate_z, rotate_z,
                                     swap_xz, translate_center)]  # , np.array([l])
-    set_pose(body, pose)
+    set_pose(body, initial_pose)
     return grasps
 
 

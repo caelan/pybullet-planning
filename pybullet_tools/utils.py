@@ -450,6 +450,13 @@ def multiply(*poses):
         pose = p.multiplyTransforms(pose[0], pose[1], *next_pose)
     return pose
 
+def invert_quat(quat):
+    pose = (unit_point(), quat)
+    return quat_from_pose(invert(pose))
+
+def multiply_quats(*quats):
+    return quat_from_pose(*[(unit_point(), quat) for quat in quats])
+
 def unit_from_theta(theta):
     return np.array([np.cos(theta), np.sin(theta)])
 
@@ -1631,8 +1638,6 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         set_joint_positions(body, joints, q)
         for attachment in attachments:
             attachment.assign()
-        #if pairwise_collision(body, body):
-        #    return True
         for link1, link2 in check_link_pairs:
             if pairwise_link_collision(body, link1, body, link2):
                 return True
@@ -1740,9 +1745,10 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
 # Placements
 
 def stable_z(body, surface):
-    _, extent = get_center_extent(body)
+    point = get_point(body)
+    center, extent = get_center_extent(body)
     _, upper = get_lower_upper(surface)
-    return (upper + extent/2)[2]
+    return (upper + extent/2 + (center - point))[2]
 
 def is_placement(body, surface, epsilon=1e-2): # TODO: above / below
     top_aabb = get_lower_upper(body)
