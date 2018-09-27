@@ -7,14 +7,13 @@ from itertools import combinations
 
 import numpy as np
 
-from examples.pybullet.utils.pybullet_tools.utils import get_body_name, get_num_joints
 from .pr2_never_collisions import NEVER_COLLISIONS
 from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, \
     set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
     unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
     ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, \
-    violates_limits, add_line
+    violates_limits, add_line, get_body_name, get_num_joints
 
 ARM_NAMES = ('left', 'right')
 
