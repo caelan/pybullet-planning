@@ -741,8 +741,11 @@ def get_joint_type(body, joint):
 def is_movable(body, joint):
     return get_joint_type(body, joint) != p.JOINT_FIXED
 
+def prune_fixed_joints(body, joints):
+    return [joint for joint in joints if is_movable(body, joint)]
+
 def get_movable_joints(body): # 45 / 87 on pr2
-    return [joint for joint in get_joints(body) if is_movable(body, joint)]
+    return prune_fixed_joints(body, get_joints(body))
 
 def joint_from_movable(body, index):
     return get_joints(body)[index]
@@ -883,7 +886,7 @@ def get_joint_ancestors(body, link):
     return get_link_ancestors(body, link) + [link]
 
 def get_movable_joint_ancestors(body, link):
-    return list(filter(lambda j: is_movable(body, j), get_joint_ancestors(body, link)))
+    return prune_fixed_joints(body, get_joint_ancestors(body, link))
 
 def get_link_descendants(body, link):
     descendants = []
@@ -891,6 +894,9 @@ def get_link_descendants(body, link):
         descendants.append(child)
         descendants += get_link_descendants(body, child)
     return descendants
+
+def get_link_subtree(body, link):
+    return [link] + get_link_descendants(body, link)
 
 def are_links_adjacent(body, link1, link2):
     return (get_link_parent(body, link1) == link2) or \
@@ -1748,7 +1754,7 @@ def stable_z(body, surface):
     point = get_point(body)
     center, extent = get_center_extent(body)
     _, upper = get_lower_upper(surface)
-    return (upper + extent/2 + (center - point))[2]
+    return (upper + extent/2 + (point - center))[2]
 
 def is_placement(body, surface, epsilon=1e-2): # TODO: above / below
     top_aabb = get_lower_upper(body)
@@ -2005,6 +2011,8 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
         return None
     return kinematic_conf
 
+#####################################
+
 def workspace_trajectory(robot, link, start_point, direction, quat, step_size=0.01, **kwargs):
     # TODO: pushing example
     # TODO: just use current configuration?
@@ -2022,23 +2030,42 @@ def workspace_trajectory(robot, link, start_point, direction, quat, step_size=0.
         traj.append(conf)
     return traj
 
+def sub_workspace_trajectory(robot, first_joint, link, direction, step_size=0.01, **kwargs):
+    # TODO: avoid regenerating the robot
+    # TODO: plan a path without needing to following intermediate waypoints
+    start_point, quat = get_link_pose(robot, link)
+    distance = get_length(direction)
+    unit_direction = get_unit_vector(direction)
+    traj = []
+    for t in np.arange(0, distance, step_size):
+        point = start_point + t*unit_direction
+        pose = (point, quat)
+        conf = sub_inverse_kinematics(robot, first_joint, link, pose, **kwargs)
+        if conf is None:
+            return None
+        traj.append(conf)
+    return traj
+
 #####################################
 
-def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_iterations=200, tolerance=1e-3):
+def sub_inverse_kinematics(robot, first_joint, target_link, target_pose,
+                           max_iterations=200, pos_tolerance=1e-3, ori_tolerance=1e-3, return_path=False):
     # TODO: fix stationary joints
     # TODO: pass in set of movable joints and take least common ancestor
     # TODO: update with most recent bullet updates
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/inverse_kinematics.py
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
 
-    selected_links = [first_joint] + get_link_descendants(robot, first_joint)
-    selected_movable_joints = [joint for joint in selected_links if is_movable(robot, joint)]
+    selected_links = get_link_subtree(robot, first_joint)
+    selected_movable_joints = prune_fixed_joints(robot, selected_links)
     assert(target_link in selected_links)
     selected_target_link = selected_links.index(target_link)
     sub_robot = clone_body(robot, links=selected_links, visual=False, collision=False) # TODO: joint limits
 
     (target_point, target_quat) = target_pose
     sub_movable_joints = get_movable_joints(sub_robot)
+    sub_kinematic_conf = get_joint_positions(sub_robot, sub_movable_joints)
+    path = [sub_kinematic_conf]
     for _ in range(max_iterations):
         sub_kinematic_conf = p.calculateInverseKinematics(sub_robot, selected_target_link,
                                                           target_point, target_quat,
@@ -2046,11 +2073,12 @@ def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_ite
         if (sub_kinematic_conf is None) or any(map(math.isnan, sub_kinematic_conf)):
             remove_body(sub_robot)
             return None
+        path.append(sub_kinematic_conf)
         set_joint_positions(sub_robot, sub_movable_joints, sub_kinematic_conf)
         link_point, link_quat = get_link_pose(sub_robot, selected_target_link)
         # TODO: let target_quat be None
-        if np.allclose(link_point, target_point, atol=tolerance, rtol=0) and \
-                np.allclose(link_quat, target_quat, atol=tolerance, rtol=0):
+        if np.allclose(link_point, target_point, atol=pos_tolerance, rtol=0) and \
+                np.allclose(link_quat, target_quat, atol=ori_tolerance, rtol=0):
             break
     else:
         remove_body(sub_robot)
@@ -2061,6 +2089,8 @@ def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_ite
     kinematic_conf = get_configuration(robot)
     if violates_limits(robot, get_movable_joints(robot), kinematic_conf):
         return None
+    if return_path:
+        return path
     #return kinematic_conf
     return sub_kinematic_conf
 
@@ -2116,6 +2146,18 @@ def draw_base_limits(limits, z=1e-2, **kwargs):
     vertices = [(lower[0], lower[1], z), (lower[0], upper[1], z),
                 (upper[0], upper[1], z), (upper[0], lower[1], z)]
     return add_segments(vertices, closed=True, **kwargs)
+
+def draw_aabb(aabb, **kwargs):
+    lower, upper = aabb
+    d = len(lower)
+    vertices = list(product(range(len(aabb)), repeat=d))
+    lines = []
+    for i1, i2 in combinations(vertices, 2):
+        if sum(i1[k] != i2[k] for k in range(d)) == 1:
+            p1 = [aabb[i1[k]][k] for k in range(d)]
+            p2 = [aabb[i2[k]][k] for k in range(d)]
+            lines.append(add_line(p1, p2, **kwargs))
+    return lines
 
 #####################################
 
