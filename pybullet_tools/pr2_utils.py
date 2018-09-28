@@ -227,7 +227,7 @@ def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose()
     center, (w, l, h) = get_center_extent(body)
     reflect_z = (np.zeros(3), quat_from_euler([0, math.pi, 0]))
     translate_z = ([0, 0, h / 2 - grasp_length], unit_quat())
-    translate_center = Pose(-center)
+    translate_center = Pose(point_from_pose(body_pose)-center)
     grasps = []
     if w <= max_width:
         for i in range(1 + under):
@@ -247,7 +247,7 @@ def get_side_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(
     initial_pose = get_pose(body)
     set_pose(body, body_pose)
     center, (w, l, h) = get_center_extent(body)
-    translate_center = Pose(-center)
+    translate_center = Pose(point_from_pose(body_pose)-center)
     grasps = []
     #x_offset = 0
     x_offset = h/2 - 0.02
@@ -274,7 +274,7 @@ def get_top_cylinder_grasps(body, tool_pose=TOOL_POSE, body_pose=unit_pose(),
     center, (w, l, h) = get_center_extent(body)
     reflect_z = (np.zeros(3), quat_from_euler([0, math.pi, 0]))
     translate_z = ([0, 0, h / 2 - grasp_length], unit_quat())
-    translate_center = Pose(-center)
+    translate_center = Pose(point_from_pose(body_pose)-center)
     diameter = (w + l) / 2 # TODO: check that these are close
     if max_width < diameter:
         return
@@ -288,7 +288,7 @@ def get_side_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=u
                              max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
     set_pose(body, body_pose)
     center, (w, l, h) = get_center_extent(body)
-    translate_center = Pose(-center)
+    translate_center = Pose(point_from_pose(body_pose)-center)
     #x_offset = 0
     x_offset = h/2 - 0.02
     diameter = (w + l) / 2 # TODO: check that these are close
