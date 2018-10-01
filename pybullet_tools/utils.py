@@ -1523,7 +1523,7 @@ def get_difference_fn(body, joints):
     return fn
 
 def get_distance_fn(body, joints, weights=None):
-    # TODO: custom weights and step sizes
+    # TODO: use the energy resulting from the mass matrix here?
     if weights is None:
         weights = 1*np.ones(len(joints))
     difference_fn = get_difference_fn(body, joints)
@@ -1640,7 +1640,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         obstacles = list(set(get_bodies()) - set(moving_bodies))
     check_body_pairs = list(product(moving_bodies, obstacles))  # + list(combinations(moving_bodies, 2))
     # TODO: maybe prune the link adjacent to the robot
-
+    # TODO: test self collision with the holding
     # TODO: end-effector constraints
     def collision_fn(q):
         if use_limits and violates_limits(body, joints, q):
@@ -1685,21 +1685,19 @@ def plan_direct_joint_motion(body, joints, end_conf, obstacles=None, attachments
                                        disabled_collisions)
 
 def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
-                      self_collisions=True, disabled_collisions=set(), direct=False, **kwargs):
+                      self_collisions=True, disabled_collisions=set(), direct=False,
+                      weights=None, resolutions=None, **kwargs):
     if direct:
         return plan_direct_joint_motion(body, joints, end_conf, obstacles, attachments, self_collisions, disabled_collisions)
     assert len(joints) == len(end_conf)
     sample_fn = get_sample_fn(body, joints)
-    distance_fn = get_distance_fn(body, joints)
-    extend_fn = get_extend_fn(body, joints)
+    distance_fn = get_distance_fn(body, joints, weights=weights)
+    extend_fn = get_extend_fn(body, joints, resolutions=resolutions)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions)
-    # TODO: test self collision with the holding
 
     start_conf = get_joint_positions(body, joints)
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
-    #if direct:
-    #    return direct_path(start_conf, end_conf, extend_fn, collision_fn)
     return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
 
 #####################################
@@ -1988,6 +1986,40 @@ def velocity_control_joints(body, joints, velocities):
                                        physicsClientId=CLIENT) #,
                                         #velocityGains=[kv] * len(joints),)
                                         #forces=forces)
+
+#####################################
+
+def compute_jacobian(robot, link, positions): #, joints=None):
+    #if joints is None:
+    joints = get_movable_joints(robot)
+    assert len(joints) == len(positions)
+    velocities = [0.0] * len(positions)
+    accelerations = [0.0] * len(positions)
+    translate, rotate = p.calculateJacobian(robot, link, unit_point(), positions,
+                                            velocities, accelerations, physicsClientId=CLIENT)
+    #movable_from_joints(robot, joints)
+    return zip(*translate), zip(*rotate) # len(joints) x 3
+
+
+def compute_joint_weights(robot, num=100):
+    # http://openrave.org/docs/0.6.6/_modules/openravepy/databases/linkstatistics/#LinkStatisticsModel
+    start_time = time.time()
+    joints = get_movable_joints(robot)
+    sample_fn = get_sample_fn(robot, joints)
+    weighted_jacobian = np.zeros(len(joints))
+    links = list(get_links(robot))
+    # links = {l for j in joints for l in get_link_descendants(self.robot, j)}
+    masses = [get_mass(robot, link) for link in links]  # Volume, AABB volume
+    total_mass = sum(masses)
+    for _ in range(num):
+        conf = sample_fn()
+        for mass, link in zip(masses, links):
+            translate, rotate = compute_jacobian(robot, link, conf)
+            weighted_jacobian += np.array([mass * np.linalg.norm(vec) for vec in translate]) / total_mass
+    weighted_jacobian /= num
+    print(list(weighted_jacobian))
+    print(time.time() - start_time)
+    return weighted_jacobian
 
 #####################################
 

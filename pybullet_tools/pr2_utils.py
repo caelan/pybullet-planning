@@ -15,6 +15,8 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, \
     violates_limits, add_line, get_body_name, get_num_joints
 
+# TODO: restrict number of pr2 rotations to prevent from wrapping too many times
+
 ARM_NAMES = ('left', 'right')
 
 def arm_from_arm(arm): # TODO: rename
