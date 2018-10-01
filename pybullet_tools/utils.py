@@ -480,6 +480,13 @@ def multiply(*poses):
         pose = p.multiplyTransforms(pose[0], pose[1], *next_pose)
     return pose
 
+def invert_quat(quat):
+    pose = (unit_point(), quat)
+    return quat_from_pose(invert(pose))
+
+def multiply_quats(*quats):
+    return quat_from_pose(*[(unit_point(), quat) for quat in quats])
+
 def unit_from_theta(theta):
     return np.array([np.cos(theta), np.sin(theta)])
 
@@ -764,11 +771,18 @@ def get_joint_type(body, joint):
 def is_movable(body, joint):
     return get_joint_type(body, joint) != p.JOINT_FIXED
 
+def prune_fixed_joints(body, joints):
+    return [joint for joint in joints if is_movable(body, joint)]
+
 def get_movable_joints(body): # 45 / 87 on pr2
-    return [joint for joint in get_joints(body) if is_movable(body, joint)]
+    return prune_fixed_joints(body, get_joints(body))
 
 def joint_from_movable(body, index):
     return get_joints(body)[index]
+
+def movable_from_joints(body, joints):
+    movable_from_original = {o: m for m, o in enumerate(get_movable_joints(body))}
+    return [movable_from_original[joint] for joint in joints]
 
 def is_circular(body, joint):
     joint_info = get_joint_info(body, joint)
@@ -906,7 +920,7 @@ def get_joint_ancestors(body, link):
     return get_link_ancestors(body, link) + [link]
 
 def get_movable_joint_ancestors(body, link):
-    return list(filter(lambda j: is_movable(body, j), get_joint_ancestors(body, link)))
+    return prune_fixed_joints(body, get_joint_ancestors(body, link))
 
 def get_link_descendants(body, link):
     descendants = []
@@ -914,6 +928,9 @@ def get_link_descendants(body, link):
         descendants.append(child)
         descendants += get_link_descendants(body, child)
     return descendants
+
+def get_link_subtree(body, link):
+    return [link] + get_link_descendants(body, link)
 
 def are_links_adjacent(body, link1, link2):
     return (get_link_parent(body, link1) == link2) or \
@@ -1536,7 +1553,7 @@ def get_difference_fn(body, joints):
     return fn
 
 def get_distance_fn(body, joints, weights=None):
-    # TODO: custom weights and step sizes
+    # TODO: use the energy resulting from the mass matrix here?
     if weights is None:
         weights = 1*np.ones(len(joints))
     difference_fn = get_difference_fn(body, joints)
@@ -1653,7 +1670,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         obstacles = list(set(get_bodies()) - set(moving_bodies))
     check_body_pairs = list(product(moving_bodies, obstacles))  # + list(combinations(moving_bodies, 2))
     # TODO: maybe prune the link adjacent to the robot
-
+    # TODO: test self collision with the holding
     # TODO: end-effector constraints
     def collision_fn(q):
         if use_limits and violates_limits(body, joints, q):
@@ -1661,8 +1678,6 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         set_joint_positions(body, joints, q)
         for attachment in attachments:
             attachment.assign()
-        #if pairwise_collision(body, body):
-        #    return True
         for link1, link2 in check_link_pairs:
             if pairwise_link_collision(body, link1, body, link2):
                 return True
@@ -1700,21 +1715,19 @@ def plan_direct_joint_motion(body, joints, end_conf, obstacles=None, attachments
                                        disabled_collisions)
 
 def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
-                      self_collisions=True, disabled_collisions=set(), direct=False, **kwargs):
+                      self_collisions=True, disabled_collisions=set(), direct=False,
+                      weights=None, resolutions=None, **kwargs):
     if direct:
         return plan_direct_joint_motion(body, joints, end_conf, obstacles, attachments, self_collisions, disabled_collisions)
     assert len(joints) == len(end_conf)
     sample_fn = get_sample_fn(body, joints)
-    distance_fn = get_distance_fn(body, joints)
-    extend_fn = get_extend_fn(body, joints)
+    distance_fn = get_distance_fn(body, joints, weights=weights)
+    extend_fn = get_extend_fn(body, joints, resolutions=resolutions)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions)
-    # TODO: test self collision with the holding
 
     start_conf = get_joint_positions(body, joints)
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
-    #if direct:
-    #    return direct_path(start_conf, end_conf, extend_fn, collision_fn)
     return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
 
 #####################################
@@ -1770,9 +1783,10 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
 # Placements
 
 def stable_z(body, surface):
-    _, extent = get_center_extent(body)
+    point = get_point(body)
+    center, extent = get_center_extent(body)
     _, upper = get_lower_upper(surface)
-    return (upper + extent/2)[2]
+    return (upper + extent/2 + (point - center))[2]
 
 def is_placement(body, surface, epsilon=1e-2): # TODO: above / below
     top_aabb = get_lower_upper(body)
@@ -1990,10 +2004,9 @@ def joint_controller_hold(body, joints, target, max_time=None):
     Keeps other joints in place
     """
     movable_joints = get_movable_joints(body)
-    movable_from_original = {o: m for m, o in enumerate(movable_joints)}
     conf = list(get_joint_positions(body, movable_joints))
-    for joint, value in zip(joints, target):
-        conf[movable_from_original[joint]] = value
+    for joint, value in zip(movable_from_joints(body, joints), target):
+        conf[joint] = value
     return joint_controller(body, movable_joints, conf)
 
 def velocity_control_joints(body, joints, velocities):
@@ -2003,6 +2016,40 @@ def velocity_control_joints(body, joints, velocities):
                                        physicsClientId=CLIENT) #,
                                         #velocityGains=[kv] * len(joints),)
                                         #forces=forces)
+
+#####################################
+
+def compute_jacobian(robot, link, positions): #, joints=None):
+    #if joints is None:
+    joints = get_movable_joints(robot)
+    assert len(joints) == len(positions)
+    velocities = [0.0] * len(positions)
+    accelerations = [0.0] * len(positions)
+    translate, rotate = p.calculateJacobian(robot, link, unit_point(), positions,
+                                            velocities, accelerations, physicsClientId=CLIENT)
+    #movable_from_joints(robot, joints)
+    return zip(*translate), zip(*rotate) # len(joints) x 3
+
+
+def compute_joint_weights(robot, num=100):
+    # http://openrave.org/docs/0.6.6/_modules/openravepy/databases/linkstatistics/#LinkStatisticsModel
+    start_time = time.time()
+    joints = get_movable_joints(robot)
+    sample_fn = get_sample_fn(robot, joints)
+    weighted_jacobian = np.zeros(len(joints))
+    links = list(get_links(robot))
+    # links = {l for j in joints for l in get_link_descendants(self.robot, j)}
+    masses = [get_mass(robot, link) for link in links]  # Volume, AABB volume
+    total_mass = sum(masses)
+    for _ in range(num):
+        conf = sample_fn()
+        for mass, link in zip(masses, links):
+            translate, rotate = compute_jacobian(robot, link, conf)
+            weighted_jacobian += np.array([mass * np.linalg.norm(vec) for vec in translate]) / total_mass
+    weighted_jacobian /= num
+    print(list(weighted_jacobian))
+    print(time.time() - start_time)
+    return weighted_jacobian
 
 #####################################
 
@@ -2029,17 +2076,22 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
         return None
     return kinematic_conf
 
-def workspace_trajectory(robot, link, start_point, direction, quat, step_size=0.01, **kwargs):
+#####################################
+
+def get_cartesian_waypoints(start_point, direction, quat, step_size=0.01):
+    distance = get_length(direction)
+    unit_direction = get_unit_vector(direction)
+    for t in np.arange(0, distance, step_size):
+        point = start_point + t*unit_direction
+        yield (point, quat)
+
+def workspace_trajectory(robot, link, start_point, direction, quat, **kwargs):
     # TODO: pushing example
     # TODO: just use current configuration?
     # TODO: check collisions?
     # TODO: lower intermediate tolerance
-    distance = get_length(direction)
-    unit_direction = get_unit_vector(direction)
     traj = []
-    for t in np.arange(0, distance, step_size):
-        point = start_point + t*unit_direction
-        pose = (point, quat)
+    for pose in get_cartesian_waypoints(start_point, direction, quat):
         conf = inverse_kinematics(robot, link, pose, **kwargs)
         if conf is None:
             return None
@@ -2048,45 +2100,54 @@ def workspace_trajectory(robot, link, start_point, direction, quat, step_size=0.
 
 #####################################
 
-def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_iterations=200, tolerance=1e-3):
+def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
+                          max_iterations=200, pos_tolerance=1e-3, ori_tolerance=1e-3):
     # TODO: fix stationary joints
     # TODO: pass in set of movable joints and take least common ancestor
     # TODO: update with most recent bullet updates
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/inverse_kinematics.py
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
+    # TODO: plan a path without needing to following intermediate waypoints
 
-    selected_links = [first_joint] + get_link_descendants(robot, first_joint)
-    selected_movable_joints = [joint for joint in selected_links if is_movable(robot, joint)]
+    selected_links = get_link_subtree(robot, first_joint)
+    selected_movable_joints = prune_fixed_joints(robot, selected_links)
     assert(target_link in selected_links)
     selected_target_link = selected_links.index(target_link)
     sub_robot = clone_body(robot, links=selected_links, visual=False, collision=False) # TODO: joint limits
-
-    (target_point, target_quat) = target_pose
     sub_movable_joints = get_movable_joints(sub_robot)
-    for _ in range(max_iterations):
-        sub_kinematic_conf = p.calculateInverseKinematics(sub_robot, selected_target_link,
-                                                          target_point, target_quat,
-                                                          physicsClientId=CLIENT)
-        if (sub_kinematic_conf is None) or any(map(math.isnan, sub_kinematic_conf)):
+
+    solutions = []
+    for target_pose in waypoint_poses:
+        (target_point, target_quat) = target_pose
+        for _ in range(max_iterations):
+            sub_kinematic_conf = p.calculateInverseKinematics(sub_robot, selected_target_link,
+                                                              target_point, target_quat, physicsClientId=CLIENT)
+            if (sub_kinematic_conf is None) or any(map(math.isnan, sub_kinematic_conf)):
+                remove_body(sub_robot)
+                return None
+            set_joint_positions(sub_robot, sub_movable_joints, sub_kinematic_conf)
+            link_point, link_quat = get_link_pose(sub_robot, selected_target_link)
+            # TODO: let target_quat be None
+            if np.allclose(link_point, target_point, atol=pos_tolerance, rtol=0) and \
+                    np.allclose(link_quat, target_quat, atol=ori_tolerance, rtol=0):
+                set_joint_positions(robot, selected_movable_joints, sub_kinematic_conf)
+                kinematic_conf = get_configuration(robot)
+                if violates_limits(robot, get_movable_joints(robot), kinematic_conf):
+                    remove_body(sub_robot)
+                    return None
+                solutions.append(kinematic_conf)
+                break
+        else:
             remove_body(sub_robot)
             return None
-        set_joint_positions(sub_robot, sub_movable_joints, sub_kinematic_conf)
-        link_point, link_quat = get_link_pose(sub_robot, selected_target_link)
-        # TODO: let target_quat be None
-        if np.allclose(link_point, target_point, atol=tolerance, rtol=0) and \
-                np.allclose(link_quat, target_quat, atol=tolerance, rtol=0):
-            break
-    else:
-        remove_body(sub_robot)
-        return None
     remove_body(sub_robot)
+    return solutions
 
-    set_joint_positions(robot, selected_movable_joints, sub_kinematic_conf)
-    kinematic_conf = get_configuration(robot)
-    if violates_limits(robot, get_movable_joints(robot), kinematic_conf):
-        return None
-    #return kinematic_conf
-    return sub_kinematic_conf
+def sub_inverse_kinematics(robot, first_joint, target_link, target_pose, **kwargs):
+    solutions = plan_cartesian_motion(robot, first_joint, target_link, [target_pose], **kwargs)
+    if solutions:
+        return solutions[0]
+    return None
 
 #####################################
 
@@ -2140,6 +2201,18 @@ def draw_base_limits(limits, z=1e-2, **kwargs):
     vertices = [(lower[0], lower[1], z), (lower[0], upper[1], z),
                 (upper[0], upper[1], z), (upper[0], lower[1], z)]
     return add_segments(vertices, closed=True, **kwargs)
+
+def draw_aabb(aabb, **kwargs):
+    lower, upper = aabb
+    d = len(lower)
+    vertices = list(product(range(len(aabb)), repeat=d))
+    lines = []
+    for i1, i2 in combinations(vertices, 2):
+        if sum(i1[k] != i2[k] for k in range(d)) == 1:
+            p1 = [aabb[i1[k]][k] for k in range(d)]
+            p2 = [aabb[i2[k]][k] for k in range(d)]
+            lines.append(add_line(p1, p2, **kwargs))
+    return lines
 
 #####################################
 

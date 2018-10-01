@@ -7,14 +7,15 @@ from itertools import combinations
 
 import numpy as np
 
-from examples.pybullet.utils.pybullet_tools.utils import get_body_name, get_num_joints
 from .pr2_never_collisions import NEVER_COLLISIONS
 from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, \
     set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
     unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
     ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, \
-    violates_limits, add_line
+    violates_limits, add_line, get_body_name, get_num_joints
+
+# TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
 ARM_NAMES = ('left', 'right')
 
@@ -129,8 +130,8 @@ def get_disabled_collisions(pr2):
     #disabled_names = PR2_DISABLED_COLLISIONS
     disabled_names = NEVER_COLLISIONS
     #disabled_names = PR2_DISABLED_COLLISIONS + NEVER_COLLISIONS
-    return [(link_from_name(pr2, name1), link_from_name(pr2, name2))
-            for name1, name2 in disabled_names if has_link(pr2, name1) and has_link(pr2, name2)]
+    return {(link_from_name(pr2, name1), link_from_name(pr2, name2))
+            for name1, name2 in disabled_names if has_link(pr2, name1) and has_link(pr2, name2)}
 
 
 def load_dae_collisions():
@@ -221,52 +222,89 @@ GRASP_LENGTH = 0.
 MAX_GRASP_WIDTH = np.inf
 
 
-def get_top_grasps(body, under=False, tool_pose=TOOL_POSE,
+def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
-    pose = get_pose(body)
-    set_pose(body, unit_pose())
+    initial_pose = get_pose(body)
+    set_pose(body, body_pose)
     center, (w, l, h) = get_center_extent(body)
     reflect_z = (np.zeros(3), quat_from_euler([0, math.pi, 0]))
     translate_z = ([0, 0, h / 2 - grasp_length], unit_quat())
-    translate_center = Pose(-center)
+    translate_center = Pose(point_from_pose(body_pose)-center)
     grasps = []
     if w <= max_width:
         for i in range(1 + under):
             rotate_z = (unit_point(), quat_from_euler([0, 0, math.pi / 2 + i * math.pi]))
-            grasps += [multiply(tool_pose, translate_z, rotate_z,
-                                reflect_z, translate_center)]
+            grasps += [multiply(tool_pose, translate_z, rotate_z, reflect_z, translate_center)]
     if l <= max_width:
         for i in range(1 + under):
             rotate_z = (unit_point(), quat_from_euler([0, 0, i * math.pi]))
-            grasps += [multiply(tool_pose, translate_z, rotate_z,
-                                reflect_z, translate_center)]
-    set_pose(body, pose)
+            grasps += [multiply(tool_pose, translate_z, rotate_z, reflect_z, translate_center)]
+    set_pose(body, initial_pose)
     return grasps
 
 
-def get_side_grasps(body, under=False, limits=True, grasp_length=GRASP_LENGTH):
-    pose = get_pose(body)
-    set_pose(body, unit_pose())
-    center, (w, l, _) = get_center_extent(body)
-    translate_center = Pose(-center)
+def get_side_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
+                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+    # TODO: compute bounding box width wrt tool frame
+    initial_pose = get_pose(body)
+    set_pose(body, body_pose)
+    center, (w, l, h) = get_center_extent(body)
+    translate_center = Pose(point_from_pose(body_pose)-center)
     grasps = []
+    #x_offset = 0
+    x_offset = h/2 - 0.02
     for j in range(1 + under):
         swap_xz = (unit_point(), quat_from_euler([0, -math.pi / 2 + j * math.pi, 0]))
-        if not limits or (w <= MAX_GRASP_WIDTH):
-            translate_z = ([0, 0, l / 2 - grasp_length], unit_quat())
+        if w <= max_width:
+            translate_z = ([x_offset, 0, l / 2 - grasp_length], unit_quat())
             for i in range(2):
                 rotate_z = (unit_point(), quat_from_euler([math.pi / 2 + i * math.pi, 0, 0]))
-                grasps += [multiply(TOOL_POSE, translate_z, rotate_z,
-                                    swap_xz, translate_center)]  # , np.array([w])
-        if not limits or (l <= MAX_GRASP_WIDTH):
-            translate_z = ([0, 0, w / 2 - grasp_length], unit_quat())
+                grasps += [multiply(tool_pose, translate_z, rotate_z, swap_xz, translate_center)]  # , np.array([w])
+        if l <= max_width:
+            translate_z = ([x_offset, 0, w / 2 - grasp_length], unit_quat())
             for i in range(2):
                 rotate_z = (unit_point(), quat_from_euler([i * math.pi, 0, 0]))
-                grasps += [multiply(TOOL_POSE, translate_z, rotate_z,
-                                    swap_xz, translate_center)]  # , np.array([l])
-    set_pose(body, pose)
+                grasps += [multiply(tool_pose, translate_z, rotate_z, swap_xz, translate_center)]  # , np.array([l])
+    set_pose(body, initial_pose)
     return grasps
 
+#####################################
+
+def get_top_cylinder_grasps(body, tool_pose=TOOL_POSE, body_pose=unit_pose(),
+                            max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+    set_pose(body, body_pose)
+    center, (w, l, h) = get_center_extent(body)
+    reflect_z = (np.zeros(3), quat_from_euler([0, math.pi, 0]))
+    translate_z = ([0, 0, h / 2 - grasp_length], unit_quat())
+    translate_center = Pose(point_from_pose(body_pose)-center)
+    diameter = (w + l) / 2 # TODO: check that these are close
+    if max_width < diameter:
+        return
+    while True:
+        theta = random.uniform(0, 2*np.pi)
+        rotate_z = (unit_point(), quat_from_euler([0, 0, theta]))
+        grasp = multiply(tool_pose, translate_z, rotate_z, reflect_z, translate_center)
+        yield grasp
+
+def get_side_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
+                             max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+    set_pose(body, body_pose)
+    center, (w, l, h) = get_center_extent(body)
+    translate_center = Pose(point_from_pose(body_pose)-center)
+    #x_offset = 0
+    x_offset = h/2 - 0.02
+    diameter = (w + l) / 2 # TODO: check that these are close
+    if max_width < diameter:
+        return
+    while True:
+        theta = random.uniform(0, 2*np.pi)
+        translate_rotate = ([x_offset, 0, diameter / 2 - grasp_length], quat_from_euler([theta, 0, 0]))
+        for j in range(1 + under):
+            swap_xz = (unit_point(), quat_from_euler([0, -math.pi / 2 + j * math.pi, 0]))
+            grasp = multiply(tool_pose, translate_rotate, swap_xz, translate_center)
+            yield grasp
+
+#####################################
 
 def get_x_presses(body, max_orientations=1):  # g_f_o
     pose = get_pose(body)
@@ -428,8 +466,8 @@ def get_viewcone(depth=MAX_VISUAL_DISTANCE, **kwargs):
     assert (mesh is not None)
     return create_mesh(mesh, **kwargs)
 
-def attach_viewcone(robot, depth=MAX_VISUAL_DISTANCE, color=(1, 0, 0), **kwargs):
-    head_link = link_from_name(robot, HEAD_LINK_NAME)
+def attach_viewcone(robot, head_name=HEAD_LINK_NAME, depth=MAX_VISUAL_DISTANCE, color=(1, 0, 0), **kwargs):
+    head_link = link_from_name(robot, head_name)
     lines = []
     for v1, v2 in cone_wires_from_support(get_viewcone_base(depth=depth)):
         lines.append(add_line(v1, v2, color=color, parent=robot, parent_link=head_link, **kwargs))
