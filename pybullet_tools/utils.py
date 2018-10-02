@@ -225,6 +225,7 @@ BODIES = defaultdict(dict)
 URDFInfo = namedtuple('URDFInfo', ['name', 'path'])
 
 def load_pybullet(filename, fixed_base=False):
+    # fixed_base=False implies infinite base mass
     body = p.loadURDF(filename, useFixedBase=fixed_base, physicsClientId=CLIENT)
     BODIES[CLIENT][body] = URDFInfo(None, filename)
     return body
@@ -234,11 +235,14 @@ URDF_FLAGS = [p.URDF_USE_INERTIA_FROM_FILE,
               p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT,
               p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS]
 
+
+def get_model_path(rel_path): # TODO: add to search path
+    directory = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(directory, '..', rel_path)
+
 def load_model(rel_path, pose=None, fixed_base=True):
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
-    directory = os.path.dirname(os.path.abspath(__file__))
-    abs_path = os.path.join(directory, '..', rel_path)
-
+    abs_path = get_model_path(rel_path)
     flags = 0 # by default, Bullet disables self-collision
     add_data_path()
     if abs_path.endswith('.urdf'):
@@ -255,6 +259,30 @@ def load_model(rel_path, pose=None, fixed_base=True):
         set_pose(body, pose)
     BODIES[CLIENT][body] = URDFInfo(None, abs_path)
     return body
+
+#####################################
+
+class World(object):
+    def __init__(self, client):
+        self.client = client
+        self.bodies = {}
+    def activate(self):
+        set_client(self.client)
+    def load(self, path, name=None, fixed_base=False):
+        body = p.loadURDF(path, useFixedBase=fixed_base, physicsClientId=self.client)
+        self.bodies[body] = URDFInfo(name, path)
+        return body
+    def remove(self, body):
+        del self.bodies[body]
+        return p.removeBody(body, physicsClientId=CLIENT)
+    def reset(self):
+        p.resetSimulation(physicsClientId=self.client)
+        self.bodies = {}
+    # TODO: with statement
+    def copy(self):
+        raise NotImplementedError()
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, len(self.bodies))
 
 #####################################
 
@@ -300,8 +328,9 @@ def wait_for_interrupt(max_time=np.inf):
 
 def connect(use_gui=True, shadows=True):
     method = p.GUI if use_gui else p.DIRECT
-    sim_id = p.connect(method)
-    #sim_id = p.connect(p.GUI, options="--opengl2") if use_gui else p.connect(p.DIRECT)
+    with HideOutput():
+        sim_id = p.connect(method)
+        #sim_id = p.connect(p.GUI, options="--opengl2") if use_gui else p.connect(p.DIRECT)
     if use_gui:
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, False, physicsClientId=sim_id)
         p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, shadows, physicsClientId=sim_id)
@@ -323,7 +352,8 @@ def connect(use_gui=True, shadows=True):
 
 def disconnect():
     # TODO: change CLIENT?
-    return p.disconnect(physicsClientId=CLIENT)
+    with HideOutput():
+        return p.disconnect(physicsClientId=CLIENT)
 
 def is_connected():
     return p.getConnectionInfo(physicsClientId=CLIENT)['isConnected']
@@ -721,7 +751,7 @@ def get_joint_position(body, joint):
 def get_joint_torque(body, joint):
     return get_joint_state(body, joint).appliedJointMotorTorque
 
-def get_joint_positions(body, joints=None):
+def get_joint_positions(body, joints): # joints=None):
     return tuple(get_joint_position(body, joint) for joint in joints)
 
 def set_joint_position(body, joint, value):
@@ -2154,7 +2184,7 @@ def get_lifetime(lifetime):
     return lifetime
 
 def add_text(text, position=(0, 0, 0), color=(0, 0, 0), lifetime=None, parent=-1, parent_link=BASE_LINK):
-    return p.addUserDebugText(text, textPosition=position, textColorRGB=color, # textSize=1,
+    return p.addUserDebugText(str(text), textPosition=position, textColorRGB=color, # textSize=1,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
 
