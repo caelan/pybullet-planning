@@ -12,7 +12,7 @@ import time
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
 
-from .transformations import quaternion_from_matrix
+from .transformations import quaternion_from_matrix, quaternion_slerp, unit_vector
 
 directory = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(directory, '../motion'))
@@ -544,6 +544,13 @@ def pose_from_base_values(base_values, default_pose):
     _, _, z = default_pose[0]
     roll, pitch, _ = euler_from_quat(default_pose[1])
     return (x, y, z), quat_from_euler([roll, pitch, yaw])
+
+def quat_angle_between(quat0, quat1): # quaternion_slerp
+    q0 = unit_vector(quat0[:4])
+    q1 = unit_vector(quat1[:4])
+    d = np.dot(q0, q1)
+    angle = math.acos(d)
+    return angle
 
 #####################################
 
@@ -1447,6 +1454,18 @@ def get_bodies_in_region(aabb):
     (lower, upper) = aabb
     return p.getOverlappingObjects(lower, upper, physicsClientId=CLIENT)
 
+def approximate_as_prism(body, body_pose=unit_pose()):
+    with PoseSaver(body):
+        set_pose(body, body_pose)
+        return get_center_extent(body)
+
+def approximate_as_cylinder(body, body_pose=unit_pose()):
+    with PoseSaver(body):
+        set_pose(body, body_pose)
+        center, (width, length, height) = get_center_extent(body)
+        diameter = (width + length) / 2
+        return center, (diameter, height)
+
 #####################################
 
 # Collision
@@ -2054,6 +2073,14 @@ def get_cartesian_waypoints(start_point, direction, quat, step_size=0.01):
     for t in np.arange(0, distance, step_size):
         point = start_point + t*unit_direction
         yield (point, quat)
+    yield (start_point + direction, quat)
+
+def get_quaternion_waypoints(point, start_quat, end_quat, step_size=np.pi/16):
+    angle = quat_angle_between(start_quat, end_quat)
+    for t in np.arange(0, angle, step_size):
+        quat = quaternion_slerp(start_quat, end_quat, fraction=t/angle)
+        yield (point, quat)
+    yield (point, end_quat)
 
 def workspace_trajectory(robot, link, start_point, direction, quat, **kwargs):
     # TODO: pushing example
