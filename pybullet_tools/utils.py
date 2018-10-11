@@ -2241,6 +2241,15 @@ def draw_aabb(aabb, **kwargs):
             lines.append(add_line(p1, p2, **kwargs))
     return lines
 
+def draw_mesh(mesh, **kwargs):
+    verts, faces = mesh
+    lines = []
+    for indices in faces:
+        #for i1, i2 in combinations(indices, 2):
+        for i1, i2 in zip(indices[-1:] + indices[:-1], indices):
+            lines.append(add_line(verts[i1], verts[i2], **kwargs))
+    return lines
+
 #####################################
 
 # Polygonal surfaces

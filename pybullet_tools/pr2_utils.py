@@ -13,7 +13,7 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
     unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
     ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, \
-    violates_limits, add_line, get_body_name, get_num_joints
+    violates_limits, add_line, get_body_name, get_num_joints, approximate_as_cylinder
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -303,6 +303,19 @@ def get_side_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=u
             swap_xz = (unit_point(), quat_from_euler([0, -math.pi / 2 + j * math.pi, 0]))
             grasp = multiply(tool_pose, translate_rotate, swap_xz, translate_center)
             yield grasp
+
+def get_cylinder_push(body, theta, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose()):
+    center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
+    reflect_z = Pose(euler=[0, math.pi, 0])
+    translate_z = Pose(point=[0, 0, -height / 2 + 0.02])
+    translate_center = Pose(point_from_pose(body_pose)-center)
+    rotate_x = Pose(euler=[0, 0, theta])
+    translate_x = Pose(point=[-diameter / 2 - 0.03, 0, 0])
+    grasps = []
+    for i in range(1 + under):
+        rotate_z = Pose(euler=[0, 0, i * math.pi])
+        grasps.append(multiply(tool_pose, translate_z, translate_x, rotate_x, rotate_z, reflect_z, translate_center))
+    return grasps
 
 #####################################
 
