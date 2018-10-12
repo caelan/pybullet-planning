@@ -1461,8 +1461,8 @@ get_aabb = get_lower_upper
 
 def get_center_extent(body):
     lower, upper = get_aabb(body)
-    center = (np.array(lower) + upper) / 2
-    extents = (np.array(upper) - lower)
+    center = (np.array(lower) + np.array(upper)) / 2
+    extents = (np.array(upper) - np.array(lower))
     return center, extents
 
 def aabb2d_from_aabb(aabb):
@@ -1485,6 +1485,7 @@ def get_bodies_in_region(aabb):
     return p.getOverlappingObjects(lower, upper, physicsClientId=CLIENT)
 
 def approximate_as_prism(body, body_pose=unit_pose()):
+    # TODO: make it just orientation
     with PoseSaver(body):
         set_pose(body, body_pose)
         return get_center_extent(body)
@@ -1493,7 +1494,7 @@ def approximate_as_cylinder(body, body_pose=unit_pose()):
     with PoseSaver(body):
         set_pose(body, body_pose)
         center, (width, length, height) = get_center_extent(body)
-        diameter = (width + length) / 2
+        diameter = (width + length) / 2 # TODO: check that these are close
         return center, (diameter, height)
 
 #####################################
@@ -1826,22 +1827,23 @@ def is_center_stable(body, surface, epsilon=1e-2):
            (aabb_contains_point(base_center[:2], aabb2d_from_aabb(bottom_aabb)))
 
 
-def sample_placement(top_body, bottom_body, max_attempts=50, epsilon=1e-3):
+def sample_placement(top_body, bottom_body, top_pose=unit_pose(), max_attempts=50, epsilon=1e-3):
     bottom_aabb = get_lower_upper(bottom_body)
     for _ in range(max_attempts):
         theta = np.random.uniform(*CIRCULAR_LIMITS)
-        quat = z_rotation(theta)
-        set_quat(top_body, quat)
+        rotation = Euler(yaw=theta)
+        set_pose(top_body, multiply(Pose(euler=rotation), top_pose))
         center, extent = get_center_extent(top_body)
         lower = (np.array(bottom_aabb[0]) + extent/2)[:2]
         upper = (np.array(bottom_aabb[1]) - extent/2)[:2]
-        if np.any(upper < lower):
-          continue
+        if np.greater(lower, upper).any():
+            continue
         x, y = np.random.uniform(lower, upper)
         z = (bottom_aabb[1] + extent/2.)[2] + epsilon
         point = np.array([x, y, z]) + (get_point(top_body) - center)
-        set_point(top_body, point)
-        return point, quat
+        pose = multiply(Pose(point, rotation), top_pose)
+        set_pose(top_body, pose)
+        return pose
     return None
 
 #####################################
@@ -2246,7 +2248,7 @@ def draw_mesh(mesh, **kwargs):
     lines = []
     for indices in faces:
         #for i1, i2 in combinations(indices, 2):
-        for i1, i2 in zip(indices[-1:] + indices[:-1], indices):
+        for i1, i2 in zip(indices[-1] +  indices[-1:], indices):
             lines.append(add_line(verts[i1], verts[i2], **kwargs))
     return lines
 
