@@ -349,6 +349,13 @@ def load_inverse_reachability(arm, grasp_type):
     return read_pickle(path)['gripper_from_base']
 
 
+def learned_forward_generator(robot, base_pose, arm, grasp_type):
+    gripper_from_base_list = load_inverse_reachability(arm, grasp_type)
+    random.shuffle(gripper_from_base_list)
+    for gripper_from_base in gripper_from_base_list:
+        yield multiply(base_pose, invert(gripper_from_base))
+
+
 def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
     gripper_from_base_list = load_inverse_reachability(arm, grasp_type)
     random.shuffle(gripper_from_base_list)

@@ -467,8 +467,8 @@ def Pose(point=None, euler=None):
     euler = Euler() if euler is None else euler
     return (point, quat_from_euler(euler))
 
-def Pose2d(x=0., y=0., yaw=0.):
-    return np.array([x, y, yaw])
+#def Pose2d(x=0., y=0., yaw=0.):
+#    return np.array([x, y, yaw])
 
 def invert(pose):
     (point, quat) = pose
@@ -645,6 +645,10 @@ def set_point(body, point):
 
 def set_quat(body, quat):
     set_pose(body, (get_point(body), quat))
+
+def pose_from_pose2d(pose2d):
+    x, y, theta = pose2d
+    return Pose(Point(x=x, y=y), Euler(yaw=theta))
 
 def set_base_values(body, values):
     _, _, z = get_point(body)
@@ -2243,6 +2247,19 @@ def draw_aabb(aabb, **kwargs):
             lines.append(add_line(p1, p2, **kwargs))
     return lines
 
+def draw_point(point, size=0.01, **kwargs):
+    lines = []
+    for i in range(len(point)):
+        axis = np.zeros(len(point))
+        axis[i] = 1.0
+        p1 = np.array(point) - size/2 * axis
+        p2 = np.array(point) + size/2 * axis
+        lines.append(add_line(p1, p2, **kwargs))
+    return lines
+    #extent = size * np.ones(len(point)) / 2
+    #aabb = np.array(point) - extent, np.array(point) + extent
+    #return draw_aabb(aabb, **kwargs)
+
 def draw_mesh(mesh, **kwargs):
     verts, faces = mesh
     lines = []
@@ -2264,7 +2281,7 @@ def create_rectangular_surface(width, length):
 def is_point_in_polygon(point, polygon):
     sign = None
     for i in range(len(polygon)):
-        v1, v2 = polygon[i - 1][:2], polygon[i][:2]
+        v1, v2 = np.array(polygon[i - 1][:2]), np.array(polygon[i][:2])
         delta = v2 - v1
         normal = np.array([-delta[1], delta[0]])
         dist = normal.dot(point[:2] - v1)
