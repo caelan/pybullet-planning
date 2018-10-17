@@ -420,13 +420,12 @@ def get_yaw(point):
     return np.math.atan2(dy, dx)
 
 def set_camera_pose(camera_point, target_point=np.zeros(3)):
-    delta_point = target_point - camera_point
+    delta_point = np.array(target_point) - np.array(camera_point)
     distance = np.linalg.norm(delta_point)
     yaw = get_yaw(delta_point) - np.pi/2 # TODO: hack
     pitch = get_pitch(delta_point)
     p.resetDebugVisualizerCamera(distance, math.degrees(yaw), math.degrees(pitch),
                                  target_point, physicsClientId=CLIENT)
-                                #point, physicsClientId=CLIENT)
 
 def get_image(width=640, height=480):
     import scipy.misc
@@ -485,7 +484,7 @@ def invert_quat(quat):
     return quat_from_pose(invert(pose))
 
 def multiply_quats(*quats):
-    return quat_from_pose(*[(unit_point(), quat) for quat in quats])
+    return quat_from_pose(multiply(*[(unit_point(), quat) for quat in quats]))
 
 def unit_from_theta(theta):
     return np.array([np.cos(theta), np.sin(theta)])
@@ -889,6 +888,7 @@ LinkState = namedtuple('LinkState', ['linkWorldPosition', 'linkWorldOrientation'
                                      'worldLinkFramePosition', 'worldLinkFrameOrientation'])
 
 def get_link_state(body, link):
+    # computeLinkVelocity | computeForwardKinematics
     return LinkState(*p.getLinkState(body, link, physicsClientId=CLIENT))
 
 def get_com_pose(body, link): # COM = center of mass
@@ -1457,9 +1457,17 @@ def set_color(body, color, link=BASE_LINK, shape_index=-1):
 
 # Bounding box
 
-def get_lower_upper(body, link=BASE_LINK):
-    # TODO: only gets AABB for a single link
-    return p.getAABB(body, linkIndex=link, physicsClientId=CLIENT)
+def aabb_from_points(points):
+    return np.min(points, axis=0), np.max(points, axis=0)
+
+def aabb_union(aabbs):
+    return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
+
+def get_lower_upper(body, link=None):
+    if link is not None:
+        return p.getAABB(body, linkIndex=link, physicsClientId=CLIENT)
+    return aabb_union(get_lower_upper(body, link=link)
+                      for link in [BASE_LINK] + list(get_links(body)))
 
 get_aabb = get_lower_upper
 
@@ -1687,7 +1695,8 @@ def get_self_link_pairs(body, joints, disabled_collisions=set()):
     return check_link_pairs
 
 
-def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions, use_limits=True):
+def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
+                     use_limits=True, **kwargs):
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
     moving_bodies = [body] + [attachment.child for attachment in attachments]
     if obstacles is None:
@@ -1703,9 +1712,9 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         for attachment in attachments:
             attachment.assign()
         for link1, link2 in check_link_pairs:
-            if pairwise_link_collision(body, link1, body, link2):
+            if pairwise_link_collision(body, link1, body, link2, **kwargs):
                 return True
-        return any(pairwise_collision(*pair) for pair in check_body_pairs)
+        return any(pairwise_collision(*pair, **kwargs) for pair in check_body_pairs)
     return collision_fn
 
 def check_initial_end(start_conf, end_conf, collision_fn):
@@ -1720,7 +1729,8 @@ def check_initial_end(start_conf, end_conf, collision_fn):
 def plan_waypoints_joint_motion(body, joints, waypoints, obstacles=None, attachments=[],
                       self_collisions=True, disabled_collisions=set()):
     extend_fn = get_extend_fn(body, joints)
-    collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions)
+    collision_fn = get_collision_fn(body, joints, obstacles, attachments,
+                                    self_collisions, disabled_collisions)
     start_conf = get_joint_positions(body, joints)
     if not check_initial_end(start_conf, ([start_conf] + waypoints)[-1], collision_fn):
         return None
@@ -1740,14 +1750,16 @@ def plan_direct_joint_motion(body, joints, end_conf, obstacles=None, attachments
 
 def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
                       self_collisions=True, disabled_collisions=set(), direct=False,
-                      weights=None, resolutions=None, **kwargs):
+                      weights=None, resolutions=None, max_distance=MAX_DISTANCE, **kwargs):
     if direct:
+        # TODO: add weights & resolutions here or deprecate
         return plan_direct_joint_motion(body, joints, end_conf, obstacles, attachments, self_collisions, disabled_collisions)
     assert len(joints) == len(end_conf)
     sample_fn = get_sample_fn(body, joints)
     distance_fn = get_distance_fn(body, joints, weights=weights)
     extend_fn = get_extend_fn(body, joints, resolutions=resolutions)
-    collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions)
+    collision_fn = get_collision_fn(body, joints, obstacles, attachments,
+                                    self_collisions, disabled_collisions, max_distance=max_distance)
 
     start_conf = get_joint_positions(body, joints)
     if not check_initial_end(start_conf, end_conf, collision_fn):
@@ -1759,7 +1771,8 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
 # Pose motion planning
 
 def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
-                     weights=1*np.ones(3), resolutions=0.05*np.ones(3), **kwargs):
+                     weights=1*np.ones(3), resolutions=0.05*np.ones(3),
+                     max_distance=MAX_DISTANCE, **kwargs):
     def sample_fn():
         x, y = np.random.uniform(*base_limits)
         theta = np.random.uniform(*CIRCULAR_LIMITS)
@@ -1788,7 +1801,7 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
         set_base_values(body, q)
         if obstacles is None:
             return single_collision(body)
-        return any(pairwise_collision(body, obs) for obs in obstacles)
+        return any(pairwise_collision(body, obs, max_distance=max_distance) for obs in obstacles)
 
     start_conf = get_base_values(body)
     if collision_fn(start_conf):
@@ -1832,6 +1845,7 @@ def is_center_stable(body, surface, epsilon=1e-2):
 
 
 def sample_placement(top_body, bottom_body, top_pose=unit_pose(), max_attempts=50, epsilon=1e-3):
+    # TODO: transform into the coordinate system of the bottom
     bottom_aabb = get_lower_upper(bottom_body)
     for _ in range(max_attempts):
         theta = np.random.uniform(*CIRCULAR_LIMITS)
@@ -1909,7 +1923,9 @@ def get_fixed_constraints():
 def add_fixed_constraint(body, robot, robot_link, max_force=None):
     body_link = BASE_LINK
     body_pose = get_pose(body)
-    end_effector_pose = get_link_pose(robot, robot_link)
+    #body_pose = get_com_pose(body, link=body_link)
+    #end_effector_pose = get_link_pose(robot, robot_link)
+    end_effector_pose = get_com_pose(robot, robot_link)
     grasp_pose = multiply(invert(end_effector_pose), body_pose)
     point, quat = grasp_pose
     # TODO: can I do this when I'm not adjacent?
