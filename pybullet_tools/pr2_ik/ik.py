@@ -1,21 +1,10 @@
-from pybullet_tools.pr2_ik.ikLeft import leftIK, leftFK
-from pybullet_tools.pr2_ik.ikRight import rightIK, rightFK
 from pybullet_tools.utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, Pose, multiply, elapsed_time, \
     get_link_pose, link_from_name, joints_from_names, get_joint_positions, get_joint_limits, joint_from_name, invert, \
-    get_joint_position, violates_limits, INF
+    get_joint_position, violates_limits
 from pybullet_tools.pr2_utils import PR2_GROUPS, PR2_TOOL_FRAMES, arm_from_arm
 
 import random
-import time
 
-ARM_FK = {
-    'left': leftFK,
-    'right': rightFK,
-}
-ARM_IK = {
-    'left': leftIK,
-    'right': rightIK,
-}
 IK_LINK = {
     'left': 'l_gripper_tool_frame',
     'right': 'r_gripper_tool_frame',
@@ -53,9 +42,15 @@ def get_torso_arm_joints(robot, arm):
 #####################################
 
 def forward_kinematics(arm, conf):
+    from pybullet_tools.pr2_ik.ikLeft import leftFK
+    from pybullet_tools.pr2_ik.ikRight import rightFK
+    arm_fk = {
+        'left': leftFK,
+        'right': rightFK,
+    }
     # base_link -> l_gripper_tool_frame | r_gripper_tool_frame
     assert len(conf) == 8
-    fk_fn = ARM_FK[arm]
+    fk_fn = arm_fk[arm]
     pose = fk_fn(list(conf))
     pos, rot = pose
     quat = quat_from_matrix(rot) # [X,Y,Z,W]
@@ -71,7 +66,13 @@ def get_tool_pose(robot, arm):
 #####################################
 
 def inverse_kinematics(arm, pose, torso, upper):
-    ik_fn = ARM_IK[arm]
+    from pybullet_tools.pr2_ik.ikLeft import leftIK
+    from pybullet_tools.pr2_ik.ikRight import rightIK
+    arm_ik = {
+        'left': leftIK,
+        'right': rightIK,
+    }
+    ik_fn = arm_ik[arm]
     pos = point_from_pose(pose)
     rot = matrix_from_quat(quat_from_pose(pose)).tolist()
     solutions = ik_fn(list(rot), list(pos), [torso, upper])

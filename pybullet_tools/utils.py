@@ -1555,11 +1555,14 @@ def all_collision(**kwargs):
 RayResult = namedtuple('RayResult', ['objectUniqueId', 'linkIndex',
                                      'hit_fraction', 'hit_position', 'hit_normal'])
 
-def ray_collision(rays):
+def ray_collision(start, end):
+    result, = p.rayTest(start, end, physicsClientId=CLIENT)
+    return RayResult(*result)
+
+def batch_ray_collision(rays):
     ray_starts = [start for start, _ in rays]
-    ray_ends = [start for _, end in rays]
+    ray_ends = [end for _, end in rays]
     return [RayResult(*tup) for tup in p.rayTestBatch(ray_starts, ray_ends, physicsClientId=CLIENT)]
-    #return RayResult(*p.rayTest(start, end))
 
 #####################################
 
@@ -1712,7 +1715,8 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         for attachment in attachments:
             attachment.assign()
         for link1, link2 in check_link_pairs:
-            if pairwise_link_collision(body, link1, body, link2, **kwargs):
+            # Self-collisions should not have the max_distance parameter
+            if pairwise_link_collision(body, link1, body, link2): #, **kwargs):
                 return True
         return any(pairwise_collision(*pair, **kwargs) for pair in check_body_pairs)
     return collision_fn
@@ -1732,8 +1736,10 @@ def plan_waypoints_joint_motion(body, joints, waypoints, obstacles=None, attachm
     collision_fn = get_collision_fn(body, joints, obstacles, attachments,
                                     self_collisions, disabled_collisions)
     start_conf = get_joint_positions(body, joints)
-    if not check_initial_end(start_conf, ([start_conf] + waypoints)[-1], collision_fn):
-        return None
+    for i, waypoint in enumerate([start_conf] + list(waypoints)):
+        if collision_fn(waypoint):
+            print("Warning: waypoint configuration {}/{} is in collision".format(i, len(waypoints)))
+            return None
     path = [start_conf]
     for waypoint in waypoints:
         assert len(joints) == len(waypoint)
