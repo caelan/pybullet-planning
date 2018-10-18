@@ -100,11 +100,11 @@ def rightarm_from_leftarm(config):
     right_from_left = np.array([-1, 1, -1, 1, -1, 1, -1])  # Drake
     return config * right_from_left
 
-def arm_conf(arm, config):
+def arm_conf(arm, left_config):
     if arm == 'left':
-        return config
+        return left_config
     elif arm == 'right':
-        return rightarm_from_leftarm(config)
+        return rightarm_from_leftarm(left_config)
     else:
         raise ValueError(arm)
 
@@ -221,6 +221,7 @@ GRASP_LENGTH = 0.
 #MAX_GRASP_WIDTH = 0.07
 MAX_GRASP_WIDTH = np.inf
 
+HEIGHT_OFFSET = 0.03
 
 def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
@@ -249,7 +250,7 @@ def get_side_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(
     translate_center = Pose(point=point_from_pose(body_pose)-center)
     grasps = []
     #x_offset = 0
-    x_offset = h/2 - 0.02
+    x_offset = h/2 - HEIGHT_OFFSET
     for j in range(1 + under):
         swap_xz = Pose(euler=[0, -math.pi / 2 + j * math.pi, 0])
         if w <= max_width:
@@ -287,7 +288,7 @@ def get_side_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=u
     center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
     translate_center = Pose(point_from_pose(body_pose)-center)
     #x_offset = 0
-    x_offset = height/2 - 0.02
+    x_offset = height/2 - HEIGHT_OFFSET
     if max_width < diameter:
         return
     while True:

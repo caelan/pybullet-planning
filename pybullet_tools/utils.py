@@ -855,7 +855,10 @@ BASE_LINK = -1
 STATIC_MASS = 0
 
 get_num_links = get_num_joints
-get_links = get_joints
+get_links = get_joints # Does not include BASE_LINK
+
+def get_all_links(body):
+    return [BASE_LINK] + list(get_links(body))
 
 def get_link_name(body, link):
     if link == BASE_LINK:
@@ -937,7 +940,7 @@ def get_link_descendants(body, link):
     descendants = []
     for child in get_link_children(body, link):
         descendants.append(child)
-        descendants += get_link_descendants(body, child)
+        descendants.extend(get_link_descendants(body, child))
     return descendants
 
 def get_link_subtree(body, link):
@@ -1662,10 +1665,11 @@ def waypoints_from_path(path):
     return waypoints
 
 def get_moving_links(body, moving_joints):
-    moving_links = list(moving_joints)
+    moving_links = set()
     for link in moving_joints:
-        moving_links += get_link_descendants(body, link)
-    return list(set(moving_links))
+        if link not in moving_links:
+            moving_links.update(get_link_subtree(body, link))
+    return list(moving_links)
 
 def get_moving_pairs(body, moving_joints):
     """
@@ -1674,24 +1678,21 @@ def get_moving_pairs(body, moving_joints):
     Check all moving pairs with a common
     """
     moving_links = get_moving_links(body, moving_joints)
-    for i in range(len(moving_links)):
-        link1 = moving_links[i]
+    for link1, link2 in combinations(moving_links, 2):
         ancestors1 = set(get_joint_ancestors(body, link1)) & set(moving_joints)
-        for j in range(i+1, len(moving_links)):
-            link2 = moving_links[j]
-            ancestors2 = set(get_joint_ancestors(body, link2)) & set(moving_joints)
-            if ancestors1 != ancestors2:
-                yield link1, link2
+        ancestors2 = set(get_joint_ancestors(body, link2)) & set(moving_joints)
+        if ancestors1 != ancestors2:
+            yield link1, link2
 
 
-def get_self_link_pairs(body, joints, disabled_collisions=set()):
+def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=True):
     moving_links = get_moving_links(body, joints)
     fixed_links = list(set(get_links(body)) - set(moving_links))
     check_link_pairs = list(product(moving_links, fixed_links))
-    if True:
-        check_link_pairs += list(get_moving_pairs(body, joints))
+    if only_moving:
+        check_link_pairs.extend(get_moving_pairs(body, joints))
     else:
-        check_link_pairs += list(combinations(moving_links, 2))
+        check_link_pairs.extend(combinations(moving_links, 2))
     check_link_pairs = list(filter(lambda pair: not are_links_adjacent(body, *pair), check_link_pairs))
     check_link_pairs = list(filter(lambda pair: (pair not in disabled_collisions) and
                                                 (pair[::-1] not in disabled_collisions), check_link_pairs))
@@ -2125,6 +2126,7 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
 
 #####################################
 
+# TODO: combine these methods
 def get_cartesian_waypoints(start_point, direction, quat, step_size=0.01):
     distance = get_length(direction)
     unit_direction = get_unit_vector(direction)
