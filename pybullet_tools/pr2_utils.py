@@ -314,7 +314,10 @@ def get_cylinder_push(body, theta, under=False, tool_pose=TOOL_POSE, body_pose=u
 
 #####################################
 
+PRESS_OFFSET = 0.02
+
 def get_x_presses(body, max_orientations=1, body_pose=unit_pose()):  # g_f_o
+    # TODO: update
     center, (w, l, h) = approximate_as_prism(body, body_pose=body_pose)
     translate_center = Pose(-center)
     press_poses = []
@@ -324,6 +327,16 @@ def get_x_presses(body, max_orientations=1, body_pose=unit_pose()):  # g_f_o
         press_poses += [multiply(TOOL_POSE, translate, swap_xz, translate_center, body_pose)]
     return press_poses
 
+def get_top_presses(body, tool_pose=TOOL_POSE, body_pose=unit_pose()):
+    center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
+    reflect_z = Pose(euler=[0, math.pi, 0])
+    translate_z = Pose(point=[0, 0, height / 2 + PRESS_OFFSET])
+    translate_center = Pose(point=point_from_pose(body_pose)-center)
+    while True:
+        theta = random.uniform(0, 2*np.pi)
+        rotate_z = Pose(euler=[0, 0, theta])
+        yield multiply(tool_pose, translate_z, rotate_z,
+                       reflect_z, translate_center, body_pose)
 
 GET_GRASPS = {
     'top': get_top_grasps,
