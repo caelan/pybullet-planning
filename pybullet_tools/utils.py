@@ -1826,10 +1826,10 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
 
 # Placements
 
-def stable_z(body, surface):
+def stable_z(body, surface, surface_link=None):
     point = get_point(body)
     center, extent = get_center_extent(body)
-    _, upper = get_lower_upper(surface)
+    _, upper = get_lower_upper(surface, link=surface_link)
     return (upper + extent/2 + (point - center))[2]
 
 def is_placement(body, surface, epsilon=1e-2): # TODO: above / below
@@ -1851,7 +1851,8 @@ def is_center_stable(body, surface, epsilon=1e-2):
            (aabb_contains_point(base_center[:2], aabb2d_from_aabb(bottom_aabb)))
 
 
-def sample_placement(top_body, bottom_body, top_pose=unit_pose(), max_attempts=50, epsilon=1e-3):
+def sample_placement(top_body, bottom_body, top_pose=unit_pose(),
+                     percent=1.0, max_attempts=50, epsilon=1e-3):
     # TODO: transform into the coordinate system of the bottom
     bottom_aabb = get_lower_upper(bottom_body)
     for _ in range(max_attempts):
@@ -1859,8 +1860,8 @@ def sample_placement(top_body, bottom_body, top_pose=unit_pose(), max_attempts=5
         rotation = Euler(yaw=theta)
         set_pose(top_body, multiply(Pose(euler=rotation), top_pose))
         center, extent = get_center_extent(top_body)
-        lower = (np.array(bottom_aabb[0]) + extent/2)[:2]
-        upper = (np.array(bottom_aabb[1]) - extent/2)[:2]
+        lower = (np.array(bottom_aabb[0]) + percent*extent/2)[:2]
+        upper = (np.array(bottom_aabb[1]) - percent*extent/2)[:2]
         if np.greater(lower, upper).any():
             continue
         x, y = np.random.uniform(lower, upper)
