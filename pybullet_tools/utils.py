@@ -30,6 +30,7 @@ user_input = input
 INF = np.inf
 PI = np.pi
 CIRCULAR_LIMITS = -PI, PI
+DEFAULT_TIME_STEP = 1./240. # seconds
 
 #####################################
 
@@ -300,6 +301,24 @@ def simulate_for_duration(duration, dt=0):
     while elapsed_time(t0) <= duration:
         step_simulation()
         time.sleep(dt)
+
+def get_time_step():
+    # {'gravityAccelerationX', 'useRealTimeSimulation', 'gravityAccelerationZ', 'numSolverIterations',
+    # 'gravityAccelerationY', 'numSubSteps', 'fixedTimeStep'}
+    return p.getPhysicsEngineParameters(physicsClientId=CLIENT)['fixedTimeStep']
+
+def simulate_for_sim_duration(sim_duration, real_dt=0, frequency=INF):
+    t0 = time.time()
+    sim_dt = get_time_step()
+    sim_time = 0
+    last_print = 0
+    while sim_time < sim_duration:
+        if frequency < (sim_time - last_print):
+            print('Sim time: {:.3f} | Real time: {:.3f}'.format(sim_time, elapsed_time(t0)))
+            last_print = sim_time
+        step_simulation()
+        sim_time += sim_dt
+        time.sleep(real_dt)
 
 def wait_for_interrupt(max_time=np.inf):
     """
@@ -1851,10 +1870,11 @@ def is_center_stable(body, surface, epsilon=1e-2):
            (aabb_contains_point(base_center[:2], aabb2d_from_aabb(bottom_aabb)))
 
 
-def sample_placement(top_body, bottom_body, top_pose=unit_pose(),
+def sample_placement(top_body, bottom_body, top_pose=unit_pose(), bottom_link=None,
                      percent=1.0, max_attempts=50, epsilon=1e-3):
     # TODO: transform into the coordinate system of the bottom
-    bottom_aabb = get_lower_upper(bottom_body)
+    # TODO: maybe I should instead just require that already in correct frame
+    bottom_aabb = get_lower_upper(bottom_body, link=bottom_link)
     for _ in range(max_attempts):
         theta = np.random.uniform(*CIRCULAR_LIMITS)
         rotation = Euler(yaw=theta)
@@ -2127,7 +2147,6 @@ def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
 
 #####################################
 
-# TODO: combine these methods
 def get_cartesian_waypoints(start_point, direction, quat, step_size=0.01):
     distance = get_length(direction)
     unit_direction = get_unit_vector(direction)
@@ -2142,6 +2161,18 @@ def get_quaternion_waypoints(point, start_quat, end_quat, step_size=np.pi/16):
         quat = quaternion_slerp(start_quat, end_quat, fraction=t/angle)
         yield (point, quat)
     yield (point, end_quat)
+
+def interpolate_poses(pose1, pose2, pos_step_size=0.01, ori_step_size=np.pi/16):
+    pos1, quat1 = pose1
+    pos2, quat2 = pose2
+    num_steps = int(math.ceil(max(get_distance(pos1, pos2)/pos_step_size,
+                                  quat_angle_between(quat1, quat2)/ori_step_size)))
+    for i in range(num_steps):
+        fraction = float(i) / num_steps
+        pos = (1-fraction)*np.array(pos1) + fraction*np.array(pos2)
+        quat = quaternion_slerp(quat1, quat2, fraction=fraction)
+        yield (pos, quat)
+    yield pose2
 
 def workspace_trajectory(robot, link, start_point, direction, quat, **kwargs):
     # TODO: pushing example
