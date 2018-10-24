@@ -211,17 +211,19 @@ def close_arm(robot, arm):
 
 #####################################
 
-# Grasps
+# Box grasps
 
-# TODO: touch grasps
 # TODO: test if grasp is in collision
 #GRASP_LENGTH = 0.04
 GRASP_LENGTH = 0.
 #GRASP_LENGTH = -0.01
+
 #MAX_GRASP_WIDTH = 0.07
 MAX_GRASP_WIDTH = np.inf
 
-HEIGHT_OFFSET = 0.03
+SIDE_HEIGHT_OFFSET = 0.03 # z distance from top of object
+
+# TODO: rename the box grasps
 
 def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
@@ -244,13 +246,13 @@ def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose()
 
 
 def get_side_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
-                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH, top_offset=SIDE_HEIGHT_OFFSET):
     # TODO: compute bounding box width wrt tool frame
     center, (w, l, h) = approximate_as_prism(body, body_pose=body_pose)
     translate_center = Pose(point=point_from_pose(body_pose)-center)
     grasps = []
     #x_offset = 0
-    x_offset = h/2 - HEIGHT_OFFSET
+    x_offset = h/2 - top_offset
     for j in range(1 + under):
         swap_xz = Pose(euler=[0, -math.pi / 2 + j * math.pi, 0])
         if w <= max_width:
@@ -269,8 +271,11 @@ def get_side_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(
 
 #####################################
 
+# Cylinder grasps
+
 def get_top_cylinder_grasps(body, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                             max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+    # Apply transformations right to left on object pose
     center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
     reflect_z = Pose(euler=[0, math.pi, 0])
     translate_z = Pose(point=[0, 0, height / 2 - grasp_length])
@@ -284,11 +289,11 @@ def get_top_cylinder_grasps(body, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                        reflect_z, translate_center, body_pose)
 
 def get_side_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
-                             max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+                             max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH, top_offset=SIDE_HEIGHT_OFFSET):
     center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
     translate_center = Pose(point_from_pose(body_pose)-center)
     #x_offset = 0
-    x_offset = height/2 - HEIGHT_OFFSET
+    x_offset = height/2 - top_offset
     if max_width < diameter:
         return
     while True:
@@ -297,6 +302,24 @@ def get_side_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=u
         for j in range(1 + under):
             swap_xz = Pose(euler=[0, -math.pi / 2 + j * math.pi, 0])
             yield multiply(tool_pose, translate_rotate, swap_xz, translate_center, body_pose)
+
+def get_edge_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
+                             grasp_length=GRASP_LENGTH):
+    center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
+    translate_yz = Pose(point=[0, diameter/2, height/2 - grasp_length])
+    reflect_y = Pose(euler=[0, math.pi, 0])
+    translate_center = Pose(point=point_from_pose(body_pose)-center)
+    while True:
+        theta = random.uniform(0, 2*np.pi)
+        rotate_z = Pose(euler=[0, 0, theta])
+        for i in range(1 + under):
+            rotate_under = Pose(euler=[0, 0, i * math.pi])
+            yield multiply(tool_pose, rotate_under, translate_yz, rotate_z,
+                           reflect_y, translate_center, body_pose)
+
+#####################################
+
+# Cylinder pushes
 
 def get_cylinder_push(body, theta, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose()):
     center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
@@ -314,23 +337,26 @@ def get_cylinder_push(body, theta, under=False, tool_pose=TOOL_POSE, body_pose=u
 
 #####################################
 
+# Button presses
+
 PRESS_OFFSET = 0.02
 
-def get_x_presses(body, max_orientations=1, body_pose=unit_pose()):  # g_f_o
+def get_x_presses(body, max_orientations=1, body_pose=unit_pose(), top_offset=PRESS_OFFSET):
+    # gripper_from_object
     # TODO: update
-    center, (w, l, h) = approximate_as_prism(body, body_pose=body_pose)
+    center, (w, _, h) = approximate_as_prism(body, body_pose=body_pose)
     translate_center = Pose(-center)
     press_poses = []
     for j in range(max_orientations):
         swap_xz = Pose(euler=[0, -math.pi / 2 + j * math.pi, 0])
-        translate = Pose(point=[0, 0, w / 2])
+        translate = Pose(point=[0, 0, w / 2 + top_offset])
         press_poses += [multiply(TOOL_POSE, translate, swap_xz, translate_center, body_pose)]
     return press_poses
 
-def get_top_presses(body, tool_pose=TOOL_POSE, body_pose=unit_pose()):
-    center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
+def get_top_presses(body, tool_pose=TOOL_POSE, body_pose=unit_pose(), top_offset=PRESS_OFFSET):
+    center, (_, height) = approximate_as_cylinder(body, body_pose=body_pose)
     reflect_z = Pose(euler=[0, math.pi, 0])
-    translate_z = Pose(point=[0, 0, height / 2 + PRESS_OFFSET])
+    translate_z = Pose(point=[0, 0, height / 2 + top_offset])
     translate_center = Pose(point=point_from_pose(body_pose)-center)
     while True:
         theta = random.uniform(0, 2*np.pi)
