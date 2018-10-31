@@ -1051,11 +1051,11 @@ def get_capsule_geometry(radius, height):
         'length': height,
     }
 
-def get_mesh_geometry(path, scale=1.0):
+def get_mesh_geometry(path, scale=1.):
     return {
         'shapeType': p.GEOM_MESH,
         'fileName': path,
-        'meshScale': scale,
+        'meshScale': scale*np.ones(3),
     }
 
 NULL_ID = -1
@@ -1172,26 +1172,25 @@ def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(.5, .5, .5, 1)):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
 
+def create_obj(path, scale=1., mass=STATIC_MASS, color=(.5, .5, .5, 1.)):
+    collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), color=color)
+    return create_body(collision_id, visual_id, mass=mass)
+
+
 mesh_count = count()
 MESH_DIR = 'temp/'
 
-def create_mesh(mesh, scale=1, mass=STATIC_MASS, color=(.5, .5, .5, 1)):
+def create_mesh(mesh, **kwargs):
     # http://people.sc.fsu.edu/~jburkardt/data/obj/obj.html
     # TODO: read OFF / WRL / OBJ files
     # TODO: maintain dict to file
     ensure_dir(MESH_DIR)
     path = os.path.join(MESH_DIR, 'mesh{}.obj'.format(next(mesh_count)))
     write(path, obj_file_from_mesh(mesh))
-    mesh_scale = scale*np.ones(3)
-    collision_id = p.createVisualShape(p.GEOM_MESH, fileName=path, meshScale=mesh_scale, physicsClientId=CLIENT)
-    if (color is None) or not has_gui():
-        visual_id = -1
-    else:
-        visual_id = p.createVisualShape(p.GEOM_MESH, fileName=path, meshScale=mesh_scale, rgbaColor=color, physicsClientId=CLIENT)
+    return create_obj(path, **kwargs)
     #safe_remove(path) # TODO: removing might delete mesh?
-    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
 
+#####################################
 
 VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
                                                  'visualGeometryType', 'dimensions', 'meshAssetFileName',
@@ -1955,6 +1954,12 @@ class Attachment(object):
     def __repr__(self):
         return '{}({},{})'.format(self.__class__.__name__, self.parent, self.child)
 
+def create_attachment(parent, parent_link, child):
+    parent_link_pose = get_link_pose(parent, parent_link)
+    child_pose = get_pose(child)
+    grasp_pose = multiply(invert(parent_link_pose), child_pose)
+    return Attachment(parent, parent_link, grasp_pose, child)
+
 def body_from_end_effector(end_effector_pose, grasp_pose):
     """
     world_from_parent * parent_from_child = world_from_child
@@ -2196,13 +2201,15 @@ def add_line(start, end, color=(0, 0, 0), width=1, lifetime=None, parent=-1, par
 def remove_debug(debug): # removeAllUserDebugItems
     p.removeUserDebugItem(debug, physicsClientId=CLIENT)
 
-def add_body_name(body, **kwargs):
+def add_body_name(body, name=None, **kwargs):
+    if name is None:
+        name = get_name(body)
     with PoseSaver(body):
         set_pose(body, unit_pose())
         lower, upper = get_aabb(body)
     #position = (0, 0, upper[2])
     position = upper
-    return add_text(get_name(body), position=position, parent=body, **kwargs)  # removeUserDebugItem
+    return add_text(name, position=position, parent=body, **kwargs)  # removeUserDebugItem
 
 
 def add_segments(points, closed=False, **kwargs):
