@@ -10,10 +10,10 @@ import numpy as np
 from .pr2_never_collisions import NEVER_COLLISIONS
 from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, \
     set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
-    get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, unit_point, unit_quat, \
-    unit_pose, get_center_extent, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
+    get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, \
+    unit_pose, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
     ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, \
-    violates_limits, add_line, get_body_name, get_num_joints
+    violates_limits, add_line, get_body_name, get_num_joints, approximate_as_cylinder, approximate_as_prism
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -100,11 +100,11 @@ def rightarm_from_leftarm(config):
     right_from_left = np.array([-1, 1, -1, 1, -1, 1, -1])  # Drake
     return config * right_from_left
 
-def arm_conf(arm, config):
+def arm_conf(arm, left_config):
     if arm == 'left':
-        return config
+        return left_config
     elif arm == 'right':
-        return rightarm_from_leftarm(config)
+        return rightarm_from_leftarm(left_config)
     else:
         raise ValueError(arm)
 
@@ -211,114 +211,158 @@ def close_arm(robot, arm):
 
 #####################################
 
-# Grasps
+# Box grasps
 
-# TODO: touch grasps
 # TODO: test if grasp is in collision
 #GRASP_LENGTH = 0.04
 GRASP_LENGTH = 0.
 #GRASP_LENGTH = -0.01
+
 #MAX_GRASP_WIDTH = 0.07
 MAX_GRASP_WIDTH = np.inf
 
+SIDE_HEIGHT_OFFSET = 0.03 # z distance from top of object
+
+# TODO: rename the box grasps
 
 def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
-    initial_pose = get_pose(body)
-    set_pose(body, body_pose)
-    center, (w, l, h) = get_center_extent(body)
-    reflect_z = (np.zeros(3), quat_from_euler([0, math.pi, 0]))
-    translate_z = ([0, 0, h / 2 - grasp_length], unit_quat())
-    translate_center = Pose(point_from_pose(body_pose)-center)
+    center, (w, l, h) = approximate_as_prism(body, body_pose=body_pose)
+    reflect_z = Pose(euler=[0, math.pi, 0])
+    translate_z = Pose(point=[0, 0, h / 2 - grasp_length])
+    translate_center = Pose(point=point_from_pose(body_pose)-center)
     grasps = []
     if w <= max_width:
         for i in range(1 + under):
-            rotate_z = (unit_point(), quat_from_euler([0, 0, math.pi / 2 + i * math.pi]))
-            grasps += [multiply(tool_pose, translate_z, rotate_z, reflect_z, translate_center)]
+            rotate_z = Pose(euler=[0, 0, math.pi / 2 + i * math.pi])
+            grasps += [multiply(tool_pose, translate_z, rotate_z,
+                                reflect_z, translate_center, body_pose)]
     if l <= max_width:
         for i in range(1 + under):
-            rotate_z = (unit_point(), quat_from_euler([0, 0, i * math.pi]))
-            grasps += [multiply(tool_pose, translate_z, rotate_z, reflect_z, translate_center)]
-    set_pose(body, initial_pose)
+            rotate_z = Pose(euler=[0, 0, i * math.pi])
+            grasps += [multiply(tool_pose, translate_z, rotate_z,
+                                reflect_z, translate_center, body_pose)]
     return grasps
 
 
 def get_side_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
-                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH, top_offset=SIDE_HEIGHT_OFFSET):
     # TODO: compute bounding box width wrt tool frame
-    initial_pose = get_pose(body)
-    set_pose(body, body_pose)
-    center, (w, l, h) = get_center_extent(body)
-    translate_center = Pose(point_from_pose(body_pose)-center)
+    center, (w, l, h) = approximate_as_prism(body, body_pose=body_pose)
+    translate_center = Pose(point=point_from_pose(body_pose)-center)
     grasps = []
     #x_offset = 0
-    x_offset = h/2 - 0.02
+    x_offset = h/2 - top_offset
     for j in range(1 + under):
-        swap_xz = (unit_point(), quat_from_euler([0, -math.pi / 2 + j * math.pi, 0]))
+        swap_xz = Pose(euler=[0, -math.pi / 2 + j * math.pi, 0])
         if w <= max_width:
-            translate_z = ([x_offset, 0, l / 2 - grasp_length], unit_quat())
+            translate_z = Pose(point=[x_offset, 0, l / 2 - grasp_length])
             for i in range(2):
-                rotate_z = (unit_point(), quat_from_euler([math.pi / 2 + i * math.pi, 0, 0]))
-                grasps += [multiply(tool_pose, translate_z, rotate_z, swap_xz, translate_center)]  # , np.array([w])
+                rotate_z = Pose(euler=[math.pi / 2 + i * math.pi, 0, 0])
+                grasps += [multiply(tool_pose, translate_z, rotate_z, swap_xz,
+                                    translate_center, body_pose)]  # , np.array([w])
         if l <= max_width:
-            translate_z = ([x_offset, 0, w / 2 - grasp_length], unit_quat())
+            translate_z = Pose(point=[x_offset, 0, w / 2 - grasp_length])
             for i in range(2):
-                rotate_z = (unit_point(), quat_from_euler([i * math.pi, 0, 0]))
-                grasps += [multiply(tool_pose, translate_z, rotate_z, swap_xz, translate_center)]  # , np.array([l])
-    set_pose(body, initial_pose)
+                rotate_z = Pose(euler=[i * math.pi, 0, 0])
+                grasps += [multiply(tool_pose, translate_z, rotate_z, swap_xz,
+                                    translate_center, body_pose)]  # , np.array([l])
     return grasps
 
 #####################################
 
+# Cylinder grasps
+
 def get_top_cylinder_grasps(body, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                             max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
-    set_pose(body, body_pose)
-    center, (w, l, h) = get_center_extent(body)
-    reflect_z = (np.zeros(3), quat_from_euler([0, math.pi, 0]))
-    translate_z = ([0, 0, h / 2 - grasp_length], unit_quat())
-    translate_center = Pose(point_from_pose(body_pose)-center)
-    diameter = (w + l) / 2 # TODO: check that these are close
+    # Apply transformations right to left on object pose
+    center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
+    reflect_z = Pose(euler=[0, math.pi, 0])
+    translate_z = Pose(point=[0, 0, height / 2 - grasp_length])
+    translate_center = Pose(point=point_from_pose(body_pose)-center)
     if max_width < diameter:
         return
     while True:
         theta = random.uniform(0, 2*np.pi)
-        rotate_z = (unit_point(), quat_from_euler([0, 0, theta]))
-        grasp = multiply(tool_pose, translate_z, rotate_z, reflect_z, translate_center)
-        yield grasp
+        rotate_z = Pose(euler=[0, 0, theta])
+        yield multiply(tool_pose, translate_z, rotate_z,
+                       reflect_z, translate_center, body_pose)
 
 def get_side_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
-                             max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
-    set_pose(body, body_pose)
-    center, (w, l, h) = get_center_extent(body)
+                             max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH, top_offset=SIDE_HEIGHT_OFFSET):
+    center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
     translate_center = Pose(point_from_pose(body_pose)-center)
     #x_offset = 0
-    x_offset = h/2 - 0.02
-    diameter = (w + l) / 2 # TODO: check that these are close
+    x_offset = height/2 - top_offset
     if max_width < diameter:
         return
     while True:
         theta = random.uniform(0, 2*np.pi)
         translate_rotate = ([x_offset, 0, diameter / 2 - grasp_length], quat_from_euler([theta, 0, 0]))
         for j in range(1 + under):
-            swap_xz = (unit_point(), quat_from_euler([0, -math.pi / 2 + j * math.pi, 0]))
-            grasp = multiply(tool_pose, translate_rotate, swap_xz, translate_center)
-            yield grasp
+            swap_xz = Pose(euler=[0, -math.pi / 2 + j * math.pi, 0])
+            yield multiply(tool_pose, translate_rotate, swap_xz, translate_center, body_pose)
+
+def get_edge_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
+                             grasp_length=GRASP_LENGTH):
+    center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
+    translate_yz = Pose(point=[0, diameter/2, height/2 - grasp_length])
+    reflect_y = Pose(euler=[0, math.pi, 0])
+    translate_center = Pose(point=point_from_pose(body_pose)-center)
+    while True:
+        theta = random.uniform(0, 2*np.pi)
+        rotate_z = Pose(euler=[0, 0, theta])
+        for i in range(1 + under):
+            rotate_under = Pose(euler=[0, 0, i * math.pi])
+            yield multiply(tool_pose, rotate_under, translate_yz, rotate_z,
+                           reflect_y, translate_center, body_pose)
 
 #####################################
 
-def get_x_presses(body, max_orientations=1):  # g_f_o
-    pose = get_pose(body)
-    set_pose(body, unit_pose())
-    center, (w, l, h) = get_center_extent(body)
+# Cylinder pushes
+
+def get_cylinder_push(body, theta, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose()):
+    center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
+    reflect_z = Pose(euler=[0, math.pi, 0])
+    translate_z = Pose(point=[0, 0, -height / 2 + 0.02])
+    translate_center = Pose(point=point_from_pose(body_pose)-center)
+    rotate_x = Pose(euler=[0, 0, theta])
+    translate_x = Pose(point=[-diameter / 2 - 0.03, 0, 0])
+    grasps = []
+    for i in range(1 + under):
+        rotate_z = Pose(euler=[0, 0, i * math.pi])
+        grasps.append(multiply(tool_pose, translate_z, translate_x, rotate_x, rotate_z,
+                               reflect_z, translate_center, body_pose))
+    return grasps
+
+#####################################
+
+# Button presses
+
+PRESS_OFFSET = 0.02
+
+def get_x_presses(body, max_orientations=1, body_pose=unit_pose(), top_offset=PRESS_OFFSET):
+    # gripper_from_object
+    # TODO: update
+    center, (w, _, h) = approximate_as_prism(body, body_pose=body_pose)
     translate_center = Pose(-center)
     press_poses = []
     for j in range(max_orientations):
-        swap_xz = (unit_point(), quat_from_euler([0, -math.pi / 2 + j * math.pi, 0]))
-        translate = ([0, 0, w / 2], unit_quat())
-        press_poses += [multiply(TOOL_POSE, translate, swap_xz, translate_center)]
-    set_pose(body, pose)
+        swap_xz = Pose(euler=[0, -math.pi / 2 + j * math.pi, 0])
+        translate = Pose(point=[0, 0, w / 2 + top_offset])
+        press_poses += [multiply(TOOL_POSE, translate, swap_xz, translate_center, body_pose)]
     return press_poses
 
+def get_top_presses(body, tool_pose=TOOL_POSE, body_pose=unit_pose(), top_offset=PRESS_OFFSET):
+    center, (_, height) = approximate_as_cylinder(body, body_pose=body_pose)
+    reflect_z = Pose(euler=[0, math.pi, 0])
+    translate_z = Pose(point=[0, 0, height / 2 + top_offset])
+    translate_center = Pose(point=point_from_pose(body_pose)-center)
+    while True:
+        theta = random.uniform(0, 2*np.pi)
+        rotate_z = Pose(euler=[0, 0, theta])
+        yield multiply(tool_pose, translate_z, rotate_z,
+                       reflect_z, translate_center, body_pose)
 
 GET_GRASPS = {
     'top': get_top_grasps,
@@ -343,6 +387,13 @@ def load_inverse_reachability(arm, grasp_type):
     filename = IR_FILENAME.format(grasp_type, arm)
     path = get_database_file(filename)
     return read_pickle(path)['gripper_from_base']
+
+
+def learned_forward_generator(robot, base_pose, arm, grasp_type):
+    gripper_from_base_list = load_inverse_reachability(arm, grasp_type)
+    random.shuffle(gripper_from_base_list)
+    for gripper_from_base in gripper_from_base_list:
+        yield multiply(base_pose, invert(gripper_from_base))
 
 
 def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
