@@ -9935,10 +9935,10 @@ static PyObject *get_ik(PyObject *self, PyObject *args)
     // Last list is free joints (For PR2: torso and upper arm roll (in that order)).
     PyObject *rotList; // 3x3 rotation matrix
     PyObject *transList; // [x,y,z]
-    PyObject *freeList; // can be empty, for PR2: [torso, upper arm]
+//    PyObject *freeList; // can be empty, for PR2: [torso, upper arm]
 
     // format 'o!': pass C object pointer with the pointer's address.
-    if(!PyArg_ParseTuple(args, "O!O!O!", &PyList_Type, &rotList, &PyList_Type, &transList, &PyList_Type, &freeList))
+    if(!PyArg_ParseTuple(args, "O!O!", &PyList_Type, &rotList, &PyList_Type, &transList)) //&PyList_Type, &freeList
     {
         fprintf(stderr,"Failed to parse input to python objects\n");
         return NULL;
@@ -9955,10 +9955,10 @@ static PyObject *get_ik(PyObject *self, PyObject *args)
         }
     }
 
-    for(int i = 0; i < GetNumFreeParameters(); ++i)
-    {
-        vfree[i] = PyFloat_AsDouble(PyList_GetItem(freeList, i));
-    }
+//    for(int i = 0; i < GetNumFreeParameters(); ++i)
+//    {
+//        vfree[i] = PyFloat_AsDouble(PyList_GetItem(freeList, i));
+//    }
 
     // call ikfast routine
     bool bSuccess = ComputeIk(eetrans, eerot, &vfree[0], solutions);
