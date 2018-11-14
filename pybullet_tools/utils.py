@@ -297,6 +297,7 @@ def wait_for_duration(duration): #, dt=0):
     # TODO: wait until keypress
 
 def simulate_for_duration(duration, dt=0):
+    # WARNING: this simulates for a wall-clock duration rather than simulator duration
     t0 = time.time()
     while elapsed_time(t0) <= duration:
         step_simulation()
@@ -319,6 +320,13 @@ def simulate_for_sim_duration(sim_duration, real_dt=0, frequency=INF):
         step_simulation()
         sim_time += sim_dt
         time.sleep(real_dt)
+
+def wait_for_user():
+    if is_darwin():
+        # OS X doesn't multi-thread the OpenGL visualizer
+        wait_for_interrupt()
+    else:
+        user_input('Press enter to continue')
 
 def wait_for_interrupt(max_time=np.inf):
     """
@@ -1082,11 +1090,11 @@ def get_capsule_geometry(radius, height):
         'length': height,
     }
 
-def get_mesh_geometry(path, scale=1.0):
+def get_mesh_geometry(path, scale=1.):
     return {
         'shapeType': p.GEOM_MESH,
         'fileName': path,
-        'meshScale': scale,
+        'meshScale': scale*np.ones(3),
     }
 
 NULL_ID = -1
@@ -1203,26 +1211,25 @@ def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(.5, .5, .5, 1)):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
 
+def create_obj(path, scale=1., mass=STATIC_MASS, color=(.5, .5, .5, 1.)):
+    collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), color=color)
+    return create_body(collision_id, visual_id, mass=mass)
+
+
 mesh_count = count()
 MESH_DIR = 'temp/'
 
-def create_mesh(mesh, scale=1, mass=STATIC_MASS, color=(.5, .5, .5, 1)):
+def create_mesh(mesh, **kwargs):
     # http://people.sc.fsu.edu/~jburkardt/data/obj/obj.html
     # TODO: read OFF / WRL / OBJ files
     # TODO: maintain dict to file
     ensure_dir(MESH_DIR)
     path = os.path.join(MESH_DIR, 'mesh{}.obj'.format(next(mesh_count)))
     write(path, obj_file_from_mesh(mesh))
-    mesh_scale = scale*np.ones(3)
-    collision_id = p.createVisualShape(p.GEOM_MESH, fileName=path, meshScale=mesh_scale, physicsClientId=CLIENT)
-    if (color is None) or not has_gui():
-        visual_id = -1
-    else:
-        visual_id = p.createVisualShape(p.GEOM_MESH, fileName=path, meshScale=mesh_scale, rgbaColor=color, physicsClientId=CLIENT)
+    return create_obj(path, **kwargs)
     #safe_remove(path) # TODO: removing might delete mesh?
-    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
 
+#####################################
 
 VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
                                                  'visualGeometryType', 'dimensions', 'meshAssetFileName',
@@ -1971,7 +1978,7 @@ def add_fixed_constraint(body, robot, robot_link, max_force=None):
     #                          parentFrameOrientation=unit_quat(),
     #                          childFrameOrientation=quat)
     constraint = p.createConstraint(robot, robot_link, body, body_link,  # Both seem to work
-                              p.JOINT_FIXED, jointAxis=unit_point(),
+                                    p.JOINT_FIXED, jointAxis=unit_point(),
                                     parentFramePosition=point,
                                     childFramePosition=unit_point(),
                                     parentFrameOrientation=quat,
@@ -2011,6 +2018,12 @@ class Attachment(object):
     def __repr__(self):
         return '{}({},{})'.format(self.__class__.__name__, self.parent, self.child)
 
+def create_attachment(parent, parent_link, child):
+    parent_link_pose = get_link_pose(parent, parent_link)
+    child_pose = get_pose(child)
+    grasp_pose = multiply(invert(parent_link_pose), child_pose)
+    return Attachment(parent, parent_link, grasp_pose, child)
+
 def body_from_end_effector(end_effector_pose, grasp_pose):
     """
     world_from_parent * parent_from_child = world_from_child
@@ -2045,11 +2058,10 @@ def control_joint(body, joint, value):
                                    jointIndex=joint,
                                    controlMode=p.POSITION_CONTROL,
                                    targetPosition=value,
-                                   targetVelocity=0,
+                                   targetVelocity=0.0,
                                    maxVelocity=get_max_velocity(body, joint),
                                    force=get_max_force(body, joint),
                                    physicsClientId=CLIENT)
-
 
 def control_joints(body, joints, positions):
     # TODO: the whole PR2 seems to jitter
@@ -2066,15 +2078,15 @@ def control_joints(body, joints, positions):
                                         #velocityGains=[kv] * len(joints),)
                                         #forces=forces)
 
-def joint_controller(body, joints, target, max_time=None):
+def joint_controller(body, joints, target, tolerance=1e-3):
     assert(len(joints) == len(target))
-    iteration = 0
-    while not np.allclose(get_joint_positions(body, joints), target, atol=1e-3, rtol=0):
+    positions = get_joint_positions(body, joints)
+    while not np.allclose(positions, target, atol=tolerance, rtol=0):
         control_joints(body, joints, target)
-        yield iteration
-        iteration += 1
+        yield positions
+        positions = get_joint_positions(body, joints)
 
-def joint_controller_hold(body, joints, target, max_time=None):
+def joint_controller_hold(body, joints, target, **kwargs):
     """
     Keeps other joints in place
     """
@@ -2082,7 +2094,22 @@ def joint_controller_hold(body, joints, target, max_time=None):
     conf = list(get_joint_positions(body, movable_joints))
     for joint, value in zip(movable_from_joints(body, joints), target):
         conf[joint] = value
-    return joint_controller(body, movable_joints, conf)
+    return joint_controller(body, movable_joints, conf, **kwargs)
+
+def trajectory_controller(body, joints, path, **kwargs):
+    for target in path:
+        for positions in joint_controller(body, joints, target, **kwargs):
+            yield positions
+
+def simulate_controller(controller, max_time=np.inf): # Allow option to sleep rather than yield?
+    sim_dt = get_time_step()
+    sim_time = 0.0
+    for _ in controller:
+        if max_time < sim_time:
+            break
+        step_simulation()
+        sim_time += sim_dt
+        yield sim_time
 
 def velocity_control_joints(body, joints, velocities):
     #kv = 0.3
@@ -2264,13 +2291,15 @@ def add_line(start, end, color=(0, 0, 0), width=1, lifetime=None, parent=-1, par
 def remove_debug(debug): # removeAllUserDebugItems
     p.removeUserDebugItem(debug, physicsClientId=CLIENT)
 
-def add_body_name(body, **kwargs):
+def add_body_name(body, name=None, **kwargs):
+    if name is None:
+        name = get_name(body)
     with PoseSaver(body):
         set_pose(body, unit_pose())
         lower, upper = get_aabb(body)
     #position = (0, 0, upper[2])
     position = upper
-    return add_text(get_name(body), position=position, parent=body, **kwargs)  # removeUserDebugItem
+    return add_text(name, position=position, parent=body, **kwargs)  # removeUserDebugItem
 
 
 def add_segments(points, closed=False, **kwargs):
