@@ -861,10 +861,15 @@ def violates_limit(body, joint, value):
 def violates_limits(body, joints, values):
     return any(violates_limit(body, joint, value) for joint, value in zip(joints, values))
 
-def wrap_joint(body, joint, value):
+def wrap_position(body, joint, position):
     if is_circular(body, joint):
-        return wrap_angle(value)
-    return value
+        return wrap_angle(position)
+    return position
+
+def wrap_positions(body, joints, positions):
+    assert len(joints) == len(positions)
+    return [wrap_position(body, joint, position)
+            for joint, position in zip(joints, positions)]
 
 #####################################
 
@@ -1625,9 +1630,10 @@ def get_refine_fn(body, joints, num_steps=0):
     def fn(q1, q2):
         q = q1
         for i in range(num_steps):
-            q = tuple((1. / (num_steps - i)) * np.array(difference_fn(q2, q)) + q)
+            positions = (1. / (num_steps - i)) * np.array(difference_fn(q2, q)) + q
+            q = tuple(positions)
+            #q = tuple(wrap_positions(body, joints, positions))
             yield q
-            # TODO: should wrap these joints
     return fn
 
 def refine_path(body, joints, waypoints, num_steps):
@@ -1751,10 +1757,10 @@ def check_initial_end(start_conf, end_conf, collision_fn):
     return True
 
 def plan_waypoints_joint_motion(body, joints, waypoints, obstacles=None, attachments=[],
-                      self_collisions=True, disabled_collisions=set()):
+                      self_collisions=True, disabled_collisions=set(), max_distance=MAX_DISTANCE):
     extend_fn = get_extend_fn(body, joints)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments,
-                                    self_collisions, disabled_collisions)
+                                    self_collisions, disabled_collisions, max_distance=max_distance)
     start_conf = get_joint_positions(body, joints)
     for i, waypoint in enumerate([start_conf] + list(waypoints)):
         if collision_fn(waypoint):
@@ -1770,9 +1776,9 @@ def plan_waypoints_joint_motion(body, joints, waypoints, obstacles=None, attachm
     return path
 
 def plan_direct_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
-                      self_collisions=True, disabled_collisions=set()):
+                      self_collisions=True, disabled_collisions=set(), **kwargs):
     return plan_waypoints_joint_motion(body, joints, [end_conf], obstacles, attachments, self_collisions,
-                                       disabled_collisions)
+                                       disabled_collisions, **kwargs)
 
 def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
                       self_collisions=True, disabled_collisions=set(), direct=False,
