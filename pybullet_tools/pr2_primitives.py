@@ -366,6 +366,7 @@ def get_ik_fn(problem, teleport=False):
         arm_joints = get_arm_joints(robot, a)
         def ik_fn(target_pose):
             try:
+                # TODO: switch to is_ik_compiled
                 from .pr2_ik.ik import sample_tool_ik, get_torso_arm_joints
                 joints = get_torso_arm_joints(robot, a)
                 torso_arm_conf = sample_tool_ik(robot, a, target_pose, torso_limits=None)

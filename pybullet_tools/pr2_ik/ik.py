@@ -65,6 +65,14 @@ def get_tool_pose(robot, arm):
 
 #####################################
 
+def is_ik_compiled():
+    try:
+        from pybullet_tools.pr2_ik.ikLeft import leftIK
+        from pybullet_tools.pr2_ik.ikRight import rightIK
+        return True
+    except ImportError:
+        return False
+
 def inverse_kinematics(arm, pose, torso, upper):
     from pybullet_tools.pr2_ik.ikLeft import leftIK
     from pybullet_tools.pr2_ik.ikRight import rightIK

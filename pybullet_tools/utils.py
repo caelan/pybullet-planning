@@ -30,6 +30,7 @@ user_input = input
 INF = np.inf
 PI = np.pi
 CIRCULAR_LIMITS = -PI, PI
+UNBOUNDED_LIMITS = -INF, INF
 DEFAULT_TIME_STEP = 1./240. # seconds
 
 #####################################
@@ -608,6 +609,11 @@ def quat_angle_between(quat0, quat1): # quaternion_slerp
     angle = math.acos(d)
     return angle
 
+def all_between(lower_limits, values, upper_limits):
+    assert len(lower_limits) == len(values)
+    assert len(values) == len(upper_limits)
+    return np.less_equal(lower_limits, values).all() and np.less_equal(values, upper_limits).all()
+
 #####################################
 
 # Bodies
@@ -830,11 +836,13 @@ def is_circular(body, joint):
 def get_joint_limits(body, joint):
     # TODO: make a version for several joints?
     if is_circular(body, joint):
+        # TODO: return UNBOUNDED_LIMITS
         return CIRCULAR_LIMITS
     joint_info = get_joint_info(body, joint)
     return joint_info.jointLowerLimit, joint_info.jointUpperLimit
 
 def get_min_limit(body, joint):
+    # TODO: rename to min_position
     return get_joint_limits(body, joint)[0]
 
 def get_max_limit(body, joint):
@@ -860,11 +868,10 @@ def get_joint_parent_frame(body, joint):
     return joint_info.parentFramePos, joint_info.parentFrameOrn
 
 def violates_limit(body, joint, value):
-    if not is_circular(body, joint):
-        lower, upper = get_joint_limits(body, joint)
-        if (value < lower) or (upper < value):
-            return True
-    return False
+    if is_circular(body, joint):
+        return False
+    lower, upper = get_joint_limits(body, joint)
+    return (value < lower) or (upper < value)
 
 def violates_limits(body, joints, values):
     return any(violates_limit(body, joint, value) for joint, value in zip(joints, values))
@@ -878,6 +885,17 @@ def wrap_positions(body, joints, positions):
     assert len(joints) == len(positions)
     return [wrap_position(body, joint, position)
             for joint, position in zip(joints, positions)]
+
+def get_custom_limits(body, joints, custom_limits, circular_limits=UNBOUNDED_LIMITS):
+    joint_limits = []
+    for joint in joints:
+        if joint in custom_limits:
+            joint_limits.append(custom_limits[joint])
+        elif is_circular(body, joint):
+            joint_limits.append(circular_limits)
+        else:
+            joint_limits.append(get_joint_limits(body, joint))
+    return zip(*joint_limits)
 
 #####################################
 
@@ -1602,14 +1620,10 @@ def batch_ray_collision(rays):
 
 # Joint motion planning
 
-def get_sample_fn(body, joints):
+def get_sample_fn(body, joints, custom_limits={}):
+    lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits, circular_limits=CIRCULAR_LIMITS)
     def fn():
-        values = []
-        for joint in joints:
-            limits = CIRCULAR_LIMITS if is_circular(body, joint) \
-                else get_joint_limits(body, joint)
-            values.append(np.random.uniform(*limits))
-        return tuple(values)
+        return tuple(np.random.uniform(lower_limits, upper_limits))
     return fn
 
 def get_difference_fn(body, joints):
@@ -1660,35 +1674,20 @@ def get_extend_fn(body, joints, resolutions=None):
         return refine_fn(q1, q2)
     return fn
 
-# def sparsify_path(body, joints, path):
-#     if len(path) <= 2:
-#         return path
-#     difference_fn = get_difference_fn(body, joints)
-#     waypoints = [path[0]]
-#     last_difference = difference_fn(waypoints[-1], path[1])
-#     last_conf = path[1]
-#     for q in path[2:]:
-#         new_difference = difference_fn(waypoints[-1], q)
-#         #if np.allclose(last_difference, new_difference, atol=1e-3, rtol=0):
-#         #
-#         #last_difference = new_difference
-#         #last_conf = q
-#         # TODO: test if a scaling of itself
-#     return path
-
-def waypoints_from_path(path):
+def waypoints_from_path(path, tolerance=1e-3):
     if len(path) < 2:
         return path
 
     def difference_fn(q2, q1):
         return np.array(q2) - np.array(q1)
+    #difference_fn = get_difference_fn(body, joints)
 
     waypoints = [path[0]]
     last_conf = path[1]
     last_difference = get_unit_vector(difference_fn(last_conf, waypoints[-1]))
     for conf in path[2:]:
         difference = get_unit_vector(difference_fn(conf, waypoints[-1]))
-        if not np.allclose(last_difference, difference, atol=1e-3, rtol=0):
+        if not np.allclose(last_difference, difference, atol=tolerance, rtol=0):
             waypoints.append(last_conf)
             difference = get_unit_vector(difference_fn(conf, waypoints[-1]))
         last_conf = conf
@@ -1732,17 +1731,19 @@ def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=Tru
 
 
 def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
-                     use_limits=True, **kwargs):
+                     custom_limits={}, **kwargs):
+    # TODO: convert most of these to keyword arguments
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
     moving_bodies = [body] + [attachment.child for attachment in attachments]
     if obstacles is None:
         obstacles = list(set(get_bodies()) - set(moving_bodies))
     check_body_pairs = list(product(moving_bodies, obstacles))  # + list(combinations(moving_bodies, 2))
+    lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits)
+
     # TODO: maybe prune the link adjacent to the robot
     # TODO: test self collision with the holding
-    # TODO: end-effector constraints
     def collision_fn(q):
-        if use_limits and violates_limits(body, joints, q):
+        if not all_between(lower_limits, q, upper_limits):
             return True
         set_joint_positions(body, joints, q)
         for attachment in attachments:
@@ -1754,24 +1755,15 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         return any(pairwise_collision(*pair, **kwargs) for pair in check_body_pairs)
     return collision_fn
 
-def check_initial_end(start_conf, end_conf, collision_fn):
-    if collision_fn(start_conf):
-        print("Warning: initial configuration is in collision")
-        return False
-    if collision_fn(end_conf):
-        print("Warning: end configuration is in collision")
-        return False
-    return True
-
 def plan_waypoints_joint_motion(body, joints, waypoints, obstacles=None, attachments=[],
-                      self_collisions=True, disabled_collisions=set(), max_distance=MAX_DISTANCE):
+                      self_collisions=True, disabled_collisions=set(), custom_limits={}, max_distance=MAX_DISTANCE):
     extend_fn = get_extend_fn(body, joints)
-    collision_fn = get_collision_fn(body, joints, obstacles, attachments,
-                                    self_collisions, disabled_collisions, max_distance=max_distance)
+    collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
+                                    custom_limits=custom_limits, max_distance=max_distance)
     start_conf = get_joint_positions(body, joints)
     for i, waypoint in enumerate([start_conf] + list(waypoints)):
         if collision_fn(waypoint):
-            print("Warning: waypoint configuration {}/{} is in collision".format(i, len(waypoints)))
+            #print("Warning: waypoint configuration {}/{} is in collision".format(i, len(waypoints)))
             return None
     path = [start_conf]
     for waypoint in waypoints:
@@ -1782,23 +1774,27 @@ def plan_waypoints_joint_motion(body, joints, waypoints, obstacles=None, attachm
             path.append(q)
     return path
 
-def plan_direct_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
-                      self_collisions=True, disabled_collisions=set(), **kwargs):
-    return plan_waypoints_joint_motion(body, joints, [end_conf], obstacles, attachments, self_collisions,
-                                       disabled_collisions, **kwargs)
+def plan_direct_joint_motion(body, joints, end_conf, **kwargs):
+    return plan_waypoints_joint_motion(body, joints, [end_conf], **kwargs)
+
+def check_initial_end(start_conf, end_conf, collision_fn):
+    if collision_fn(start_conf):
+        print("Warning: initial configuration is in collision")
+        return False
+    if collision_fn(end_conf):
+        print("Warning: end configuration is in collision")
+        return False
+    return True
 
 def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
-                      self_collisions=True, disabled_collisions=set(), direct=False,
-                      weights=None, resolutions=None, max_distance=MAX_DISTANCE, **kwargs):
-    if direct:
-        # TODO: add weights & resolutions here or deprecate
-        return plan_direct_joint_motion(body, joints, end_conf, obstacles, attachments, self_collisions, disabled_collisions)
+                      self_collisions=True, disabled_collisions=set(),
+                      weights=None, resolutions=None, max_distance=MAX_DISTANCE, custom_limits={}, **kwargs):
     assert len(joints) == len(end_conf)
-    sample_fn = get_sample_fn(body, joints)
+    sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
     distance_fn = get_distance_fn(body, joints, weights=weights)
     extend_fn = get_extend_fn(body, joints, resolutions=resolutions)
-    collision_fn = get_collision_fn(body, joints, obstacles, attachments,
-                                    self_collisions, disabled_collisions, max_distance=max_distance)
+    collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
+                                    custom_limits=custom_limits, max_distance=max_distance)
 
     start_conf = get_joint_positions(body, joints)
     if not check_initial_end(start_conf, end_conf, collision_fn):
@@ -1807,7 +1803,7 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
 
 #####################################
 
-# Pose motion planning
+# SE(2) pose motion planning
 
 def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
                      weights=1*np.ones(3), resolutions=0.05*np.ones(3),
@@ -2155,26 +2151,42 @@ def compute_joint_weights(robot, num=100):
 
 #####################################
 
-def inverse_kinematics(robot, link, pose, max_iterations=200, tolerance=1e-3):
-    (target_point, target_quat) = pose
+def inverse_kinematics_helper(robot, link, target_pose):
+    (target_point, target_quat) = target_pose
+    assert target_point is not None
+    if target_quat is None:
+        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, physicsClientId=CLIENT)
+    else:
+        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, target_quat, physicsClientId=CLIENT)
+    if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
+        return None
+    return kinematic_conf
+
+def is_pose_close(pose, target_pose, pos_tolerance=1e-3, ori_tolerance=1e-3*np.pi):
+    (point, quat) = pose
+    (target_point, target_quat) = target_pose
+    if (target_point is not None) and not np.allclose(point, target_point, atol=pos_tolerance, rtol=0):
+        return False
+    if (target_quat is not None) and not np.allclose(quat, target_quat, atol=ori_tolerance, rtol=0):
+        # TODO: account for quaternion redundancy
+        return False
+    return True
+
+def inverse_kinematics(robot, link, target_pose, max_iterations=200, custom_limits={}, **kwargs):
     movable_joints = get_movable_joints(robot)
     for iterations in range(max_iterations):
         # TODO: stop is no progress
         # TODO: stop if collision or invalid joint limits
-        if target_quat is None:
-            kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, physicsClientId=CLIENT)
-        else:
-            kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, target_quat, physicsClientId=CLIENT)
-        if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
+        kinematic_conf = inverse_kinematics_helper(robot, link, target_pose)
+        if kinematic_conf is None:
             return None
         set_joint_positions(robot, movable_joints, kinematic_conf)
-        link_point, link_quat = get_link_pose(robot, link)
-        if np.allclose(link_point, target_point, atol=tolerance, rtol=0) and \
-                ((target_quat is None) or np.allclose(link_quat, target_quat, atol=tolerance, rtol=0)):
+        if is_pose_close(get_link_pose(robot, link), target_pose, **kwargs):
             break
     else:
         return None
-    if violates_limits(robot, movable_joints, kinematic_conf):
+    lower_limits, upper_limits = get_custom_limits(robot, movable_joints, custom_limits)
+    if not all_between(lower_limits, kinematic_conf, upper_limits):
         return None
     return kinematic_conf
 
@@ -2223,7 +2235,7 @@ def workspace_trajectory(robot, link, start_point, direction, quat, **kwargs):
 #####################################
 
 def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
-                          max_iterations=200, pos_tolerance=1e-3, ori_tolerance=1e-3):
+                          max_iterations=200, custom_limits={}, **kwargs):
     # TODO: fix stationary joints
     # TODO: pass in set of movable joints and take least common ancestor
     # TODO: update with most recent bullet updates
@@ -2231,6 +2243,7 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/inverse_kinematics_husky_kuka.py
     # TODO: plan a path without needing to following intermediate waypoints
 
+    lower_limits, upper_limits = get_custom_limits(robot, get_movable_joints(robot), custom_limits)
     selected_links = get_link_subtree(robot, first_joint)
     selected_movable_joints = prune_fixed_joints(robot, selected_links)
     assert(target_link in selected_links)
@@ -2240,21 +2253,16 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
 
     solutions = []
     for target_pose in waypoint_poses:
-        (target_point, target_quat) = target_pose
         for _ in range(max_iterations):
-            sub_kinematic_conf = p.calculateInverseKinematics(sub_robot, selected_target_link,
-                                                              target_point, target_quat, physicsClientId=CLIENT)
-            if (sub_kinematic_conf is None) or any(map(math.isnan, sub_kinematic_conf)):
+            sub_kinematic_conf = inverse_kinematics_helper(sub_robot, selected_target_link, target_pose)
+            if sub_kinematic_conf is None:
                 remove_body(sub_robot)
                 return None
             set_joint_positions(sub_robot, sub_movable_joints, sub_kinematic_conf)
-            link_point, link_quat = get_link_pose(sub_robot, selected_target_link)
-            # TODO: let target_quat be None
-            if np.allclose(link_point, target_point, atol=pos_tolerance, rtol=0) and \
-                    np.allclose(link_quat, target_quat, atol=ori_tolerance, rtol=0):
+            if is_pose_close(get_link_pose(sub_robot, selected_target_link), target_pose, **kwargs):
                 set_joint_positions(robot, selected_movable_joints, sub_kinematic_conf)
                 kinematic_conf = get_configuration(robot)
-                if violates_limits(robot, get_movable_joints(robot), kinematic_conf):
+                if not all_between(lower_limits, kinematic_conf, upper_limits):
                     remove_body(sub_robot)
                     return None
                 solutions.append(kinematic_conf)

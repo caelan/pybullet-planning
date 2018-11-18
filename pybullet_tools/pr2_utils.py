@@ -40,6 +40,7 @@ PR2_GROUPS = {
                      'l_gripper_l_finger_tip_joint', 'l_gripper_r_finger_tip_joint'],
     gripper_from_arm('right'): ['r_gripper_l_finger_joint', 'r_gripper_r_finger_joint',
                       'r_gripper_l_finger_tip_joint', 'r_gripper_r_finger_tip_joint'],
+    # r_gripper_joint & l_gripper_joint are not mimicked
 }
 
 HEAD_LINK_NAME = 'high_def_optical_frame' # high_def_optical_frame | high_def_frame | wide_stereo_l_stereo_camera_frame | ...
