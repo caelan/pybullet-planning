@@ -122,14 +122,14 @@ def main(use_pr2_drake=False):
     set_joint_positions(pr2, right_joints, rightarm_from_leftarm(REST_LEFT_ARM))
     set_joint_positions(pr2, torso_joints, [0.2])
     open_arm(pr2, 'left')
-    #test_ikfast(pr2)
+    test_ikfast(pr2)
 
     p.addUserDebugLine(base_start, base_goal, lineColorRGB=(1, 0, 0)) # addUserDebugText
     print(base_start, base_goal)
-    if use_pr2_drake:
-        test_drake_base_motion(pr2, base_start, base_goal)
-    else:
-        test_base_motion(pr2, base_start, base_goal)
+    # if use_pr2_drake:
+    #     test_drake_base_motion(pr2, base_start, base_goal)
+    # else:
+    #     test_base_motion(pr2, base_start, base_goal)
 
     test_arm_motion(pr2, left_joints, arm_goal)
     test_arm_control(pr2, left_joints, arm_start)

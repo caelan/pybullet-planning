@@ -2,34 +2,19 @@ from pybullet_tools.kuka_kr6r900_ik.ikfast_kuka_kr6r900 import get_ik, get_fk
 
 from pybullet_tools.utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, Pose, multiply, elapsed_time, \
     get_link_pose, link_from_name, joints_from_names, get_joint_positions, get_joint_limits, joint_from_name, invert, \
-    get_joint_position, violates_limits, INF
-# from pybullet_tools.pr2_utils import PR2_GROUPS, PR2_TOOL_FRAMES, arm_from_arm
+    get_joint_position, violates_limits, INF, get_joints
 
 import random
 
-# As we only have one arm in kuka_kr6_r900,
-# the default name is simply 'arm' (compared to 'left' and 'right' in PR2's case)
-ARM_FK = {
-    'arm': get_fk,
-}
-
-ARM_IK = {
-    'arm': get_ik,
-}
-
 # the corresponding frame name can be found in
 # models/kuka_kr6r900_description/framefab_kr6_r900_support/urdf/kuka_kr6_r900.urdf
-IK_LINK = {
-    'arm': 'robot_tool0',
+KUKA_KR6R900_GROUPS = {
+    'arm_joints': ['robot_joint_a1', 'robot_joint_a2', 'robot_joint_a3',
+                   'robot_joint_a4', 'robot_joint_a5', 'robot_joint_a6'],
+    'tool_link': 'robot_tool0'
 }
 
 BASE_LINK = 'robot_base_link'
-
-# tool = robot_tool0 (6th axis flange)
-# no extra dof
-
-#def get_prefix(arm):
-#    return arm[0]
 
 def or_from_pyb_quat(quat):
     x, y, z, w = quat
@@ -42,23 +27,14 @@ def pyb_from_or_quat(quat):
 def get_base_pose(robot):
     return get_link_pose(robot, link_from_name(robot, BASE_LINK))
 
-def get_torso_arm_joints(robot, arm):
-    return joints_from_names(robot, PR2_GROUPS['torso'] + PR2_GROUPS[arm_from_arm(arm)])
-
 #####################################
 
 def forward_kinematics(conf):
-    '''
-    compute fk.
-    :param conf: robot's configuration
-    :return:
-    '''
-
     # TODO: this should be linked to ikfast's get numOfJoint function.
+    print(conf)
     assert len(conf) == 6
 
-    arm = 'arm'
-    fk_fn = ARM_FK[arm]
+    fk_fn = get_fk
 
     pose = fk_fn(list(conf))
     pos, rot = pose
@@ -67,14 +43,15 @@ def forward_kinematics(conf):
     # switch from [r, i, j, k] to [i, j, k, r]
     # quat = quat if quat.real >= 0 else -quat  # solves q and -q being same rotation
 
-def get_tool_pose(robot, arm):
+def get_tool_pose(robot):
     '''
     compute static transform from BASE_LINK -> IK_LINK
     :param robot:
     :param arm:
     :return:
     '''
-    tool_pose = forward_kinematics(arm, get_joint_positions(robot, get_torso_arm_joints(robot, arm)))
+    tool_pose = forward_kinematics(get_joint_positions(
+        robot, joints_from_names(robot, KUKA_KR6R900_GROUPS['arm_joints'])))
     return multiply(get_base_pose(robot), tool_pose)
 
 #####################################
@@ -85,9 +62,7 @@ def inverse_kinematics(pose):
     :param pose: end effector's pose
     :return:
     '''
-
-    arm = 'arm'
-    ik_fn = ARM_IK[arm]
+    ik_fn = get_ik
 
     pos = point_from_pose(pose)
     rot = matrix_from_quat(quat_from_pose(pose)).tolist()
@@ -96,14 +71,6 @@ def inverse_kinematics(pose):
         return []
     return solutions
 
-# def get_limits(robot, joint, limits):
-#     if limits is False:
-#         return get_joint_limits(robot, joint)
-#     elif limits is None:
-#         torso_value = get_joint_position(robot, joint)
-#         return torso_value, torso_value
-#     return limits
-
 #def sample_ik(robot, arm, target_pose, torso_limits, upper_limits):
 #    arm_joints = get_arm_joints(robot, arm)
 #    torso = random.uniform(*torso_limits)
@@ -111,32 +78,31 @@ def inverse_kinematics(pose):
 #    return [q for q in inverse_kinematics(arm, target_pose, torso, upper)
 #           if not violates_limits(robot, arm_joints, q)]
 
-# def get_ik_generator(robot, arm, world_pose, torso_limits=False, upper_limits=False):
-#     target_pose = multiply(invert(get_base_pose(robot)), world_pose)
-#     torso_limits = get_limits(robot, joint_from_name(robot, TORSO_JOINT), torso_limits)
-#     upper_limits = get_limits(robot, joint_from_name(robot, UPPER_JOINT[arm]), upper_limits)
-#     arm_joints = get_torso_arm_joints(robot, arm)
-#     while True:
-#         torso = random.uniform(*torso_limits)
-#         upper = random.uniform(*upper_limits)
-#         yield [q for q in inverse_kinematics(arm, target_pose, torso, upper)
-#                if not violates_limits(robot, arm_joints, q)]
+def get_ik_generator(robot, ee_world_pose):
+    target_ee_pose = multiply(invert(get_base_pose(robot)), ee_world_pose)
 
-# TODO:
-def sample_tool_ik(robot, arm, world_from_target, max_attempts=10, **kwargs):
-    world_from_tool = get_link_pose(robot, link_from_name(robot, PR2_TOOL_FRAMES[arm]))
-    world_from_ik = get_link_pose(robot, link_from_name(robot, IK_LINK[arm]))
-    tool_from_ik = multiply(invert(world_from_tool), world_from_ik)
-    ik_pose = multiply(world_from_target, tool_from_ik)
-    generator = get_ik_generator(robot, arm, ik_pose, **kwargs)
-    for _ in range(max_attempts):
-        try:
-            solutions = next(generator)
-            if solutions:
-                return random.choice(solutions)
-        except StopIteration:
-            break
-    return None
+    # get joint limits
+    arm_joints = joints_from_names(robot, KUKA_KR6R900_GROUPS['arm_joints'])
+    while True:
+        yield [q for q in inverse_kinematics(target_ee_pose)
+               if not violates_limits(robot, arm_joints, q)]
+
+# def sample_tool_ik(robot, arm, world_from_target, max_attempts=10, **kwargs):
+#
+#     world_from_tool = get_link_pose(robot, link_from_name(robot, PR2_TOOL_FRAMES[arm]))
+#     world_from_ik = get_link_pose(robot, link_from_name(robot, IK_LINK[arm]))
+#     tool_from_ik = multiply(invert(world_from_tool), world_from_ik)
+#     ik_pose = multiply(world_from_target, tool_from_ik)
+#
+#     generator = get_ik_generator(robot, arm, ik_pose, **kwargs)
+#     for _ in range(max_attempts):
+#         try:
+#             solutions = next(generator)
+#             if solutions:
+#                 return random.choice(solutions)
+#         except StopIteration:
+#             break
+#     return None
 
 #####################################
 

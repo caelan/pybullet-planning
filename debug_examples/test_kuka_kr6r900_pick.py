@@ -2,12 +2,14 @@
 
 from __future__ import print_function
 
-from pybullet_tools.kuka_primitives import BodyPose, BodyConf, Command, get_grasp_gen, \
+import numpy as np
+from pybullet_tools.kuka_kr6r900_primitives import BodyPose, BodyConf, Command, get_grasp_gen, \
     get_ik_fn, get_free_motion_gen, get_holding_motion_gen
 
 from pybullet_tools.utils import WorldSaver, enable_gravity, connect, dump_world, set_pose, \
     Pose, Point, set_default_camera, stable_z, \
-    BLOCK_URDF, load_model, wait_for_interrupt, disconnect, DRAKE_IIWA_URDF, user_input, update_state, disable_real_time
+    BLOCK_URDF, load_model, wait_for_interrupt, disconnect, DRAKE_IIWA_URDF, user_input, update_state, disable_real_time, \
+    joints_from_names, get_link_pose, link_from_name, set_joint_positions, get_joint_positions
 
 def plan(robot, block, fixed, teleport):
     grasp_gen = get_grasp_gen(robot, 'top')
@@ -38,39 +40,52 @@ def plan(robot, block, fixed, teleport):
                           path3.body_paths)
     return None
 
-# def test_ikfast(pr2):
-#     from pybullet_tools.kuka_kr6r900_ik.ik import forward_kinematics, inverse_kinematics, get_tool_pose#, get_ik_generator
-#
-#     left_joints = joints_from_names(pr2, PR2_GROUPS['left_arm'])
-#     #right_joints = joints_from_names(pr2, PR2_GROUPS['right_arm'])
-#     torso_joints = joints_from_names(pr2, PR2_GROUPS['torso'])
-#     torso_left = torso_joints + left_joints
-#     print(get_link_pose(pr2, link_from_name(pr2, 'l_gripper_tool_frame')))
-#     print(forward_kinematics('left', get_joint_positions(pr2, torso_left)))
-#     print(get_tool_pose(pr2, 'left'))
-#
-#     arm = 'left'
-#     pose = get_tool_pose(pr2, arm)
-#     generator = get_ik_generator(pr2, arm, pose, torso_limits=False)
-#     for i in range(100):
-#         solutions = next(generator)
-#         print(i, len(solutions))
-#         for q in solutions:
-#             set_joint_positions(pr2, torso_left, q)
-#             wait_for_interrupt()
+def test_ikfast(robot):
+    '''
+    An ikfast test function, print and render all the ikfast joint sols
+    by 'ctrl-C'
+    Modified from test_pr2_motion.py
+    :param robot: loaded URDF robot model
+    '''
+
+    from pybullet_tools.kuka_kr6r900_ik.ik \
+        import forward_kinematics, inverse_kinematics, get_tool_pose, get_ik_generator, KUKA_KR6R900_GROUPS
+
+    arm_joints = joints_from_names(robot, KUKA_KR6R900_GROUPS['arm_joints'])
+
+    print(get_link_pose(robot, link_from_name(robot, KUKA_KR6R900_GROUPS['tool_link'])))
+    print(forward_kinematics(get_joint_positions(robot, arm_joints)))
+    print(get_tool_pose(robot))
+
+    ee_pose = get_tool_pose(robot)
+    generator = get_ik_generator(robot, ee_pose)
+
+    for i in range(15):
+        solutions = next(generator)
+        print(i, len(solutions))
+        for q in solutions:
+            set_joint_positions(robot, arm_joints, q)
+            wait_for_interrupt()
 
 def main(display='execute'): # control | execute | step
     connect(use_gui=True)
     disable_real_time()
 
-    KUKA_URDF = "models/kuka_kr6r900_description/framefab_kr6r900_support/urdf/kuka_kr6_r900.urdf"
+    KUKA_URDF = "models/kuka_kr6r900_description/framefab_kr6_r900_support/urdf/kuka_kr6_r900.urdf"
+    robot = load_model(KUKA_URDF)
 
-    robot = load_model(KUKA_URDF) # KUKA_IIWA_URDF | DRAKE_IIWA_URDF
     floor = load_model('models/short_floor.urdf')
     block = load_model(BLOCK_URDF, fixed_base=False)
     set_pose(block, Pose(Point(y=0.5, z=stable_z(block, floor))))
     set_default_camera()
     dump_world()
+
+    # from pybullet_tools.kuka_kr6r900_ik.ik import KUKA_KR6R900_GROUPS
+    #
+    # arm_joints = joints_from_names(robot, KUKA_KR6R900_GROUPS['arm_joints'])
+    # arm_start = [np.pi/3, -np.pi * (1/2), -np.pi/2, np.pi*(1/6), 0, 0]
+    # set_joint_positions(robot, arm_joints, arm_start)
+    # test_ikfast(robot)
 
     saved_world = WorldSaver()
     command = plan(robot, block, fixed=[floor], teleport=False)
@@ -80,6 +95,7 @@ def main(display='execute'): # control | execute | step
 
     saved_world.restore()
     update_state()
+
     user_input('{}?'.format(display))
     if display == 'control':
         enable_gravity()
