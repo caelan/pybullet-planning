@@ -1,23 +1,25 @@
 import time
 
-from .pr2_utils import get_top_grasps
+from .pr2_utils import get_top_grasps, get_side_grasps
 from .utils import get_pose, set_pose, get_movable_joints, get_configuration, \
     set_joint_positions, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, user_input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
     pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
-    step_simulation, refine_path
+    step_simulation, refine_path, inverse_kinematics
 
-from pybullet_tools.kuka_kr6r900_ik.ik \
-    import forward_kinematics, inverse_kinematics, get_tool_pose, get_ik_generator, KUKA_KR6R900_GROUPS
+import pybullet_tools.kuka_kr6r900_ik.ik as ikfast
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
                                                  max_width=INF,  grasp_length=0),
-                     Pose(0.1*Point(z=1))),
+                     Pose(0.05*Point(z=1))),
+    'side': GraspInfo(lambda body: get_side_grasps(body, under=True, tool_pose=Pose(),
+                                                 max_width=INF,  grasp_length=0),
+                     Pose(0.05*Point(z=1)))
 }
 
-DEBUG_FAILURE = False
+DEBUG_FAILURE = True
 
 class BodyPose(object):
     def __init__(self, body, pose=None):
@@ -173,7 +175,7 @@ class Command(object):
 
 def get_grasp_gen(robot, grasp_name):
     grasp_info = GRASP_INFO[grasp_name]
-    end_effector_link = link_from_name(robot, KUKA_KR6R900_GROUPS['tool_link'])
+    end_effector_link = link_from_name(robot, ikfast.KUKA_KR6R900_GROUPS['tool_link'])
 
     def gen(body):
         grasp_poses = grasp_info.get_grasps(body)
@@ -195,26 +197,65 @@ def get_stable_gen(fixed=[]): # TODO: continuous set of grasps
             # TODO: check collisions
     return gen
 
-
-def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=1):
+def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=5):
     movable_joints = get_movable_joints(robot)
     sample_fn = get_sample_fn(robot, movable_joints)
-    def fn(body, pose, grasp):
+
+    def ikfast_ik_fn(body, pose, grasp):
         obstacles = [body] + fixed
         gripper_pose = end_effector_from_body(pose.pose, grasp.grasp_pose)
         approach_pose = approach_from_grasp(grasp.approach_pose, gripper_pose)
 
         for _ in range(num_attempts):
-            set_joint_positions(robot, movable_joints, sample_fn()) # Random seed
+            # set_joint_positions(robot, movable_joints, sample_fn()) # Random seed
 
             # using ikfast here, see import
-            q_approach = inverse_kinematics(approach_pose)
+            q_approach = ikfast.sample_tool_ik(robot, approach_pose)
 
             if (q_approach is None) or any(pairwise_collision(robot, b) for b in obstacles):
                 continue
-            conf = BodyConf(robot, q_approach)
-            q_grasp = inverse_kinematics(gripper_pose)
 
+            conf = BodyConf(robot, q_approach)
+            q_grasp = ikfast.sample_tool_ik(robot, gripper_pose)
+
+            if (q_grasp is None) or any(pairwise_collision(robot, b) for b in obstacles):
+                continue
+            if teleport:
+                path = [q_approach, q_grasp]
+            else:
+                conf.assign()
+                #direction, _ = grasp.approach_pose
+                #path = workspace_trajectory(robot, grasp.link, point_from_pose(approach_pose), -direction,
+                #                                   quat_from_pose(approach_pose))
+                path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=obstacles, direct=True)
+                print(path)
+
+                if path is None:
+                    if DEBUG_FAILURE:
+                        print(path)
+                        user_input('Approach motion failed')
+                    continue
+
+            command = Command([BodyPath(robot, path),
+                               Attach(body, robot, grasp.link),
+                               BodyPath(robot, path[::-1], attachments=[grasp])])
+            return (conf, command)
+            # TODO: holding collisions
+        return None
+
+    def pybullet_ik_fn(body, pose, grasp):
+
+        obstacles = [body] + fixed
+        gripper_pose = end_effector_from_body(pose.pose, grasp.grasp_pose)
+        approach_pose = approach_from_grasp(grasp.approach_pose, gripper_pose)
+        for _ in range(num_attempts):
+            set_joint_positions(robot, movable_joints, sample_fn()) # Random seed
+
+            q_approach = inverse_kinematics(robot, grasp.link, approach_pose)
+            if (q_approach is None) or any(pairwise_collision(robot, b) for b in obstacles):
+                continue
+            conf = BodyConf(robot, q_approach)
+            q_grasp = inverse_kinematics(robot, grasp.link, gripper_pose)
             if (q_grasp is None) or any(pairwise_collision(robot, b) for b in obstacles):
                 continue
             if teleport:
@@ -234,7 +275,9 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=1):
             return (conf, command)
             # TODO: holding collisions
         return None
-    return fn
+
+    # return pybullet_ik_fn
+    return ikfast_ik_fn
 
 def assign_fluent_state(fluents):
     obstacles = []

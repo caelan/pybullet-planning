@@ -11,7 +11,8 @@ import random
 KUKA_KR6R900_GROUPS = {
     'arm_joints': ['robot_joint_a1', 'robot_joint_a2', 'robot_joint_a3',
                    'robot_joint_a4', 'robot_joint_a5', 'robot_joint_a6'],
-    'tool_link': 'robot_tool0'
+    'tool_link': 'robot_tool0',
+    'ik_tool_link': 'robot_tool0'
 }
 
 BASE_LINK = 'robot_base_link'
@@ -87,22 +88,23 @@ def get_ik_generator(robot, ee_world_pose):
         yield [q for q in inverse_kinematics(target_ee_pose)
                if not violates_limits(robot, arm_joints, q)]
 
-# def sample_tool_ik(robot, arm, world_from_target, max_attempts=10, **kwargs):
-#
-#     world_from_tool = get_link_pose(robot, link_from_name(robot, PR2_TOOL_FRAMES[arm]))
-#     world_from_ik = get_link_pose(robot, link_from_name(robot, IK_LINK[arm]))
-#     tool_from_ik = multiply(invert(world_from_tool), world_from_ik)
-#     ik_pose = multiply(world_from_target, tool_from_ik)
-#
-#     generator = get_ik_generator(robot, arm, ik_pose, **kwargs)
-#     for _ in range(max_attempts):
-#         try:
-#             solutions = next(generator)
-#             if solutions:
-#                 return random.choice(solutions)
-#         except StopIteration:
-#             break
-#     return None
+def sample_tool_ik(robot, world_from_target, max_attempts=10, **kwargs):
+    world_from_tool = get_link_pose(robot, link_from_name(robot, KUKA_KR6R900_GROUPS['tool_link']))
+    world_from_ik = get_link_pose(robot, link_from_name(robot, KUKA_KR6R900_GROUPS['ik_tool_link']))
+
+    # tool from the bare flange (6th axis)
+    tool_from_ik = multiply(invert(world_from_tool), world_from_ik)
+    ik_pose = multiply(world_from_target, tool_from_ik)
+
+    generator = get_ik_generator(robot, ik_pose, **kwargs)
+    for _ in range(max_attempts):
+        try:
+            solutions = next(generator)
+            if solutions:
+                return random.choice(solutions)
+        except StopIteration:
+            break
+    return None
 
 #####################################
 

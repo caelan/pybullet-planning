@@ -360,10 +360,20 @@ def get_ik_fn(problem, teleport=False):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
     def fn(a, o, p, g, bq):
+        '''
+
+        :param a: robot
+        :param o: object o
+        :param p: object o's pose p
+        :param g: the pose of the object relative to the hand
+        :param bq:
+        :return:
+        '''
         gripper_pose = multiply(p.value, invert(g.value)) # w_f_g = w_f_o * (g_f_o)^-1
         approach_pose = multiply(g.approach, gripper_pose)
         link = get_gripper_link(robot, a)
         arm_joints = get_arm_joints(robot, a)
+
         def ik_fn(target_pose):
             try:
                 from .pr2_ik.ik import sample_tool_ik, get_torso_arm_joints
@@ -377,9 +387,11 @@ def get_ik_fn(problem, teleport=False):
                 if (movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
                     return None
             return get_joint_positions(robot, arm_joints)
+
         default_conf = arm_conf(a, g.carry)
         p.assign()
         bq.assign()
+
         # TODO: randomly sample initial position to make sampler?
         # TODO: perturb this randomly
         set_joint_positions(robot, arm_joints, default_conf)

@@ -1963,7 +1963,13 @@ def body_from_end_effector(end_effector_pose, grasp_pose):
 
 def end_effector_from_body(body_pose, grasp_pose):
     """
+    grasp_pose: the body's pose in gripper's frame
+
     world_from_child * (parent_from_child)^(-1) = world_from_parent
+    (parent: gripper, child: body to be grasped)
+
+    Pose_{world,gripper} = Pose_{world,block}*Pose_{block,gripper}
+                         = Pose_{world,block}*(Pose_{gripper,block})^{-1}
     """
     return multiply(body_pose, invert(grasp_pose))
 
