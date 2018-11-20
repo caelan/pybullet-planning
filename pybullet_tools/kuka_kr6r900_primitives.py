@@ -202,7 +202,7 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=5):
     sample_fn = get_sample_fn(robot, movable_joints)
 
     def ikfast_ik_fn(body, pose, grasp):
-        obstacles = [body] + fixed
+        obstacles = fixed #+[body]
         gripper_pose = end_effector_from_body(pose.pose, grasp.grasp_pose)
         approach_pose = approach_from_grasp(grasp.approach_pose, gripper_pose)
 
@@ -211,15 +211,18 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=5):
 
             # using ikfast here, see import
             q_approach = ikfast.sample_tool_ik(robot, approach_pose)
-
-            if (q_approach is None) or any(pairwise_collision(robot, b) for b in obstacles):
-                continue
-
             conf = BodyConf(robot, q_approach)
+
+            # if (q_approach is None) or any(pairwise_collision(robot, b) for b in obstacles):
+            #     print("collision in q_approach, q_approach len=%d"%len(q_approach))
+            #     continue
+
             q_grasp = ikfast.sample_tool_ik(robot, gripper_pose)
 
-            if (q_grasp is None) or any(pairwise_collision(robot, b) for b in obstacles):
-                continue
+            # if (q_grasp is None) or any(pairwise_collision(robot, b) for b in obstacles):
+            #     print("collision in q_grasp")
+            #     continue
+
             if teleport:
                 path = [q_approach, q_grasp]
             else:
@@ -227,12 +230,10 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=5):
                 #direction, _ = grasp.approach_pose
                 #path = workspace_trajectory(robot, grasp.link, point_from_pose(approach_pose), -direction,
                 #                                   quat_from_pose(approach_pose))
-                path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=obstacles, direct=True)
-                print(path)
+                path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=None, direct=False)
 
                 if path is None:
                     if DEBUG_FAILURE:
-                        print(path)
                         user_input('Approach motion failed')
                     continue
 

@@ -31,6 +31,7 @@ def plan(robot, block, fixed, teleport):
             print("grasp %d - ik for grasp failed!"%i)
             continue
         conf1, path2 = result1
+
         pose0.assign()
         result2 = free_motion_fn(conf0, conf1)
         if result2 is None:
@@ -48,7 +49,7 @@ def plan(robot, block, fixed, teleport):
     return None
 
 def test_ikfast_grasp_block(robot, block, fixed, process='grasp'):
-    grasp_gen = get_grasp_gen(robot, 'side')
+    grasp_gen = get_grasp_gen(robot, 'top')
 
     # ik_fn = get_ik_fn(robot, fixed=fixed, teleport=teleport)
 
@@ -75,6 +76,7 @@ def test_ikfast_grasp_block(robot, block, fixed, process='grasp'):
             solutions = next(gen)
             print("iter%d - sol number:%d" % (i, len(solutions)))
             for q in solutions:
+                print(q)
                 set_joint_positions(robot, arm_joints, q)
                 user_input('step?')
 
@@ -105,7 +107,7 @@ def test_ikfast(robot):
             set_joint_positions(robot, arm_joints, q)
             wait_for_interrupt()
 
-def main(display='execute'): # control | execute | step
+def main(display='step'): # control | execute | step
     connect(use_gui=True)
     disable_real_time()
 
@@ -115,27 +117,28 @@ def main(display='execute'): # control | execute | step
     floor = load_model('models/short_floor.urdf')
     block = load_model(BLOCK_URDF, fixed_base=False)
 
-    set_pose(block, Pose(Point(x=0.1, y=0.65, z=stable_z(block, floor)+0.5)))
+    set_pose(block, Pose(Point(x=0.55, y=0, z=stable_z(block, floor)+0)))
     set_default_camera()
     dump_world()
 
     from pybullet_tools.kuka_kr6r900_ik.ik import KUKA_KR6R900_GROUPS
 
     arm_joints = joints_from_names(robot, KUKA_KR6R900_GROUPS['arm_joints'])
-    arm_start = [0, -np.pi * (1/2), 0, 0, 0, 0]
+    arm_start = [0.08, -1.57, 1.74, 0.08, 0.17, -0.08]
+
     set_joint_positions(robot, arm_joints, arm_start)
 
     # test_ikfast(robot)
     # test_ikfast_grasp_block(robot, block, fixed=[floor], process='approach')
-    # test_ikfast_grasp_block(robot, block, fixed=[floor], 'grasp')
+    test_ikfast_grasp_block(robot, block, fixed=[floor], process='grasp')
 
     saved_world = WorldSaver()
 
-    command = plan(robot, block, fixed=[floor], teleport=False)
-    if command is None: #or (display is None):
-        print('Unable to find a plan!')
-        # return
-
+    # command = plan(robot, block, fixed=[floor], teleport=False)
+    # if command is None: #or (display is None):
+    #     print('Unable to find a plan!')
+    #     # return
+    #
     # saved_world.restore()
     # update_state()
     #

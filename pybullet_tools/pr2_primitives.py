@@ -362,14 +362,18 @@ def get_ik_fn(problem, teleport=False):
     def fn(a, o, p, g, bq):
         '''
 
-        :param a: robot
+        :param a: robot (arm)
         :param o: object o
         :param p: object o's pose p
-        :param g: the pose of the object relative to the hand
+        :param g: grasp pose, the pose of the object relative to the hand & approach pose
         :param bq:
         :return:
         '''
-        gripper_pose = multiply(p.value, invert(g.value)) # w_f_g = w_f_o * (g_f_o)^-1
+        # w_f_g = w_f_o * (g_f_o)^-1
+        # w: world, f: from, o: object
+        gripper_pose = multiply(p.value, invert(g.value))
+
+        # w_approach_translation * w_f_g
         approach_pose = multiply(g.approach, gripper_pose)
         link = get_gripper_link(robot, a)
         arm_joints = get_arm_joints(robot, a)

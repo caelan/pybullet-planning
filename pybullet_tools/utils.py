@@ -1745,6 +1745,8 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions)
 
     start_conf = get_joint_positions(body, joints)
+    print(start_conf)
+
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
     return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
