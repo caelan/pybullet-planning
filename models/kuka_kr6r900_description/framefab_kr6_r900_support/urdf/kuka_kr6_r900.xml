@@ -1,0 +1,6 @@
+<robot file="kuka_kr6_r900.dae">
+  <Manipulator name="kuka_kr6_r900">
+    <base>robot_base_link</base>
+    <effector>robot_tool0</effector>
+  </Manipulator>
+</robot>

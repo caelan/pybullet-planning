@@ -13,7 +13,7 @@ import fnmatch
 IKFAST = 'ikfast_kuka_kr6r900'
 
 ikfast_module = Extension(IKFAST,
-                          sources=['ikfast.cpp'])
+                          sources=['ikfast0x1000004a.Transform6D.0_1_2_3_4_5.cpp'])
 
 setup(name=IKFAST,
       version='1.0',
@@ -23,7 +23,7 @@ setup(name=IKFAST,
 build_lib_path = None
 
 for root, dirnames, filenames in os.walk(os.getcwd()):
-    if fnmatch.fnmatch(root, os.path.join(os.getcwd(),"*build","lib*")):
+    if fnmatch.fnmatch(root, os.path.join(os.getcwd(), "*build", "lib*")):
         build_lib_path = root
         break
 

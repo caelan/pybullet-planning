@@ -12,7 +12,7 @@
 /// See the License for the specific language governing permissions and
 /// limitations under the License.
 ///
-/// ikfast version 0x1000004a generated on 2018-03-20 13:36:59.301922
+/// ikfast version 0x1000004a generated on 2018-11-21 10:02:40.045769
 /// Generated using solver transform6d
 /// To compile with gcc:
 ///     gcc -lstdc++ ik.cpp
@@ -9922,7 +9922,6 @@ int main(int argc, char** argv)
 
 // start python bindings
 #include <Python.h>
-//python2.7/
 
 static PyObject *get_ik(PyObject *self, PyObject *args)
 {
