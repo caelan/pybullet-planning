@@ -10063,7 +10063,7 @@ PyInit_ikfast_kuka_kr6r900(void)
 #else // PY_MAJOR_VERSION < 3
 #define INITERROR return
 
-void
+PyMODINIT_FUNC
 initikfast_kuka_kr6r900(void)
 #endif
 {

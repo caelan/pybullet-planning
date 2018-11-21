@@ -23,7 +23,7 @@ setup(name=IKFAST,
 build_lib_path = None
 
 for root, dirnames, filenames in os.walk(os.getcwd()):
-    if fnmatch.fnmatch(root, os.path.join(os.getcwd(),"*build\lib*")):
+    if fnmatch.fnmatch(root, os.path.join(os.getcwd(),"*build","lib*")):
         build_lib_path = root
         break
 
