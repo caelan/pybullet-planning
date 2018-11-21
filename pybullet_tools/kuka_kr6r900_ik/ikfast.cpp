@@ -23,8 +23,8 @@
 using namespace ikfast;
 
 // check if the included ikfast version matches what this file was compiled with
-#define IKFAST_COMPILE_ASSERT(x) extern int __dummy[(int)x]
-IKFAST_COMPILE_ASSERT(IKFAST_VERSION==0x1000004a);
+//#define IKFAST_COMPILE_ASSERT(x) extern int __dummy[(int)x]
+//IKFAST_COMPILE_ASSERT(IKFAST_VERSION==0x1000004a);
 
 #include <cmath>
 #include <vector>
@@ -9921,7 +9921,8 @@ int main(int argc, char** argv)
 #endif
 
 // start python bindings
-#include "python2.7/Python.h"
+#include <Python.h>
+//python2.7/
 
 static PyObject *get_ik(PyObject *self, PyObject *args)
 {
@@ -10039,12 +10040,45 @@ static PyMethodDef ikfast_methods[] =
 {
     {"get_ik", get_ik, METH_VARARGS, "compute ik solutions using ikfast."},
     {"get_fk", get_fk, METH_VARARGS, "Compute fk solutions using ikfast."},
-    {NULL, NULL, 0, NULL} // Not sure why/if this is needed. It shows up in the examples though(something about Sentinel).
+    {NULL, NULL, 0, NULL}
+    // Not sure why/if this is needed. It shows up in the examples though(something about Sentinel).
 };
 
-PyMODINIT_FUNC initikfast_kuka_kr6r900(void)
+#if PY_MAJOR_VERSION >= 3
+
+static struct PyModuleDef ikfast_kuka_kr6r900_module = {
+    PyModuleDef_HEAD_INIT,
+    "ikfast_kuka_kr6r900",   /* name of module */
+    NULL, /* module documentation, may be NULL */
+    -1,       /* size of per-interpreter state of the module,
+                 or -1 if the module keeps state in global variables. */
+    ikfast_methods
+};
+
+#define INITERROR return NULL
+
+PyMODINIT_FUNC
+PyInit_ikfast_kuka_kr6r900(void)
+
+#else // PY_MAJOR_VERSION < 3
+#define INITERROR return
+
+void
+initikfast_kuka_kr6r900(void)
+#endif
 {
-    (void) Py_InitModule("ikfast_kuka_kr6r900", ikfast_methods);
+#if PY_MAJOR_VERSION >= 3
+    PyObject *module = PyModule_Create(&ikfast_kuka_kr6r900_module);
+#else
+    PyObject *module = Py_InitModule("ikfast_kuka_kr6r900", ikfast_methods);
+#endif
+
+if (module == NULL)
+    INITERROR;
+
+#if PY_MAJOR_VERSION >= 3
+    return module;
+#endif
 }
 
 // end python bindings
