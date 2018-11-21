@@ -3,7 +3,6 @@
 from __future__ import print_function
 
 import os
-import numpy as np
 from pybullet_tools.kuka_kr6r900_primitives import BodyPose, BodyConf, Command, get_grasp_gen, \
     get_ik_fn, get_free_motion_gen, get_holding_motion_gen
 

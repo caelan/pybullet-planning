@@ -1,8 +1,9 @@
-from pybullet_tools.kuka_kr6r900_ik.ikfast_kuka_kr6r900 import get_ik, get_fk
-
-from pybullet_tools.utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, Pose, multiply, elapsed_time, \
+# TODO: how can we make this local?
+from examples.pybullet.utils.pybullet_tools.utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, Pose, multiply, elapsed_time, \
     get_link_pose, link_from_name, joints_from_names, get_joint_positions, get_joint_limits, joint_from_name, invert, \
     get_joint_position, violates_limits, INF, get_joints
+
+from examples.pybullet.utils.pybullet_tools.kuka_kr6r900_ik.ikfast_kuka_kr6r900 import get_ik, get_fk
 
 import random
 import numpy as np
@@ -33,7 +34,6 @@ def get_base_pose(robot):
 
 def forward_kinematics(conf):
     # TODO: this should be linked to ikfast's get numOfJoint function.
-    print(conf)
     assert len(conf) == 6
 
     fk_fn = get_fk
@@ -64,6 +64,7 @@ def inverse_kinematics(pose):
     :param pose: end effector's pose
     :return:
     '''
+
     ik_fn = get_ik
 
     pos = point_from_pose(pose)
