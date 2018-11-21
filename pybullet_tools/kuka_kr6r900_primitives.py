@@ -6,20 +6,19 @@ from .utils import get_pose, set_pose, get_movable_joints, get_configuration, \
     enable_gravity, get_refine_fn, user_input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
     pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
-    step_simulation, refine_path, inverse_kinematics
+    step_simulation, refine_path, inverse_kinematics, plan_waypoints_joint_motion
 
 import pybullet_tools.kuka_kr6r900_ik.ik as ikfast
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
                                                  max_width=INF,  grasp_length=0),
-                     Pose(0.05*Point(z=1))),
-    'side': GraspInfo(lambda body: get_side_grasps(body, under=True, tool_pose=Pose(),
-                                                 max_width=INF,  grasp_length=0),
-                     Pose(0.05*Point(z=1)))
+                     Pose(0.1*Point(z=1)))
 }
 
 DEBUG_FAILURE = True
+ENABLE_SELF_COLLISION = False
+USE_IKFAST = True
 
 class BodyPose(object):
     def __init__(self, body, pose=None):
@@ -32,7 +31,6 @@ class BodyPose(object):
         return self.pose
     def __repr__(self):
         return 'p{}'.format(id(self) % 1000)
-
 
 class BodyGrasp(object):
     def __init__(self, body, grasp_pose, approach_pose, robot, link):
@@ -50,7 +48,6 @@ class BodyGrasp(object):
     def __repr__(self):
         return 'g{}'.format(id(self) % 1000)
 
-
 class BodyConf(object):
     def __init__(self, body, configuration=None, joints=None):
         if joints is None:
@@ -65,7 +62,6 @@ class BodyConf(object):
         return self.configuration
     def __repr__(self):
         return 'q{}'.format(id(self) % 1000)
-
 
 class BodyPath(object):
     def __init__(self, body, path, joints=None, attachments=[]):
@@ -85,6 +81,7 @@ class BodyPath(object):
             for grasp in self.attachments:
                 grasp.assign()
             yield i
+
     def control(self, real_time=False, dt=0):
         # TODO: just waypoints
         if real_time:
@@ -172,7 +169,6 @@ class Command(object):
     def __repr__(self):
         return 'c{}'.format(id(self) % 1000)
 
-
 def get_grasp_gen(robot, grasp_name):
     grasp_info = GRASP_INFO[grasp_name]
     end_effector_link = link_from_name(robot, ikfast.KUKA_KR6R900_GROUPS['tool_link'])
@@ -185,56 +181,56 @@ def get_grasp_gen(robot, grasp_name):
             yield (body_grasp,)
     return gen
 
-
-def get_stable_gen(fixed=[]): # TODO: continuous set of grasps
-    def gen(body, surface):
-        while True:
-            pose = sample_placement(body, surface)
-            if (pose is None) or any(pairwise_collision(body, b) for b in fixed):
-                continue
-            body_pose = BodyPose(body, pose)
-            yield (body_pose,)
-            # TODO: check collisions
-    return gen
-
 def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=5):
     movable_joints = get_movable_joints(robot)
     sample_fn = get_sample_fn(robot, movable_joints)
 
     def ikfast_ik_fn(body, pose, grasp):
-        obstacles = fixed #+[body]
+        '''
+        Generate robot's motion starts from approach to grasp.
+        :param body: the body being manipulated
+        :param pose: pose of the body
+        :param grasp: grasp to be planned
+        :return:
+        '''
+        # we cannot add block here unless we move the ee frame a bit forward
+        # to get around the collision caused by grasping
+        obstacles = fixed #+ [block]
         gripper_pose = end_effector_from_body(pose.pose, grasp.grasp_pose)
         approach_pose = approach_from_grasp(grasp.approach_pose, gripper_pose)
 
         for _ in range(num_attempts):
-            # set_joint_positions(robot, movable_joints, sample_fn()) # Random seed
 
-            # using ikfast here, see import
             q_approach = ikfast.sample_tool_ik(robot, approach_pose)
             conf = BodyConf(robot, q_approach)
 
-            # if (q_approach is None) or any(pairwise_collision(robot, b) for b in obstacles):
-            #     print("collision in q_approach, q_approach len=%d"%len(q_approach))
-            #     continue
+            if (q_approach is None) or any(pairwise_collision(robot, b) for b in obstacles):
+                print("collision in q_approach or no sol!")
+                continue
 
-            q_grasp = ikfast.sample_tool_ik(robot, gripper_pose)
+            q_grasp = ikfast.sample_tool_ik(robot, gripper_pose, prev_conf=q_approach)
 
-            # if (q_grasp is None) or any(pairwise_collision(robot, b) for b in obstacles):
-            #     print("collision in q_grasp")
-            #     continue
+            if (q_grasp is None) or any(pairwise_collision(robot, b) for b in obstacles):
+                print("collision in q_grasp or no sol!")
+                continue
 
             if teleport:
                 path = [q_approach, q_grasp]
             else:
                 conf.assign()
+
                 #direction, _ = grasp.approach_pose
                 #path = workspace_trajectory(robot, grasp.link, point_from_pose(approach_pose), -direction,
                 #                                   quat_from_pose(approach_pose))
-                path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=None, direct=False)
+
+                # path = plan_waypoints_joint_motion(robot, conf.joints, [q_grasp],
+                #                                    obstacles=obstacles, self_collisions=ENABLE_SELF_COLLISION)
+                path = plan_joint_motion(robot, conf.joints, q_grasp,
+                                         obstacles=obstacles, self_collisions=ENABLE_SELF_COLLISION)
 
                 if path is None:
                     if DEBUG_FAILURE:
-                        user_input('Approach motion failed')
+                        user_input('ikfast failed to find a collision-free sol.')
                     continue
 
             command = Command([BodyPath(robot, path),
@@ -245,17 +241,19 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=5):
         return None
 
     def pybullet_ik_fn(body, pose, grasp):
+        obstacles = fixed #+ [body]
 
-        obstacles = [body] + fixed
         gripper_pose = end_effector_from_body(pose.pose, grasp.grasp_pose)
         approach_pose = approach_from_grasp(grasp.approach_pose, gripper_pose)
         for _ in range(num_attempts):
             set_joint_positions(robot, movable_joints, sample_fn()) # Random seed
 
+            # TODO: multiple attempts?
             q_approach = inverse_kinematics(robot, grasp.link, approach_pose)
             if (q_approach is None) or any(pairwise_collision(robot, b) for b in obstacles):
                 continue
             conf = BodyConf(robot, q_approach)
+
             q_grasp = inverse_kinematics(robot, grasp.link, gripper_pose)
             if (q_grasp is None) or any(pairwise_collision(robot, b) for b in obstacles):
                 continue
@@ -266,9 +264,10 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=5):
                 #direction, _ = grasp.approach_pose
                 #path = workspace_trajectory(robot, grasp.link, point_from_pose(approach_pose), -direction,
                 #                                   quat_from_pose(approach_pose))
-                path = plan_joint_motion(robot, conf.joints, q_grasp, obstacles=obstacles, direct=True)
+                path = plan_joint_motion(robot, conf.joints, q_grasp,
+                                         obstacles=obstacles, self_collisions=ENABLE_SELF_COLLISION)
                 if path is None:
-                    if DEBUG_FAILURE: user_input('Approach motion failed')
+                    if DEBUG_FAILURE: user_input('pybullet native ik failed to find a collision-free sol.')
                     continue
             command = Command([BodyPath(robot, path),
                                Attach(body, robot, grasp.link),
@@ -277,8 +276,12 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=5):
             # TODO: holding collisions
         return None
 
-    # return pybullet_ik_fn
-    return ikfast_ik_fn
+    if USE_IKFAST == False:
+        print("pybullet ik used.")
+        return pybullet_ik_fn
+    else:
+        print("ikfast ik used.")
+        return ikfast_ik_fn
 
 def assign_fluent_state(fluents):
     obstacles = []
@@ -300,7 +303,8 @@ def get_free_motion_gen(robot, fixed=[], teleport=False):
         else:
             conf1.assign()
             obstacles = fixed + assign_fluent_state(fluents)
-            path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=obstacles)
+            path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=obstacles,
+                                     self_collisions=ENABLE_SELF_COLLISION)
             if path is None:
                 if DEBUG_FAILURE: user_input('Free motion failed')
                 return None
@@ -318,7 +322,8 @@ def get_holding_motion_gen(robot, fixed=[], teleport=False):
             conf1.assign()
             obstacles = fixed + assign_fluent_state(fluents)
             path = plan_joint_motion(robot, conf2.joints, conf2.configuration,
-                                     obstacles=obstacles, attachments=[grasp.attachment()])
+                                     obstacles=obstacles, attachments=[grasp.attachment()],
+                                     self_collisions=ENABLE_SELF_COLLISION)
             if path is None:
                 if DEBUG_FAILURE: user_input('Holding motion failed')
                 return None

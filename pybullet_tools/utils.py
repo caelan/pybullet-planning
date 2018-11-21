@@ -1789,6 +1789,7 @@ def check_initial_end(start_conf, end_conf, collision_fn):
 def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
                       self_collisions=True, disabled_collisions=set(),
                       weights=None, resolutions=None, max_distance=MAX_DISTANCE, custom_limits={}, **kwargs):
+
     assert len(joints) == len(end_conf)
     sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
     distance_fn = get_distance_fn(body, joints, weights=weights)
@@ -1797,7 +1798,6 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
                                     custom_limits=custom_limits, max_distance=max_distance)
 
     start_conf = get_joint_positions(body, joints)
-    print(start_conf)
 
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None

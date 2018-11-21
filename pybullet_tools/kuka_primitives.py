@@ -1,4 +1,5 @@
 import time
+# dump_body(robot)
 
 from .pr2_utils import get_top_grasps
 from .utils import get_pose, set_pose, get_movable_joints, get_configuration, \

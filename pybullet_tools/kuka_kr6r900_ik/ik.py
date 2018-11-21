@@ -5,14 +5,15 @@ from pybullet_tools.utils import matrix_from_quat, point_from_pose, quat_from_po
     get_joint_position, violates_limits, INF, get_joints
 
 import random
+import numpy as np
 
 # the corresponding frame name can be found in
 # models/kuka_kr6r900_description/framefab_kr6_r900_support/urdf/kuka_kr6_r900.urdf
 KUKA_KR6R900_GROUPS = {
     'arm_joints': ['robot_joint_a1', 'robot_joint_a2', 'robot_joint_a3',
                    'robot_joint_a4', 'robot_joint_a5', 'robot_joint_a6'],
-    'tool_link': 'robot_tool0',
-    'ik_tool_link': 'robot_tool0'
+    'ik_tool_link': 'robot_tool0',
+    'tool_link': 'eef_tcp_frame' #robot_tool0 | eef_tcp_frame
 }
 
 BASE_LINK = 'robot_base_link'
@@ -80,30 +81,34 @@ def inverse_kinematics(pose):
 #           if not violates_limits(robot, arm_joints, q)]
 
 def get_ik_generator(robot, ee_world_pose):
-    target_ee_pose = multiply(invert(get_base_pose(robot)), ee_world_pose)
+    # target_ee_pose = multiply(invert(get_base_pose(robot)), ee_world_pose)
+    target_ee_pose = ee_world_pose
 
-    # get joint limits
-    arm_joints = joints_from_names(robot, KUKA_KR6R900_GROUPS['arm_joints'])
-    while True:
-        yield [q for q in inverse_kinematics(target_ee_pose)
-               if not violates_limits(robot, arm_joints, q)]
-
-def sample_tool_ik(robot, world_from_target, max_attempts=10, **kwargs):
     world_from_tool = get_link_pose(robot, link_from_name(robot, KUKA_KR6R900_GROUPS['tool_link']))
     world_from_ik = get_link_pose(robot, link_from_name(robot, KUKA_KR6R900_GROUPS['ik_tool_link']))
 
     # tool from the bare flange (6th axis)
     tool_from_ik = multiply(invert(world_from_tool), world_from_ik)
-    ik_pose = multiply(world_from_target, tool_from_ik)
+    ik_pose = multiply(target_ee_pose, tool_from_ik)
 
-    generator = get_ik_generator(robot, ik_pose, **kwargs)
-    for _ in range(max_attempts):
-        try:
-            solutions = next(generator)
-            if solutions:
-                return random.choice(solutions)
-        except StopIteration:
-            break
+    # get joint limits
+    arm_joints = joints_from_names(robot, KUKA_KR6R900_GROUPS['arm_joints'])
+    while True:
+        yield [q for q in inverse_kinematics(ik_pose)
+               if not violates_limits(robot, arm_joints, q)]
+
+def sample_tool_ik(robot, world_from_target, prev_conf=None, **kwargs):
+
+    generator = get_ik_generator(robot, world_from_target, **kwargs)
+
+    solutions = next(generator)
+    if solutions:
+        if prev_conf == None:
+            return random.choice(solutions)
+        else:
+            np_prev_jt = np.array(prev_conf)
+            return min(solutions, key=lambda jt : np.linalg.norm(np.array(jt)-np_prev_jt))
+
     return None
 
 #####################################
