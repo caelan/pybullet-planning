@@ -36,6 +36,8 @@ def test_drake_base_motion(pr2, base_start, base_goal):
     disabled_collisions = get_disabled_collisions(pr2)
     base_joints = [joint_from_name(pr2, name) for name in PR2_GROUPS['base']]
     set_joint_positions(pr2, base_joints, base_start)
+    base_joints = base_joints[:2]
+    base_goal = base_goal[:len(base_joints)]
     user_input('Plan Base?')
     base_path = plan_joint_motion(pr2, base_joints, base_goal, disabled_collisions=disabled_collisions)
     if base_path is None:
@@ -46,6 +48,8 @@ def test_drake_base_motion(pr2, base_start, base_goal):
         set_joint_positions(pr2, base_joints, bq)
         user_input('Continue?')
         # time.sleep(0.05)
+
+#####################################
 
 def test_arm_motion(pr2, left_joints, arm_goal):
     disabled_collisions = get_disabled_collisions(pr2)
@@ -70,6 +74,8 @@ def test_arm_control(pr2, left_joints, arm_start):
             p.stepSimulation()
         #time.sleep(0.01)
 
+#####################################
+
 def test_ikfast(pr2):
     from pybullet_tools.pr2_ik.ik import forward_kinematics, inverse_kinematics, get_tool_pose, get_ik_generator
     left_joints = joints_from_names(pr2, PR2_GROUPS['left_arm'])
@@ -92,7 +98,7 @@ def test_ikfast(pr2):
 
 #####################################
 
-def main(use_pr2_drake=False):
+def main(use_pr2_drake=True):
     connect(use_gui=True)
     add_data_path()
 
@@ -102,7 +108,7 @@ def main(use_pr2_drake=False):
     table = p.loadURDF(table_path, 0, 0, 0, 0, 0, 0.707107, 0.707107)
     # table_square/table_square.urdf, cube.urdf, block.urdf, door.urdf
 
-    pr2_urdf = PR2_URDF if use_pr2_drake else DRAKE_PR2_URDF
+    pr2_urdf = DRAKE_PR2_URDF if use_pr2_drake else PR2_URDF
     with HideOutput():
         pr2 = load_model(pr2_urdf, fixed_base=True) # TODO: suppress warnings?
     dump_body(pr2)
