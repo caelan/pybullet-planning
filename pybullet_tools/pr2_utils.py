@@ -197,17 +197,18 @@ def get_gripper_link(robot, arm):
 #    #pose = get_link_pose(robot, link_from_name(robot, LEFT_TOOL_NAME))
 #    return pose
 
-def open_arm(robot, arm):  # TODO: these are mirrored on the pr2
-    gripper = gripper_from_arm(arm)
-    for name in PR2_GROUPS[gripper]:
-        joint = joint_from_name(robot, name)
+
+def get_gripper_joints(robot, arm):
+    return get_group_joints(robot, gripper_from_arm(arm))
+
+
+def open_arm(robot, arm): # These are mirrored on the pr2
+    for joint in get_gripper_joints(robot, arm):
         set_joint_position(robot, joint, get_max_limit(robot, joint))
 
 
 def close_arm(robot, arm):
-    gripper = gripper_from_arm(arm)
-    for name in PR2_GROUPS[gripper]:
-        joint = joint_from_name(robot, name)
+    for joint in get_gripper_joints(robot, arm):
         set_joint_position(robot, joint, get_min_limit(robot, joint))
 
 #####################################
