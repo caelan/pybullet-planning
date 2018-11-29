@@ -15,7 +15,7 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, \
     uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, remove_fixed_constraint, \
     enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, get_distance, \
     get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, \
-    add_segments, set_base_values, get_max_limit, link_from_name, BodySaver, get_aabb
+    add_segments, set_base_values, get_max_limit, link_from_name, BodySaver, get_aabb, plan_direct_joint_motion
 from .pr2_problems import get_fixed_bodies
 
 BASE_EXTENT = 3.5 # 2.5
@@ -394,10 +394,10 @@ def get_ik_fn(problem, teleport=False):
             path = [default_conf, approach_conf, grasp_conf]
         else:
             #set_joint_positions(robot, arm_joints, approach_conf)
-            control_path = plan_joint_motion(robot, arm_joints, approach_conf,
-                                             obstacles=fixed, self_collisions=False, direct=True)
+            control_path = plan_direct_joint_motion(robot, arm_joints, approach_conf,
+                                             obstacles=fixed, self_collisions=False)
             set_joint_positions(robot, arm_joints, approach_conf)
-            retreat_path = plan_joint_motion(robot, arm_joints, default_conf,
+            retreat_path = plan_direct_joint_motion(robot, arm_joints, default_conf,
                                              obstacles=fixed, self_collisions=False)
             path = retreat_path[::-1] + control_path[::-1]
         mt = create_trajectory(robot, arm_joints, path)
@@ -475,8 +475,8 @@ def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
                 if teleport:
                     path = [default_conf, approach_conf, grasp_conf]
                 else:
-                    control_path = plan_joint_motion(robot, joints, approach_conf,
-                                                     obstacles=fixed_wo_button, self_collisions=False, direct=True)
+                    control_path = plan_direct_joint_motion(robot, joints, approach_conf,
+                                                     obstacles=fixed_wo_button, self_collisions=False)
                     if control_path is None: continue
                     set_joint_positions(robot, joints, approach_conf)
                     retreat_path = plan_joint_motion(robot, joints, default_conf,
