@@ -1755,12 +1755,16 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         return any(pairwise_collision(*pair, **kwargs) for pair in check_body_pairs)
     return collision_fn
 
-def plan_waypoints_joint_motion(body, joints, waypoints, obstacles=None, attachments=[],
+def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstacles=None, attachments=[],
                       self_collisions=True, disabled_collisions=set(), custom_limits={}, max_distance=MAX_DISTANCE):
     extend_fn = get_extend_fn(body, joints)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, max_distance=max_distance)
-    start_conf = get_joint_positions(body, joints)
+    if start_conf is None:
+        start_conf = get_joint_positions(body, joints)
+    else:
+        assert len(start_conf) == len(joints)
+
     for i, waypoint in enumerate([start_conf] + list(waypoints)):
         if collision_fn(waypoint):
             #print("Warning: waypoint configuration {}/{} is in collision".format(i, len(waypoints)))
