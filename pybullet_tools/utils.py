@@ -483,6 +483,8 @@ def restore_bullet(filename):
 
 # Geometry
 
+#Pose = namedtuple('Pose', ['position', 'orientation'])
+
 def Point(x=0., y=0., z=0.):
     return np.array([x, y, z])
 
@@ -886,7 +888,7 @@ def wrap_positions(body, joints, positions):
     return [wrap_position(body, joint, position)
             for joint, position in zip(joints, positions)]
 
-def get_custom_limits(body, joints, custom_limits, circular_limits=UNBOUNDED_LIMITS):
+def get_custom_limits(body, joints, custom_limits={}, circular_limits=UNBOUNDED_LIMITS):
     joint_limits = []
     for joint in joints:
         if joint in custom_limits:
@@ -1509,8 +1511,10 @@ def set_color(body, color, link=BASE_LINK, shape_index=-1):
 
 # Bounding box
 
+AABB = namedtuple('AABB', ['lower', 'upper'])
+
 def aabb_from_points(points):
-    return np.min(points, axis=0), np.max(points, axis=0)
+    return AABB(np.min(points, axis=0), np.max(points, axis=0))
 
 def aabb_union(aabbs):
     return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
@@ -1800,6 +1804,30 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
     return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
+
+def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kwargs):
+    from motion_planners.lazy_prm import lazy_prm
+    path, samples, edges, colliding_vertices, colliding_edges = lazy_prm(
+        start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kwargs)
+    if path is None:
+        return path
+
+    #lower, upper = get_custom_limits(body, joints, circular_limits=CIRCULAR_LIMITS)
+    def draw_fn(q): # TODO: draw edges instead of vertices
+        return np.append(q[:2], [1e-3])
+        #return np.array([1, 1, 0.25])*(q + np.array([0., 0., np.pi]))
+    handles = []
+    for q1, q2 in zip(path, path[1:]):
+        handles.append(add_line(draw_fn(q1), draw_fn(q2), color=(0, 1, 0)))
+    for i1, i2 in edges:
+        color = (0, 0, 1)
+        if any(colliding_vertices.get(i, False) for i in (i1, i2)) or colliding_vertices.get((i1, i2), False):
+            color = (1, 0, 0)
+        elif not colliding_vertices.get((i1, i2), True):
+            color = (0, 0, 0)
+        handles.append(add_line(draw_fn(samples[i1]), draw_fn(samples[i2]), color=color))
+    wait_for_interrupt()
+    return path
 
 #####################################
 
