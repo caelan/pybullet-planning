@@ -483,6 +483,8 @@ def restore_bullet(filename):
 
 # Geometry
 
+#Pose = namedtuple('Pose', ['position', 'orientation'])
+
 def Point(x=0., y=0., z=0.):
     return np.array([x, y, z])
 
@@ -1509,8 +1511,10 @@ def set_color(body, color, link=BASE_LINK, shape_index=-1):
 
 # Bounding box
 
+AABB = namedtuple('AABB', ['lower', 'upper'])
+
 def aabb_from_points(points):
-    return np.min(points, axis=0), np.max(points, axis=0)
+    return AABB(np.min(points, axis=0), np.max(points, axis=0))
 
 def aabb_union(aabbs):
     return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
