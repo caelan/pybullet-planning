@@ -17,6 +17,7 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, \
     get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, \
     add_segments, set_base_values, get_max_limit, link_from_name, BodySaver, get_aabb, plan_direct_joint_motion
 from .pr2_problems import get_fixed_bodies
+from .ik.pr2.ik import sample_tool_ik, get_torso_arm_joints, is_ik_compiled
 
 BASE_EXTENT = 3.5 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
@@ -356,39 +357,43 @@ def get_ir_sampler(problem, learned=True):
         return (bq,)
     return sampler
 
+def pr2_inverse_kinematics(robot, arm, gripper_pose):
+    link = get_gripper_link(robot, arm)
+    arm_joints = get_arm_joints(robot, arm)
+    try:
+        # TODO: switch to is_ik_compiled
+        ik_joints = get_torso_arm_joints(robot, arm)
+        torso_arm_conf = sample_tool_ik(robot, arm, gripper_pose, torso_limits=None)
+        if torso_arm_conf is None:
+            return None
+        set_joint_positions(robot, ik_joints, torso_arm_conf)
+        return get_joint_positions(robot, arm_joints)
+    except ValueError: # ImportError:
+        return sub_inverse_kinematics(robot, arm_joints[0], link, gripper_pose)
+
 def get_ik_fn(problem, teleport=False):
     robot = problem.robot
     fixed = get_fixed_bodies(problem)
-    def fn(a, o, p, g, bq):
-        gripper_pose = multiply(p.value, invert(g.value)) # w_f_g = w_f_o * (g_f_o)^-1
-        approach_pose = multiply(g.approach, gripper_pose)
-        link = get_gripper_link(robot, a)
-        arm_joints = get_arm_joints(robot, a)
-        def ik_fn(target_pose):
-            try:
-                # TODO: switch to is_ik_compiled
-                from .pr2_ik.ik import sample_tool_ik, get_torso_arm_joints
-                joints = get_torso_arm_joints(robot, a)
-                torso_arm_conf = sample_tool_ik(robot, a, target_pose, torso_limits=None)
-                if torso_arm_conf is None:
-                    return None
-                set_joint_positions(robot, joints, torso_arm_conf)
-            except ImportError:
-                movable_conf = sub_inverse_kinematics(robot, arm_joints[0], link, target_pose)
-                if (movable_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
-                    return None
-            return get_joint_positions(robot, arm_joints)
-        default_conf = arm_conf(a, g.carry)
-        p.assign()
-        bq.assign()
+    if is_ik_compiled():
+        print('Using ikfast for inverse kinematics')
+    else:
+        print('Using pybullet for inverse kinematics')
+    def fn(arm, obj, pose, grasp, base_conf):
+        gripper_pose = multiply(pose.value, invert(grasp.value)) # w_f_g = w_f_o * (g_f_o)^-1
+        approach_pose = multiply(grasp.approach, gripper_pose)
+        arm_joints = get_arm_joints(robot, arm)
+
+        default_conf = arm_conf(arm, grasp.carry)
+        pose.assign()
+        base_conf.assign()
         # TODO: randomly sample initial position to make sampler?
         # TODO: perturb this randomly
         set_joint_positions(robot, arm_joints, default_conf)
-        approach_conf = ik_fn(approach_pose)
-        if approach_conf is None:
+        approach_conf = pr2_inverse_kinematics(robot, arm, approach_pose)
+        if (approach_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
             return None
-        grasp_conf = ik_fn(gripper_pose)
-        if grasp_conf is None:
+        grasp_conf = pr2_inverse_kinematics(robot, arm, gripper_pose)
+        if (grasp_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
             return None
         if teleport:
             path = [default_conf, approach_conf, grasp_conf]

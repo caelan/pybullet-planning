@@ -1,11 +1,9 @@
-from ..utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, Pose, multiply, elapsed_time, \
-    get_link_pose, link_from_name, joints_from_names, get_joint_positions, get_joint_limits, joint_from_name, invert, \
-    get_joint_position, violates_limits, INF, get_joints
-
-from .ikfast_kuka_kr6r900 import get_ik, get_fk
-
 import random
 import numpy as np
+
+from .ikfast_kuka_kr6r900 import get_ik, get_fk
+from ...utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, multiply, get_link_pose, \
+    link_from_name, joints_from_names, get_joint_positions, invert, violates_limits, HideOutput
 
 # the corresponding frame name can be found in
 # models/kuka_kr6r900_description/framefab_kr6_r900_support/urdf/kuka_kr6_r900.urdf
@@ -17,14 +15,6 @@ KUKA_KR6R900_GROUPS = {
 }
 
 BASE_LINK = 'robot_base_link'
-
-def or_from_pyb_quat(quat):
-    x, y, z, w = quat
-    return [w, x, y, z]
-
-def pyb_from_or_quat(quat):
-    w, x, y, z = quat
-    return [x, y, z, w]
 
 def get_base_pose(robot):
     return get_link_pose(robot, link_from_name(robot, BASE_LINK))
@@ -73,14 +63,7 @@ def inverse_kinematics(pose):
         return []
     return solutions
 
-#def sample_ik(robot, arm, target_pose, torso_limits, upper_limits):
-#    arm_joints = get_arm_joints(robot, arm)
-#    torso = random.uniform(*torso_limits)
-#    upper = random.uniform(*upper_limits)
-#    return [q for q in inverse_kinematics(arm, target_pose, torso, upper)
-#           if not violates_limits(robot, arm_joints, q)]
-
-def get_ik_generator(robot, ee_world_pose):
+def get_ik_generator(robot, ee_world_pose, **kwargs):
     # target_ee_pose = multiply(invert(get_base_pose(robot)), ee_world_pose)
     target_ee_pose = ee_world_pose
 
@@ -98,28 +81,13 @@ def get_ik_generator(robot, ee_world_pose):
                if not violates_limits(robot, arm_joints, q)]
 
 def sample_tool_ik(robot, world_from_target, prev_conf=None, **kwargs):
-
+    # TODO: search over neighborhood of sampled joints when prev_conf != None
     generator = get_ik_generator(robot, world_from_target, **kwargs)
-
     solutions = next(generator)
     if solutions:
-        if prev_conf == None:
+        if prev_conf is None:
             return random.choice(solutions)
         else:
             np_prev_jt = np.array(prev_conf)
-            return min(solutions, key=lambda jt : np.linalg.norm(np.array(jt)-np_prev_jt))
-
+            return min(solutions, key=lambda jt: np.linalg.norm(np.array(jt) - np_prev_jt))
     return None
-
-#####################################
-
-# def accelerate_list_generator(generator, max_attempts=1, max_time=np.inf):
-#     while True:
-#         start_time = time.time()
-#         for i in range(max_attempts):
-#             if max_time <= elapsed_time(start_time):
-#                 break
-#             sequence = next(generator)
-#             if sequence:
-#                 yield sequence
-#                 break

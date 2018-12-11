@@ -1,7 +1,7 @@
-from pybullet_tools.utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, Pose, multiply, elapsed_time, \
+from ...utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, multiply, \
     get_link_pose, link_from_name, joints_from_names, get_joint_positions, get_joint_limits, joint_from_name, invert, \
     get_joint_position, violates_limits
-from pybullet_tools.pr2_utils import PR2_GROUPS, PR2_TOOL_FRAMES, arm_from_arm
+from ...pr2_utils import PR2_GROUPS, PR2_TOOL_FRAMES, arm_from_arm
 
 import random
 
@@ -22,17 +22,6 @@ UPPER_JOINT = {
 # upper = l_upper_arm_roll_joint | r_upper_arm_roll_joint
 # torso = torso_lift_joint
 
-#def get_prefix(arm):
-#    return arm[0]
-
-def or_from_pyb_quat(quat):
-    x, y, z, w = quat
-    return [w, x, y, z]
-
-def pyb_from_or_quat(quat):
-    w, x, y, z = quat
-    return [x, y, z, w]
-
 def get_base_pose(robot):
     return get_link_pose(robot, link_from_name(robot, BASE_LINK))
 
@@ -42,8 +31,8 @@ def get_torso_arm_joints(robot, arm):
 #####################################
 
 def forward_kinematics(arm, conf):
-    from pybullet_tools.pr2_ik.ikLeft import leftFK
-    from pybullet_tools.pr2_ik.ikRight import rightFK
+    from .ikLeft import leftFK
+    from .ikRight import rightFK
     arm_fk = {
         'left': leftFK,
         'right': rightFK,
@@ -67,15 +56,15 @@ def get_tool_pose(robot, arm):
 
 def is_ik_compiled():
     try:
-        from pybullet_tools.pr2_ik.ikLeft import leftIK
-        from pybullet_tools.pr2_ik.ikRight import rightIK
+        from .ikLeft import leftIK
+        from .ikRight import rightIK
         return True
     except ImportError:
         return False
 
 def inverse_kinematics(arm, pose, torso, upper):
-    from pybullet_tools.pr2_ik.ikLeft import leftIK
-    from pybullet_tools.pr2_ik.ikRight import rightIK
+    from .ikLeft import leftIK
+    from .ikRight import rightIK
     arm_ik = {
         'left': leftIK,
         'right': rightIK,
@@ -88,25 +77,18 @@ def inverse_kinematics(arm, pose, torso, upper):
         return []
     return solutions
 
-def get_limits(robot, joint, limits):
+def get_ik_limits(robot, joint, limits=False):
     if limits is False:
         return get_joint_limits(robot, joint)
     elif limits is None:
-        torso_value = get_joint_position(robot, joint)
-        return torso_value, torso_value
+        value = get_joint_position(robot, joint)
+        return value, value
     return limits
-
-#def sample_ik(robot, arm, target_pose, torso_limits, upper_limits):
-#    arm_joints = get_arm_joints(robot, arm)
-#    torso = random.uniform(*torso_limits)
-#    upper = random.uniform(*upper_limits)
-#    return [q for q in inverse_kinematics(arm, target_pose, torso, upper)
-#           if not violates_limits(robot, arm_joints, q)]
 
 def get_ik_generator(robot, arm, world_pose, torso_limits=False, upper_limits=False):
     target_pose = multiply(invert(get_base_pose(robot)), world_pose)
-    torso_limits = get_limits(robot, joint_from_name(robot, TORSO_JOINT), torso_limits)
-    upper_limits = get_limits(robot, joint_from_name(robot, UPPER_JOINT[arm]), upper_limits)
+    torso_limits = get_ik_limits(robot, joint_from_name(robot, TORSO_JOINT), torso_limits)
+    upper_limits = get_ik_limits(robot, joint_from_name(robot, UPPER_JOINT[arm]), upper_limits)
     arm_joints = get_torso_arm_joints(robot, arm)
     while True:
         torso = random.uniform(*torso_limits)
@@ -128,16 +110,3 @@ def sample_tool_ik(robot, arm, world_from_target, max_attempts=10, **kwargs):
         except StopIteration:
             break
     return None
-
-#####################################
-
-# def accelerate_list_generator(generator, max_attempts=1, max_time=np.inf):
-#     while True:
-#         start_time = time.time()
-#         for i in range(max_attempts):
-#             if max_time <= elapsed_time(start_time):
-#                 break
-#             sequence = next(generator)
-#             if sequence:
-#                 yield sequence
-#                 break
