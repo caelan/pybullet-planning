@@ -1,7 +1,6 @@
 import random
 
-from ..utils import get_ik_limits
-from ..utils import compute_forward_kinematics, compute_inverse_kinematics, select_solution
+from ..utils import get_ik_limits, compute_forward_kinematics, compute_inverse_kinematics, select_solution
 from ...pr2_utils import PR2_TOOL_FRAMES, get_torso_arm_joints
 from ...utils import multiply, get_link_pose, link_from_name, get_joint_positions, \
     joint_from_name, invert, violates_limits
@@ -47,16 +46,14 @@ def get_ik_generator(robot, arm, ik_pose, torso_limits=False, upper_limits=False
     from .ikLeft import leftIK
     from .ikRight import rightIK
     arm_ik = {'left': leftIK, 'right': rightIK}
-
     world_from_base = get_link_pose(robot, link_from_name(robot, BASE_FRAME))
     base_from_ik = multiply(invert(world_from_base), ik_pose)
-    torso_limits = get_ik_limits(robot, joint_from_name(robot, TORSO_JOINT), torso_limits)
-    upper_limits = get_ik_limits(robot, joint_from_name(robot, UPPER_JOINT[arm]), upper_limits)
+    sampled_limits = [get_ik_limits(robot, joint_from_name(robot, name), limits) for name, limits in
+                      [(TORSO_JOINT, torso_limits), (UPPER_JOINT[arm], upper_limits)]]
     arm_joints = get_torso_arm_joints(robot, arm)
     while True:
-        torso = random.uniform(*torso_limits)
-        upper = random.uniform(*upper_limits)
-        confs = compute_inverse_kinematics(arm_ik[arm], base_from_ik, [torso, upper])
+        sampled_values = [random.uniform(*limits) for limits in sampled_limits]
+        confs = compute_inverse_kinematics(arm_ik[arm], base_from_ik, sampled_values)
         yield [q for q in confs if not violates_limits(robot, arm_joints, q)]
 
 def get_tool_from_ik(robot, arm):
