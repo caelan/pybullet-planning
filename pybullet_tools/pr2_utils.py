@@ -8,7 +8,7 @@ from itertools import combinations
 import numpy as np
 
 from .pr2_never_collisions import NEVER_COLLISIONS
-from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, \
+from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, joints_from_names, \
     set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, \
     unit_pose, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
@@ -176,6 +176,10 @@ def set_group_conf(robot, group, positions):
 
 def get_arm_joints(robot, arm):
     return get_group_joints(robot, arm_from_arm(arm))
+
+
+def get_torso_arm_joints(robot, arm):
+    return joints_from_names(robot, PR2_GROUPS['torso'] + PR2_GROUPS[arm_from_arm(arm)])
 
 
 #def get_arm_conf(robot, arm):
