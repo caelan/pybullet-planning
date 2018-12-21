@@ -5,12 +5,12 @@ import os
 import pickle
 import platform
 import pybullet as p
-import numpy as np
 import sys
 import time
-
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
+
+import numpy as np
 
 from .transformations import quaternion_from_matrix, quaternion_slerp, unit_vector
 
@@ -85,6 +85,13 @@ def ensure_dir(f):
     d = os.path.dirname(f)
     if not os.path.exists(d):
         os.makedirs(d)
+
+def safe_zip(sequence1, sequence2):
+    assert len(sequence1) == len(sequence2)
+    return zip(sequence1, sequence2)
+
+def clip(value, min_value=-INF, max_value=+INF):
+    return min(max(min_value, value), max_value)
 
 #####################################
 
@@ -226,9 +233,9 @@ BODIES = defaultdict(dict)
 
 URDFInfo = namedtuple('URDFInfo', ['name', 'path'])
 
-def load_pybullet(filename, fixed_base=False):
+def load_pybullet(filename, fixed_base=False, scale=1.):
     # fixed_base=False implies infinite base mass
-    body = p.loadURDF(filename, useFixedBase=fixed_base, physicsClientId=CLIENT)
+    body = p.loadURDF(filename, useFixedBase=fixed_base, globalScaling=scale, physicsClientId=CLIENT)
     BODIES[CLIENT][body] = URDFInfo(None, filename)
     return body
 
@@ -242,13 +249,14 @@ def get_model_path(rel_path): # TODO: add to search path
     directory = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(directory, '..', rel_path)
 
-def load_model(rel_path, pose=None, fixed_base=True):
+def load_model(rel_path, pose=None, fixed_base=True, scale=1.):
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
     abs_path = get_model_path(rel_path)
     flags = 0 # by default, Bullet disables self-collision
     add_data_path()
     if abs_path.endswith('.urdf'):
-        body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags, physicsClientId=CLIENT)
+        body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags,
+                          globalScaling=scale, physicsClientId=CLIENT)
     elif abs_path.endswith('.sdf'):
         body = p.loadSDF(abs_path, physicsClientId=CLIENT)
     elif abs_path.endswith('.xml'):
@@ -397,7 +405,9 @@ def get_data_path():
     return pybullet_data.getDataPath()
 
 def add_data_path():
-    return p.setAdditionalSearchPath(get_data_path())
+    data_path = get_data_path()
+    p.setAdditionalSearchPath(data_path)
+    return data_path
 
 def enable_gravity():
     p.setGravity(0, 0, -9.8, physicsClientId=CLIENT)
@@ -707,11 +717,14 @@ def dump_body(body):
             print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
                 joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
                 is_circular(body, joint), get_joint_limits(body, joint)))
-    print('Link id: {} | Name: {} | Mass: {}'.format(-1, get_base_name(body), get_mass(body)))
+    link = -1
+    print('Link id: {} | Name: {} | Mass: {} | Collision: {} | Visual: {}'.format(
+        link, get_base_name(body), get_mass(body),
+        len(get_collision_data(body, link)), len(get_visual_data(body, link))))
     for link in get_links(body):
-        print('Link id: {} | Name: {} | Parent: {} | Mass: {}'.format(
-            link, get_link_name(body, link), get_link_name(body, get_link_parent(body, link)),
-            get_mass(body, link)))
+        print('Link id: {} | Name: {} | Parent: {} | Mass: {} | Collision: {} | Visual: {}'.format(
+            link, get_link_name(body, link), get_link_name(body, get_link_parent(body, link)), get_mass(body, link),
+            len(get_collision_data(body, link)), len(get_visual_data(body, link))))
         #print(get_joint_parent_frame(body, link))
         #print(map(get_data_geometry, get_visual_data(body, link)))
         #print(map(get_data_geometry, get_collision_data(body, link)))
@@ -1094,7 +1107,7 @@ def get_cylinder_geometry(radius, height):
     return {
         'shapeType': p.GEOM_CYLINDER,
         'radius': radius,
-        'height': height,
+        'length': height,
     }
 
 def get_sphere_geometry(radius):
@@ -1108,6 +1121,12 @@ def get_capsule_geometry(radius, height):
         'shapeType': p.GEOM_CAPSULE,
         'radius': radius,
         'length': height,
+    }
+
+def get_plane_geometry(normal):
+    return {
+        'shapeType': p.GEOM_PLANE,
+        'planeNormal': normal,
     }
 
 def get_mesh_geometry(path, scale=1.):
@@ -1127,14 +1146,13 @@ def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
         'physicsClientId': CLIENT,
     }
     collision_args.update(geometry)
+    if 'length' in collision_args: # TODO: pybullet bug
+        geometry['height'] = geometry['length']
+        del geometry['length']
     collision_id = p.createCollisionShape(**collision_args)
 
     if (color is None) or not has_gui():
-    #if not has_gui():
         return collision_id, NULL_ID
-    if 'height' in geometry: # TODO: pybullet bug
-        geometry['length'] = geometry['height']
-        del geometry['height']
     visual_args = {
         'rgbaColor': color,
         'visualFramePosition': point,
@@ -1156,19 +1174,21 @@ def plural(word):
     return word + 's'
 
 def create_shape_array(geoms, poses, colors=None):
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/pybullet.c
+    # createCollisionShape: height
+    # createVisualShape: length
+    # createCollisionShapeArray: lengths
+    # createVisualShapeArray: lengths
     mega_geom = defaultdict(list)
     for geom in geoms:
         extended_geom = get_default_geometry()
         extended_geom.update(geom)
-        if 'height' in extended_geom:
-            extended_geom['length'] = extended_geom['height']
-            del extended_geom['height']
+        #extended_geom = geom.copy()
         for key, value in extended_geom.items():
             mega_geom[plural(key)].append(value)
 
     collision_args = mega_geom.copy()
-    for pose in poses:
-        point, quat = pose
+    for (point, quat) in poses:
         collision_args['collisionFramePositions'].append(point)
         collision_args['collisionFrameOrientations'].append(quat)
     collision_id = p.createCollisionShapeArray(physicsClientId=CLIENT, **collision_args)
@@ -1176,9 +1196,9 @@ def create_shape_array(geoms, poses, colors=None):
         return collision_id, NULL_ID
 
     visual_args = mega_geom.copy()
-    for pose, color in zip(poses, colors):
-        point, quat = pose
-        visual_args['rgbaColors'].append(color)
+    for (point, quat), color in zip(poses, colors):
+        # TODO: color doesn't seem to work correctly here
+        #visual_args['rgbaColors'].append(color)
         visual_args['visualFramePositions'].append(point)
         visual_args['visualFrameOrientations'].append(quat)
     visual_id = p.createVisualShapeArray(physicsClientId=CLIENT, **visual_args)
@@ -1190,11 +1210,9 @@ def create_body(collision_id, visual_id, mass=STATIC_MASS):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
 
-
 def create_box(w, l, h, mass=STATIC_MASS, color=(1, 0, 0, 1)):
     collision_id, visual_id = create_shape(get_box_geometry(w, l, h), color=color)
-    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
+    return create_body(collision_id, visual_id, mass=mass)
     # basePosition | baseOrientation
     # linkCollisionShapeIndices | linkVisualShapeIndices
 
@@ -1222,30 +1240,27 @@ def create_sphere(radius, mass=STATIC_MASS, color=(0, 0, 1, 1)):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
 
-def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(.5, .5, .5, 1)):
-    collision_id = p.createCollisionShape(p.GEOM_PLANE, normal=normal, physicsClientId=CLIENT)
-    if (color is None) or not has_gui():
-        visual_id = -1
-    else:
-        visual_id = p.createVisualShape(p.GEOM_PLANE, normal=normal, rgbaColor=color, physicsClientId=CLIENT)
-    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
+def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(0, 0, 0, 1)):
+    # color seems to be ignored in favor of a texture
+    collision_id, visual_id = create_shape(get_plane_geometry(normal), color=color)
+    return create_body(collision_id, visual_id, mass=mass)
 
-def create_obj(path, scale=1., mass=STATIC_MASS, color=(.5, .5, .5, 1.)):
+def create_obj(path, scale=1., mass=STATIC_MASS, color=(0.5, 0.5, 0.5, 1)):
     collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), color=color)
     return create_body(collision_id, visual_id, mass=mass)
 
 
+Mesh = namedtuple('Mesh', ['vertices', 'faces'])
 mesh_count = count()
-MESH_DIR = 'temp/'
+TEMP_DIR = 'temp/'
 
-def create_mesh(mesh, **kwargs):
+def create_mesh(mesh, under=True, **kwargs):
     # http://people.sc.fsu.edu/~jburkardt/data/obj/obj.html
     # TODO: read OFF / WRL / OBJ files
     # TODO: maintain dict to file
-    ensure_dir(MESH_DIR)
-    path = os.path.join(MESH_DIR, 'mesh{}.obj'.format(next(mesh_count)))
-    write(path, obj_file_from_mesh(mesh))
+    ensure_dir(TEMP_DIR)
+    path = os.path.join(TEMP_DIR, 'mesh{}.obj'.format(next(mesh_count)))
+    write(path, obj_file_from_mesh(mesh, under=under))
     return create_obj(path, **kwargs)
     #safe_remove(path) # TODO: removing might delete mesh?
 
@@ -1254,7 +1269,7 @@ def create_mesh(mesh, **kwargs):
 VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
                                                  'visualGeometryType', 'dimensions', 'meshAssetFileName',
                                                  'localVisualFrame_position', 'localVisualFrame_orientation',
-                                                 'rgbaColor'])
+                                                 'rgbaColor']) # 'textureUniqueId'
 
 def visual_shape_from_data(data, client):
     if (data.visualGeometryType == p.GEOM_MESH) and (data.meshAssetFileName == 'unknown_file'):
@@ -1414,7 +1429,7 @@ def get_default_geometry():
     return {
         'halfExtents': DEFAULT_EXTENTS,
         'radius': DEFAULT_RADIUS,
-        'height': DEFAULT_HEIGHT,
+        'length': DEFAULT_HEIGHT, # 'height'
         'fileName': DEFAULT_MESH,
         'meshScale': DEFAULT_SCALE,
         'planeNormal': DEFAULT_NORMAL,
@@ -1519,11 +1534,13 @@ def aabb_from_points(points):
 def aabb_union(aabbs):
     return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
 
+def get_aabbs(body):
+    return [get_aabb(body, link=link) for link in get_all_links(body)]
+
 def get_lower_upper(body, link=None):
     if link is not None:
         return p.getAABB(body, linkIndex=link, physicsClientId=CLIENT)
-    return aabb_union(get_lower_upper(body, link=link)
-                      for link in [BASE_LINK] + list(get_links(body)))
+    return aabb_union(get_aabbs(body))
 
 get_aabb = get_lower_upper
 
@@ -1570,7 +1587,7 @@ def approximate_as_cylinder(body, body_pose=unit_pose()):
 # Collision
 
 #MAX_DISTANCE = 1e-3
-MAX_DISTANCE = 0
+MAX_DISTANCE = 0.
 
 def contact_collision():
     step_simulation()
@@ -2362,6 +2379,14 @@ def draw_base_limits(limits, z=1e-2, **kwargs):
                 (upper[0], upper[1], z), (upper[0], lower[1], z)]
     return add_segments(vertices, closed=True, **kwargs)
 
+def draw_circle(center, radius, n=24, **kwargs):
+  vertices = []
+  for i in range(n):
+      theta = i*2*math.pi/n
+      unit = np.array([math.cos(theta), math.sin(theta), 0])
+      vertices.append(center+radius*unit)
+  return add_segments(vertices, closed=True, **kwargs)
+
 def draw_aabb(aabb, **kwargs):
     lower, upper = aabb
     d = len(lower)
@@ -2514,6 +2539,13 @@ def convex_hull(points):
     faces = np.vectorize(lambda i: new_indices[i])(hull.simplices)
     return vertices, faces
 
+def convex_area(vertices):
+    if len(vertices) < 3:
+        return 0.
+    vertices = [v[:2] for v in vertices]
+    segments = zip(vertices, vertices[1:] + vertices[-1:])
+    return 0.5 * abs(sum(x0*y1 - x1*y0 for ((x0, y0), (x1, y1)) in segments))
+
 def mesh_from_points(points):
     vertices, indices = convex_hull(points)
     new_indices = []
@@ -2525,7 +2557,7 @@ def mesh_from_points(points):
             # if normal.dot(centroid) < 0:
             triplet = triplet[::-1]
         new_indices.append(tuple(triplet))
-    return vertices.tolist(), new_indices
+    return Mesh(vertices.tolist(), new_indices)
 
 def mesh_from_body(body, link=BASE_LINK):
     # TODO: read obj files so I can always obtain the pointcloud
@@ -2534,12 +2566,13 @@ def mesh_from_body(body, link=BASE_LINK):
     print(get_collision_data(body, link))
     print(get_visual_data(body, link))
     # TODO: these aren't working...
+    raise NotImplementedError()
 
 #####################################
 
 # Mesh & Pointcloud Files
 
-def obj_file_from_mesh(mesh):
+def obj_file_from_mesh(mesh, under=True):
     """
     Creates a *.obj mesh string
     :param mesh: tuple of list of vertices and list of faces
@@ -2554,7 +2587,8 @@ def obj_file_from_mesh(mesh):
         assert(len(f) == 3)
         f = [i+1 for i in f]
         s += '\nf {}'.format(' '.join(map(str, f)))
-        s += '\nf {}'.format(' '.join(map(str, reversed(f))))
+        if under:
+            s += '\nf {}'.format(' '.join(map(str, reversed(f))))
     return s
 
 def read_mesh_off(path, scale=1.0):
@@ -2568,7 +2602,7 @@ def read_mesh_off(path, scale=1.0):
         nv, nf, ne = [int(x) for x in f.readline().split()]
         verts = [tuple(scale * float(v) for v in f.readline().split()) for _ in range(nv)]
         faces = [tuple(map(int, f.readline().split()[1:])) for _ in range(nf)]
-        return verts, faces
+        return Mesh(verts, faces)
 
 
 def read_pcd_file(path):
