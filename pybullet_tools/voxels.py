@@ -1,33 +1,44 @@
 import os
 import pybullet as p
 import numpy as np
+import time
 from itertools import product
 
-from .utils import unit_pose, safe_zip, multiply, Pose, AABB, create_box, set_pose, get_all_links, \
+from .utils import unit_pose, safe_zip, multiply, Pose, AABB, create_box, set_pose, get_all_links, LockRenderer, \
     get_aabb, pairwise_link_collision, remove_body, draw_aabb, get_box_geometry, create_shape, create_body, STATIC_MASS, \
-    unit_quat, unit_point, CLIENT, create_shape_array, set_color, get_point, clip, load_model, TEMP_DIR, NULL_ID
+    unit_quat, unit_point, CLIENT, create_shape_array, set_color, get_point, clip, load_model, TEMP_DIR, NULL_ID, elapsed_time
 
 MAX_TEXTURE_WIDTH = 418 # max square dimension
 MAX_PIXEL_VALUE = 255
+MAX_LINKS = 125  # Max links seems to be 126
 
 
 class VoxelGrid(object):
+    # https://github.mit.edu/caelan/ROS/blob/master/sparse_voxel_grid.py
+    # https://github.mit.edu/caelan/ROS/blob/master/base_navigation.py
+    # https://github.mit.edu/caelan/ROS/blob/master/utils.py
+    # https://github.mit.edu/caelan/ROS/blob/master/voxel_detection.py
+    # TODO: can always display the grid in RVIZ after filtering
+    # TODO: compute the maximum sized cuboid (rectangle) in a grid (matrix)
+
     def __init__(self, resolutions, color=(1, 0, 0, 0.5)):
     #def __init__(self, sizes, centers, pose=unit_pose()):
         #assert len(sizes) == len(centers)
         self.resolutions = resolutions
         self.occupied = set()
-        #self.points = points
         self.world_from_grid = unit_pose() # TODO: support for real
         self.color = color
-        self.bodies = None
+        #self.bodies = None
+        # TODO: store voxels more intelligently spatially
     def __len__(self):
         return len(self.occupied)
+
     def voxel_from_point(self, point):
         return tuple(np.floor(np.divide(point, self.resolutions)).astype(int))
     def voxels_from_aabb(self, aabb):
         lower_voxel, upper_voxel = map(self.voxel_from_point, aabb)
         return map(tuple, product(*[range(l, u + 1) for l, u in safe_zip(lower_voxel, upper_voxel)]))
+
     def lower_from_voxel(self, voxel):
         return np.multiply(voxel, self.resolutions)
     def center_from_voxel(self, voxel):
@@ -38,6 +49,48 @@ class VoxelGrid(object):
         return multiply(self.world_from_grid, Pose(self.center_from_voxel(voxel)))
     def aabb_from_voxel(self, voxel):
         return AABB(self.lower_from_voxel(voxel), self.upper_from_voxel(voxel))
+
+    def is_occupied(self, voxel):
+        return voxel in self.occupied
+    def set_occupied(self, voxel):
+        if self.is_occupied(voxel):
+            return False
+        self.occupied.add(voxel)
+        return True
+    def set_free(self, voxel):
+        if not self.is_occupied(voxel):
+            return False
+        self.occupied.remove(voxel)
+        return True
+
+    def get_neighbors(self, index):
+        for i in range(len(index)):
+            direction = np.zeros(len(index), dtype=int)
+            for n in (-1, +1):
+                direction[i] = n
+                yield tuple(np.array(index) + direction)
+
+    def get_clusters(self, voxels=None):
+        if voxels is None:
+            voxels = self.occupied
+
+        clusters = []
+        assigned = set()
+        def dfs(current):
+            if (current in assigned) or (not self.is_occupied(current)):
+                return []
+            cluster = [current]
+            assigned.add(current)
+            for neighbor in self.get_neighbors(current):
+                cluster.extend(dfs(neighbor))
+            return cluster
+
+        for voxel in voxels:
+            cluster = dfs(voxel)
+            if cluster:
+                clusters.append(cluster)
+        return clusters
+
     # TODO: implicitly check collisions
     def create_box(self):
         color = (0, 0, 0, 0)
@@ -46,44 +99,65 @@ class VoxelGrid(object):
         #set_color(box, color=color)
         set_pose(box, self.world_from_grid)
         return box
-    def get_affected(self, bodies):
+    def get_affected(self, bodies, occupied):
         assert self.world_from_grid == unit_pose()
         check_voxels = {}
         for body in bodies:
             for link in get_all_links(body):
                 aabb = get_aabb(body, link) # TODO: pad using threshold
                 for voxel in self.voxels_from_aabb(aabb):
-                    if voxel not in self.occupied:
+                    if self.is_occupied(voxel) == occupied:
                         check_voxels.setdefault(voxel, []).append((body, link))
         return check_voxels
+    def check_collision(self, box, voxel, pairs, threshold=0.):
+        box_pairs = [(box, link) for link in get_all_links(box)]
+        set_pose(box, self.pose_from_voxel(voxel))
+        return any(pairwise_link_collision(body1, link1, body2, link2, max_distance=threshold)
+                   for (body1, link1), (body2, link2) in product(pairs, box_pairs))
+
+    def add_point(self, point):
+        self.set_occupied(self.voxel_from_point(point))
+    def add_aabb(self, aabb):
+        for voxel in self.voxels_from_aabb(aabb):
+            self.set_occupied(voxel)
     def add_bodies(self, bodies, threshold=0.):
         # Otherwise, need to transform bodies
-        check_voxels = self.get_affected(bodies)
+        check_voxels = self.get_affected(bodies, occupied=False)
         box = self.create_box()
-        box_pairs = [(box, link) for link in get_all_links(box)]
         for voxel, pairs in check_voxels.items(): # pairs typically only has one element
-            set_pose(box, self.pose_from_voxel(voxel))
-            if any(pairwise_link_collision(body1, link1, body2, link2, max_distance=threshold)
-                   for (body1, link1), (body2, link2) in product(pairs, box_pairs)):
-                self.occupied.add(voxel)
+            if self.check_collision(box, voxel, pairs, threshold=threshold):
+                self.set_occupied(voxel)
         remove_body(box)
+    def remove_bodies(self, bodies, threshold=1e-2):
+        # TODO: could also just iterate over the voxels directly
+        check_voxels = self.get_affected(bodies, occupied=True)
+        box = self.create_box()
+        for voxel, pairs in check_voxels.items():
+            if self.check_collision(box, voxel, pairs, threshold=threshold):
+                self.set_free(voxel)
+        remove_body(box)
+
     def draw_voxel_bodies(self):
         # TODO: transform into the world frame
-        handles = []
-        for voxel in sorted(self.occupied):
-            handles.extend(draw_aabb(self.aabb_from_voxel(voxel), color=self.color[:3]))
-        return handles
-    def create_voxel_bodies(self):
+        with LockRenderer():
+            handles = []
+            for voxel in sorted(self.occupied):
+                handles.extend(draw_aabb(self.aabb_from_voxel(voxel), color=self.color[:3]))
+            return handles
+    def create_voxel_bodies1(self):
+        start_time = time.time()
         geometry = get_box_geometry(*self.resolutions)
         collision_id, visual_id = create_shape(geometry, color=self.color)
         bodies = []
         for voxel in sorted(self.occupied):
             body = create_body(collision_id, visual_id)
+            #scale = self.resolutions[0]
+            #body = load_model('models/voxel.urdf', fixed_base=True, scale=scale)
             set_pose(body, self.pose_from_voxel(voxel))
             bodies.append(body) # 0.0462474774444 / voxel
+        print(elapsed_time(start_time))
         return bodies
     def create_voxel_bodies2(self):
-        MAX_LINKS = 125  # Max links seems to be 126
         geometry = get_box_geometry(*self.resolutions)
         collision_id, visual_id = create_shape(geometry, color=self.color)
         ordered_voxels = sorted(self.occupied)
@@ -122,7 +196,15 @@ class VoxelGrid(object):
         #dump_body(body)
         set_color(body, self.color)
         return [body]
+    def create_voxel_bodies(self):
+        with LockRenderer():
+            return self.create_voxel_bodies1()
+            #return self.create_voxel_bodies2()
+            #return self.create_voxel_bodies3()
+
     def project2d(self):
+        # TODO: combine adjacent voxels into larger lines
+        # TODO: greedy algorithm that combines lines/boxes
         tallest_voxel = {}
         for i, j, k in self.occupied:
             tallest_voxel[i, j] = max(k, tallest_voxel.get((i, j), k))

@@ -144,12 +144,11 @@ class HideOutput(object):
 
 # Savers
 
-# TODO: move the saving to enter?
-
 class Saver(object):
     def restore(self):
         raise NotImplementedError()
     def __enter__(self):
+        # TODO: move the saving to enter?
         pass
     def __exit__(self, type, value, traceback):
         self.restore()
@@ -163,14 +162,12 @@ class ClientSaver(Saver):
     def restore(self):
         set_client(self.client)
 
-
 class StateSaver(Saver):
     def __init__(self):
         self.state = save_state()
 
     def restore(self):
         restore_state(self.state)
-
 
 #####################################
 
@@ -235,7 +232,11 @@ URDFInfo = namedtuple('URDFInfo', ['name', 'path'])
 
 def load_pybullet(filename, fixed_base=False, scale=1.):
     # fixed_base=False implies infinite base mass
-    body = p.loadURDF(filename, useFixedBase=fixed_base, globalScaling=scale, physicsClientId=CLIENT)
+    with LockRenderer():
+        # URDF_USE_IMPLICIT_CYLINDER
+        # URDF_INITIALIZE_SAT_FEATURES
+        # URDF_ENABLE_CACHED_GRAPHICS_SHAPES
+        body = p.loadURDF(filename, useFixedBase=fixed_base, globalScaling=scale, physicsClientId=CLIENT)
     BODIES[CLIENT][body] = URDFInfo(None, filename)
     return body
 
@@ -254,7 +255,11 @@ def load_model(rel_path, pose=None, fixed_base=True, scale=1.):
     abs_path = get_model_path(rel_path)
     flags = 0 # by default, Bullet disables self-collision
     add_data_path()
+    #with LockRenderer():
     if abs_path.endswith('.urdf'):
+        # URDF_ENABLE_CACHED_GRAPHICS_SHAPES seems to help
+        # but URDF_INITIALIZE_SAT_FEATURES does not (might need to be provided a mesh)
+        #flags = p.URDF_INITIALIZE_SAT_FEATURES | p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
         body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags,
                           globalScaling=scale, physicsClientId=CLIENT)
     elif abs_path.endswith('.sdf'):
@@ -317,6 +322,14 @@ def get_time_step():
     # 'gravityAccelerationY', 'numSubSteps', 'fixedTimeStep'}
     return p.getPhysicsEngineParameters(physicsClientId=CLIENT)['fixedTimeStep']
 
+def enable_separating_axis_test():
+    p.setPhysicsEngineParameter(enableSAT=1)
+    #p.setCollisionFilterPair()
+    #p.setCollisionFilterGroupMask()
+    #p.setInternalSimFlags()
+    # enableFileCaching: Set to 0 to disable file caching, such as .obj wavefront file loading
+    #p.getAPIVersion() # TODO: check that API is up-to-date
+
 def simulate_for_sim_duration(sim_duration, real_dt=0, frequency=INF):
     t0 = time.time()
     sim_dt = get_time_step()
@@ -362,14 +375,51 @@ def wait_for_interrupt(max_time=np.inf):
 #         # https://docs.python.org/2/library/select.html
 
 
+def disable_viewer():
+    p.configureDebugVisualizer(p.COV_ENABLE_GUI, False, physicsClientId=CLIENT)
+    p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, False, physicsClientId=CLIENT)
+    p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, False, physicsClientId=CLIENT)
+    p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, False, physicsClientId=CLIENT)
+    #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, False, physicsClientId=CLIENT)
+    #p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING, True, physicsClientId=CLIENT)
+    #p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, False, physicsClientId=CLIENT)
+    #p.configureDebugVisualizer(p.COV_ENABLE_WIREFRAME, True, physicsClientId=CLIENT)
+    #p.COV_ENABLE_MOUSE_PICKING, p.COV_ENABLE_KEYBOARD_SHORTCUTS
+
+def set_renderer(enable):
+    p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, int(enable), physicsClientId=CLIENT)
+
+class LockRenderer(Saver):
+    def __init__(self):
+        # skip if the visualizer isn't active
+        set_renderer(enable=False)
+        # disable rendering temporary makes adding objects faster
+
+    def restore(self):
+        set_renderer(enable=True)
+
 def connect(use_gui=True, shadows=True):
+    # Shared Memory: execute the physics simulation and rendering in a separate process
+    # http://openrave.org/docs/0.8.2/_modules/openravepy/misc/#SetViewerUserThread
+    # https://github.com/bulletphysics/bullet3/blob/6b2cae1b1d63056ef48c64b39c8db6027e897663/examples/pybullet/examples/vrminitaur.py#L7
+    # make sure to compile pybullet with PYBULLET_USE_NUMPY enabled
     method = p.GUI if use_gui else p.DIRECT
     with HideOutput():
+        # options="--width=1024 --height=768"
+        #  --window_backend=2 --render_device=0'
         sim_id = p.connect(method)
         #sim_id = p.connect(p.GUI, options="--opengl2") if use_gui else p.connect(p.DIRECT)
     if use_gui:
+        # p.COV_ENABLE_PLANAR_REFLECTION
+        # p.COV_ENABLE_SINGLE_STEP_RENDERING
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, False, physicsClientId=sim_id)
+        p.configureDebugVisualizer(p.COV_ENABLE_TINY_RENDERER, False, physicsClientId=sim_id)
+        p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, False, physicsClientId=sim_id)
+        p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, False, physicsClientId=sim_id)
+        p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, False, physicsClientId=sim_id)
         p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, shadows, physicsClientId=sim_id)
+
+    # you can also use GUI mode, for faster OpenGL rendering (instead of TinyRender CPU)
     #visualizer_options = {
     #    p.COV_ENABLE_WIREFRAME: 1,
     #    p.COV_ENABLE_SHADOWS: 0,
@@ -615,6 +665,8 @@ def pose_from_base_values(base_values, default_pose):
     return (x, y, z), quat_from_euler([roll, pitch, yaw])
 
 def quat_angle_between(quat0, quat1): # quaternion_slerp
+    #p.getQuaternionSlerp()
+    #p.getDifferenceQuaternion()
     q0 = unit_vector(quat0[:4])
     q1 = unit_vector(quat1[:4])
     d = np.dot(q0, q1)
@@ -1093,6 +1145,7 @@ SHAPE_TYPES = {
     p.GEOM_MESH: 'mesh', # 5
     p.GEOM_PLANE: 'plane',  # 6
     p.GEOM_CAPSULE: 'capsule',  # 7
+    # p.GEOM_FORCE_CONCAVE_TRIMESH
 }
 
 # TODO: clean this up to avoid repeated work
@@ -1538,6 +1591,7 @@ def get_aabbs(body):
     return [get_aabb(body, link=link) for link in get_all_links(body)]
 
 def get_lower_upper(body, link=None):
+    # getOverlappingObjects
     if link is not None:
         return p.getAABB(body, linkIndex=link, physicsClientId=CLIENT)
     return aabb_union(get_aabbs(body))
