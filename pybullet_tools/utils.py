@@ -310,12 +310,10 @@ def wait_for_duration(duration): #, dt=0):
         disable_gravity()
     # TODO: wait until keypress
 
-def simulate_for_duration(duration, dt=0):
-    # WARNING: this simulates for a wall-clock duration rather than simulator duration
-    t0 = time.time()
-    while elapsed_time(t0) <= duration:
+def simulate_for_duration(duration):
+    dt = get_time_step()
+    for i in range(int(duration / dt)):
         step_simulation()
-        time.sleep(dt)
 
 def get_time_step():
     # {'gravityAccelerationX', 'useRealTimeSimulation', 'gravityAccelerationZ', 'numSolverIterations',
@@ -2190,6 +2188,31 @@ def joint_controller_hold(body, joints, target, **kwargs):
     for joint, value in zip(movable_from_joints(body, joints), target):
         conf[joint] = value
     return joint_controller(body, movable_joints, conf, **kwargs)
+
+def joint_controller_hold2(body, joints, target, tolerance=1e-2*np.pi,
+                           position_gain=0.02): #, velocity_gain=0.1):
+    """
+    Keeps other joints in place
+    """
+    # TODO: different tolerance for intermediate vs end waypoints
+    movable_joints = get_movable_joints(body)
+    movable_from_original = {o: m for m, o in enumerate(movable_joints)}
+    target_conf = list(get_joint_positions(body, movable_joints))
+    for joint, value in zip(joints, target):
+        target_conf[movable_from_original[joint]] = value
+    # return joint_controller(body, movable_joints, conf)
+    current_conf = get_joint_positions(body, movable_joints)
+    # TODO: command target velocities for intermediate waypoints
+    while not np.allclose(current_conf, target_conf, atol=tolerance, rtol=0):
+        # TODO: only enforce velocity constraints at end
+        p.setJointMotorControlArray(body, movable_joints, p.POSITION_CONTROL,
+                                    targetPositions=target_conf,
+                                    targetVelocities=[0.0] * len(movable_joints),
+                                    positionGains=[position_gain] * len(movable_joints),
+                                    #velocityGains=[velocity_gain] * len(movable_joints),
+                                    physicsClientId=CLIENT)
+        yield current_conf
+        current_conf = get_joint_positions(body, movable_joints)
 
 def trajectory_controller(body, joints, path, **kwargs):
     for target in path:
