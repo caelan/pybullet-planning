@@ -22,10 +22,9 @@ from motion_planners.rrt_connect import birrt, direct_path
 # from future_builtins import map, filter
 # from builtins import input # TODO - use future
 try:
-   input = raw_input
+    user_input = raw_input
 except NameError:
-   pass
-user_input = input
+    user_input = input
 
 INF = np.inf
 PI = np.pi
@@ -225,10 +224,12 @@ def set_client(client):
     global CLIENT
     CLIENT = client
 
-BODIES = defaultdict(dict)
-# TODO: update delete as well
+ModelInfo = namedtuple('URDFInfo', ['name', 'path', 'fixed_base', 'scale'])
 
-URDFInfo = namedtuple('URDFInfo', ['name', 'path'])
+INFO_FROM_BODY = {}
+
+def get_model_info(body):
+    return INFO_FROM_BODY.get((CLIENT, body), None)
 
 def load_pybullet(filename, fixed_base=False, scale=1.):
     # fixed_base=False implies infinite base mass
@@ -237,8 +238,16 @@ def load_pybullet(filename, fixed_base=False, scale=1.):
         # URDF_INITIALIZE_SAT_FEATURES
         # URDF_ENABLE_CACHED_GRAPHICS_SHAPES
         body = p.loadURDF(filename, useFixedBase=fixed_base, globalScaling=scale, physicsClientId=CLIENT)
-    BODIES[CLIENT][body] = URDFInfo(None, filename)
+    INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, filename, fixed_base, scale)
     return body
+
+def load_model_info(info):
+    if info.path.endswith('.urdf'):
+        return load_pybullet(info.path, fixed_base=info.fixed_base, scale=info.scale)
+    if info.path.endswith('.obj'):
+        mass = STATIC_MASS if info.fixed_base else 1.
+        return create_obj(info.path, mass=mass, scale=info.scale)
+    raise NotImplementedError(info.path)
 
 URDF_FLAGS = [p.URDF_USE_INERTIA_FROM_FILE,
               p.URDF_USE_SELF_COLLISION,
@@ -272,32 +281,32 @@ def load_model(rel_path, pose=None, fixed_base=True, scale=1.):
         raise ValueError(abs_path)
     if pose is not None:
         set_pose(body, pose)
-    BODIES[CLIENT][body] = URDFInfo(None, abs_path)
+    INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, abs_path, fixed_base, scale)
     return body
 
 #####################################
 
-class World(object):
-    def __init__(self, client):
-        self.client = client
-        self.bodies = {}
-    def activate(self):
-        set_client(self.client)
-    def load(self, path, name=None, fixed_base=False):
-        body = p.loadURDF(path, useFixedBase=fixed_base, physicsClientId=self.client)
-        self.bodies[body] = URDFInfo(name, path)
-        return body
-    def remove(self, body):
-        del self.bodies[body]
-        return p.removeBody(body, physicsClientId=CLIENT)
-    def reset(self):
-        p.resetSimulation(physicsClientId=self.client)
-        self.bodies = {}
-    # TODO: with statement
-    def copy(self):
-        raise NotImplementedError()
-    def __repr__(self):
-        return '{}({})'.format(self.__class__.__name__, len(self.bodies))
+# class World(object):
+#     def __init__(self, client):
+#         self.client = client
+#         self.bodies = {}
+#     def activate(self):
+#         set_client(self.client)
+#     def load(self, path, name=None, fixed_base=False, scale=1.):
+#         body = p.loadURDF(path, useFixedBase=fixed_base, physicsClientId=self.client)
+#         self.bodies[body] = URDFInfo(name, path, fixed_base, scale)
+#         return body
+#     def remove(self, body):
+#         del self.bodies[body]
+#         return p.removeBody(body, physicsClientId=self.client)
+#     def reset(self):
+#         p.resetSimulation(physicsClientId=self.client)
+#         self.bodies = {}
+#     # TODO: with statement
+#     def copy(self):
+#         raise NotImplementedError()
+#     def __repr__(self):
+#         return '{}({})'.format(self.__class__.__name__, len(self.bodies))
 
 #####################################
 
@@ -396,6 +405,8 @@ class LockRenderer(Saver):
     def restore(self):
         set_renderer(enable=True)
 
+CLIENTS = set()
+
 def connect(use_gui=True, shadows=True):
     # Shared Memory: execute the physics simulation and rendering in a separate process
     # http://openrave.org/docs/0.8.2/_modules/openravepy/misc/#SetViewerUserThread
@@ -407,6 +418,7 @@ def connect(use_gui=True, shadows=True):
         #  --window_backend=2 --render_device=0'
         sim_id = p.connect(method)
         #sim_id = p.connect(p.GUI, options="--opengl2") if use_gui else p.connect(p.DIRECT)
+    CLIENTS.add(sim_id)
     if use_gui:
         # p.COV_ENABLE_PLANAR_REFLECTION
         # p.COV_ENABLE_SINGLE_STEP_RENDERING
@@ -436,6 +448,8 @@ def connect(use_gui=True, shadows=True):
 
 def disconnect():
     # TODO: change CLIENT?
+    if CLIENT in CLIENTS:
+        CLIENTS.remove(CLIENT)
     with HideOutput():
         return p.disconnect(physicsClientId=CLIENT)
 
@@ -715,6 +729,8 @@ def body_from_name(name):
     raise ValueError(name)
 
 def remove_body(body):
+    if (CLIENT, body) in INFO_FROM_BODY:
+        del INFO_FROM_BODY[CLIENT, body]
     return p.removeBody(body, physicsClientId=CLIENT)
 
 def get_pose(body):
@@ -1298,7 +1314,10 @@ def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(0, 0, 0, 1)):
 
 def create_obj(path, scale=1., mass=STATIC_MASS, color=(0.5, 0.5, 0.5, 1)):
     collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), color=color)
-    return create_body(collision_id, visual_id, mass=mass)
+    body = create_body(collision_id, visual_id, mass=mass)
+    fixed_base = (mass == STATIC_MASS)
+    INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, path, fixed_base, scale) # TODO: store geometry info instead?
+    return body
 
 
 Mesh = namedtuple('Mesh', ['vertices', 'faces'])
@@ -2661,8 +2680,7 @@ def obj_file_from_mesh(mesh, under=True):
         assert(len(v) == 3)
         s += '\nv {}'.format(' '.join(map(str, v)))
     for f in faces:
-        assert(len(f) == 3)
-        f = [i+1 for i in f]
+        f = [i+1 for i in f] # Assumes mesh is indexed from zero
         s += '\nf {}'.format(' '.join(map(str, f)))
         if under:
             s += '\nf {}'.format(' '.join(map(str, reversed(f))))
