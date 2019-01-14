@@ -242,6 +242,8 @@ def load_pybullet(filename, fixed_base=False, scale=1.):
     return body
 
 def load_model_info(info):
+    # TODO: disable file caching to reuse old filenames
+    # p.setPhysicsEngineParameter(enableFileCaching=0, physicsClientId=CLIENT)
     if info.path.endswith('.urdf'):
         return load_pybullet(info.path, fixed_base=info.fixed_base, scale=info.scale)
     if info.path.endswith('.obj'):
@@ -330,7 +332,7 @@ def get_time_step():
     return p.getPhysicsEngineParameters(physicsClientId=CLIENT)['fixedTimeStep']
 
 def enable_separating_axis_test():
-    p.setPhysicsEngineParameter(enableSAT=1)
+    p.setPhysicsEngineParameter(enableSAT=1, physicsClientId=CLIENT)
     #p.setCollisionFilterPair()
     #p.setCollisionFilterGroupMask()
     #p.setInternalSimFlags()
@@ -837,8 +839,8 @@ def get_joint_info(body, joint):
 def get_joint_name(body, joint):
     return get_joint_info(body, joint).jointName.decode('UTF-8')
 
-#def get_joint_names(body):
-#    return [get_joint_name(body, joint) for joint in get_joints(body)]
+def get_joint_names(body, joints):
+    return [get_joint_name(body, joint) for joint in joints]
 
 def joint_from_name(body, name):
     for joint in get_joints(body):
@@ -857,7 +859,7 @@ def joints_from_names(body, names):
     return tuple(joint_from_name(body, name) for name in names)
 
 JointState = namedtuple('JointState', ['jointPosition', 'jointVelocity',
-                                     'jointReactionForces', 'appliedJointMotorTorque'])
+                                       'jointReactionForces', 'appliedJointMotorTorque'])
 
 def get_joint_state(body, joint):
     return JointState(*p.getJointState(body, joint, physicsClientId=CLIENT))
@@ -865,11 +867,17 @@ def get_joint_state(body, joint):
 def get_joint_position(body, joint):
     return get_joint_state(body, joint).jointPosition
 
+def get_joint_velocity(body, joint):
+    return get_joint_state(body, joint).jointVelocity
+
 def get_joint_torque(body, joint):
     return get_joint_state(body, joint).appliedJointMotorTorque
 
 def get_joint_positions(body, joints): # joints=None):
     return tuple(get_joint_position(body, joint) for joint in joints)
+
+def get_joint_velocities(body, joints):
+    return tuple(get_joint_velocity(body, joint) for joint in joints)
 
 def set_joint_position(body, joint, value):
     p.resetJointState(body, joint, value, physicsClientId=CLIENT)
@@ -888,6 +896,11 @@ def set_configuration(body, values):
 def get_full_configuration(body):
     # Cannot alter fixed joints
     return get_joint_positions(body, get_joints(body))
+
+def get_labeled_configuration(body):
+    movable_joints = get_movable_joints(body)
+    return dict(zip(get_joint_names(body, movable_joints),
+                    get_joint_positions(body, movable_joints)))
 
 def get_joint_type(body, joint):
     return get_joint_info(body, joint).jointType
@@ -1607,13 +1620,21 @@ def aabb_union(aabbs):
 def get_aabbs(body):
     return [get_aabb(body, link=link) for link in get_all_links(body)]
 
-def get_lower_upper(body, link=None):
+def get_aabb(body, link=None):
     # getOverlappingObjects
-    if link is not None:
-        return p.getAABB(body, linkIndex=link, physicsClientId=CLIENT)
-    return aabb_union(get_aabbs(body))
+    # Note that the query is conservative and may return additional objects that don't have actual AABB overlap.
+    # This happens because the acceleration structures have some heuristic that enlarges the AABBs a bit
+    # (extra margin and extruded along the velocity vector).
+    # AABBs are extended by this number. Defaults to 0.02 in Bullet 2.x
+    #p.setPhysicsEngineParameter(contactBreakingThreshold=0.0, physicsClientId=CLIENT)
+    if link is None:
+        aabb = aabb_union(get_aabbs(body))
+    else:
+        aabb = p.getAABB(body, linkIndex=link, physicsClientId=CLIENT)
+    #p.setPhysicsEngineParameter(contactBreakingThreshold=0.02, physicsClientId=CLIENT)
+    return aabb
 
-get_aabb = get_lower_upper
+get_lower_upper = get_aabb
 
 def get_center_extent(body):
     lower, upper = get_aabb(body)
@@ -2208,27 +2229,32 @@ def joint_controller_hold(body, joints, target, **kwargs):
         conf[joint] = value
     return joint_controller(body, movable_joints, conf, **kwargs)
 
-def joint_controller_hold2(body, joints, target, tolerance=1e-2*np.pi,
-                           position_gain=0.02): #, velocity_gain=0.1):
+def joint_controller_hold2(body, joints, positions, velocities=None,
+                           tolerance=1e-2 * np.pi, position_gain=0.05, velocity_gain=0.01):
     """
     Keeps other joints in place
     """
-    # TODO: different tolerance for intermediate vs end waypoints
+    # TODO: velocity_gain causes the PR2 to oscillate
+    if velocities is None:
+        velocities = [0.] * len(positions)
     movable_joints = get_movable_joints(body)
+    target_positions = list(get_joint_positions(body, movable_joints))
+    target_velocities = [0.] * len(movable_joints)
     movable_from_original = {o: m for m, o in enumerate(movable_joints)}
-    target_conf = list(get_joint_positions(body, movable_joints))
-    for joint, value in zip(joints, target):
-        target_conf[movable_from_original[joint]] = value
+    #print(list(positions), list(velocities))
+    for joint, position, velocity in zip(joints, positions, velocities):
+        target_positions[movable_from_original[joint]] = position
+        target_velocities[movable_from_original[joint]] = velocity
     # return joint_controller(body, movable_joints, conf)
     current_conf = get_joint_positions(body, movable_joints)
-    # TODO: command target velocities for intermediate waypoints
-    while not np.allclose(current_conf, target_conf, atol=tolerance, rtol=0):
+    while not np.allclose(current_conf, target_positions, atol=tolerance, rtol=0):
         # TODO: only enforce velocity constraints at end
         p.setJointMotorControlArray(body, movable_joints, p.POSITION_CONTROL,
-                                    targetPositions=target_conf,
-                                    targetVelocities=[0.0] * len(movable_joints),
+                                    targetPositions=target_positions,
+                                    #targetVelocities=target_velocities,
                                     positionGains=[position_gain] * len(movable_joints),
                                     #velocityGains=[velocity_gain] * len(movable_joints),
+                                    #forces=[position_gain] * len(movable_joints)
                                     physicsClientId=CLIENT)
         yield current_conf
         current_conf = get_joint_positions(body, movable_joints)
