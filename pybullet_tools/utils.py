@@ -399,10 +399,11 @@ def set_renderer(enable):
     p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, int(enable), physicsClientId=CLIENT)
 
 class LockRenderer(Saver):
-    def __init__(self):
+    # disabling rendering temporary makes adding objects faster
+    def __init__(self, lock=True):
         # skip if the visualizer isn't active
-        set_renderer(enable=False)
-        # disable rendering temporary makes adding objects faster
+        if lock:
+            set_renderer(enable=False)
 
     def restore(self):
         set_renderer(enable=True)
@@ -611,11 +612,11 @@ def quat_from_vector_angle(vec, angle):
 def unit_pose():
     return (unit_point(), unit_quat())
 
-def get_length(vec):
-    return np.linalg.norm(vec)
+def get_length(vec, ord=2):
+    return np.linalg.norm(vec, ord=ord)
 
-def get_distance(p1, p2):
-    return get_length(np.array(p2) - np.array(p1))
+def get_distance(p1, p2, **kwargs):
+    return get_length(np.array(p2) - np.array(p1), **kwargs)
 
 def angle_between(vec1, vec2):
     return np.math.acos(np.dot(vec1, vec2) / (get_length(vec1) *  get_length(vec2)))
