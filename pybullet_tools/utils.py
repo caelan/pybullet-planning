@@ -1,5 +1,6 @@
 from __future__ import print_function
 
+import colorsys
 import math
 import os
 import pickle
@@ -195,6 +196,7 @@ class BodySaver(Saver):
         self.body = body
         self.pose_saver = PoseSaver(body)
         self.conf_saver = ConfSaver(body)
+        # TODO: store velocities
 
     def restore(self):
         self.pose_saver.restore()
@@ -315,11 +317,21 @@ def load_model(rel_path, pose=None, fixed_base=True, scale=1.):
 def elapsed_time(start_time):
     return time.time() - start_time
 
+MouseEvent = namedtuple('MouseEvent', ['eventType', 'mousePosX', 'mousePosY', 'buttonIndex', 'buttonState'])
+
+def get_mouse_events():
+    return list(MouseEvent(*event) for event in p.getMouseEvents(physicsClientId=CLIENT))
+
 def wait_for_duration(duration): #, dt=0):
     t0 = time.time()
     while elapsed_time(t0) <= duration:
-        disable_gravity()
-    # TODO: wait until keypress
+        keys = p.getKeyboardEvents()
+        #for k, v in keys.items():
+        #    #p.KEY_IS_DOWN, p.KEY_WAS_RELEASED, p.KEY_WAS_TRIGGERED
+        #    if (k == p.B3G_RETURN) and (v & p.KEY_WAS_TRIGGERED):
+        #        return
+        #time.sleep(1e-3) # Doesn't work
+        #disable_gravity()
 
 def simulate_for_duration(duration):
     dt = get_time_step()
@@ -338,6 +350,7 @@ def enable_separating_axis_test():
     #p.setInternalSimFlags()
     # enableFileCaching: Set to 0 to disable file caching, such as .obj wavefront file loading
     #p.getAPIVersion() # TODO: check that API is up-to-date
+    #p.isNumpyEnabled()
 
 def simulate_for_sim_duration(sim_duration, real_dt=0, frequency=INF):
     t0 = time.time()
@@ -508,8 +521,11 @@ def update_state():
 def reset_simulation():
     p.resetSimulation(physicsClientId=CLIENT)
 
+CameraInfo = namedtuple('CameraInfo', ['width', 'height', 'viewMatrix', 'projectionMatrix', 'cameraUp', 'cameraForward',
+                                       'horizontal', 'vertical', 'yaw', 'pitch', 'dist', 'target'])
+
 def get_camera():
-    return p.getDebugVisualizerCamera(physicsClientId=CLIENT)
+    return CameraInfo(*p.getDebugVisualizerCamera(physicsClientId=CLIENT))
 
 def set_camera(yaw, pitch, distance, target_position=np.zeros(3)):
     p.resetDebugVisualizerCamera(distance, yaw, pitch, target_position, physicsClientId=CLIENT)
@@ -530,14 +546,106 @@ def set_camera_pose(camera_point, target_point=np.zeros(3)):
     p.resetDebugVisualizerCamera(distance, math.degrees(yaw), math.degrees(pitch),
                                  target_point, physicsClientId=CLIENT)
 
-def get_image(width=640, height=480):
+def set_camera_pose2(world_from_camera, distance=2):
+    target_camera = np.array([0, 0, distance])
+    target_world = tform_point(world_from_camera, target_camera)
+    camera_world = point_from_pose(world_from_camera)
+    set_camera_pose(camera_world, target_world)
+    #roll, pitch, yaw = euler_from_quat(quat_from_pose(world_from_camera))
+    # TODO: assert that roll is about zero?
+    #p.resetDebugVisualizerCamera(cameraDistance=distance, cameraYaw=math.degrees(yaw), cameraPitch=math.degrees(-pitch),
+    #                             cameraTargetPosition=target_world, physicsClientId=CLIENT)
+
+CameraImage = namedtuple('CameraImage', ['rgbPixels', 'depthPixels', 'segmentationMaskBuffer'])
+
+def demask_pixel(pixel):
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/segmask_linkindex.py
+    # Not needed when p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX is not enabled
+    #if 0 <= pixel:
+    #    return None
+    # Returns a large value when undefined
+    body = pixel & ((1 << 24) - 1)
+    link = (pixel >> 24) - 1
+    return body, link
+
+def save_image(filename, rgba):
     import scipy.misc
-    rgb, depth, _ = p.getCameraImage(width, height, physicsClientId=CLIENT)[2:]
-    print(rgb.shape) # (480, 640, 4)
-    print(depth.shape) # (480, 640)
-    scipy.misc.imsave('image.jpg', rgb[:,:,:3])
-    # scipy.misc.toimage(image_array, cmin=0.0, cmax=...).save('outfile.jpg')
-    return rgb # np.reshape(rgb, [width, height, 4])
+    if filename.endswith('.jpg'):
+        scipy.misc.imsave(filename, rgba[:, :, :3])
+    elif filename.endswith('.png'):
+        scipy.misc.imsave(filename, rgba)  # (480, 640, 4)
+        # scipy.misc.toimage(image_array, cmin=0.0, cmax=...).save('outfile.jpg')
+    else:
+        raise ValueError(filename)
+    print('Saved image at {}'.format(filename))
+
+def get_projection_matrix(width, height, vertical_fov, near, far):
+    """
+    OpenGL projection matrix
+    :param width: 
+    :param height: 
+    :param vertical_fov: vertical field of view in radians
+    :param near: 
+    :param far: 
+    :return: 
+    """
+    # http://www.songho.ca/opengl/gl_projectionmatrix.html
+    # http://www.songho.ca/opengl/gl_transform.html#matrix
+    # https://www.edmundoptics.fr/resources/application-notes/imaging/understanding-focal-length-and-field-of-view/
+    # gluPerspective() requires only 4 parameters; vertical field of view (FOV),
+    # the aspect ratio of width to height and the distances to near and far clipping planes.
+    aspect = float(width) / height
+    fov_degrees = math.degrees(vertical_fov)
+    projection_matrix = p.computeProjectionMatrixFOV(fov=fov_degrees, aspect=aspect,
+                                                     nearVal=near, farVal=far, physicsClientId=CLIENT)
+    # projection_matrix = p.computeProjectionMatrix(0, width, height, 0, near, far, physicsClientId=CLIENT)
+    return projection_matrix
+    #return np.reshape(projection_matrix, [4, 4])
+
+def spaced_colors(n, s=1, v=1):
+    return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]
+
+def image_from_segmented(segmented, color_from_body=None):
+    if color_from_body is None:
+        bodies = get_bodies()
+        color_from_body = dict(zip(bodies, spaced_colors(len(bodies))))
+    image = np.zeros(segmented.shape[:2] + (3,))
+    for r in range(segmented.shape[0]):
+        for c in range(segmented.shape[1]):
+            body, link = segmented[r, c, :]
+            image[r, c, :] = color_from_body.get(body, (0, 0, 0))
+    return image
+
+def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, near=0.02, far=5.0,
+              segment=False, segment_links=False):
+    # computeViewMatrixFromYawPitchRoll
+    view_matrix = p.computeViewMatrix(cameraEyePosition=camera_pos, cameraTargetPosition=target_pos,
+                                      cameraUpVector=[0, 0, 1], physicsClientId=CLIENT)
+    projection_matrix = get_projection_matrix(width, height, vertical_fov, near, far)
+    if segment:
+        if segment_links:
+            flags = p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX
+        else:
+            flags = 0
+    else:
+        flags = p.ER_NO_SEGMENTATION_MASK
+    image = CameraImage(*p.getCameraImage(width, height, viewMatrix=view_matrix,
+                                          projectionMatrix=projection_matrix,
+                                          shadow=False,
+                                          flags=flags,
+                                          renderer=p.ER_TINY_RENDERER, # p.ER_BULLET_HARDWARE_OPENGL
+                                          physicsClientId=CLIENT)[2:])
+    depth = far * near / (far - (far - near) * image.depthPixels)
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/pointCloudFromCameraImage.py
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/getCameraImageTest.py
+    segmented = None
+    if segment:
+        segmented = np.zeros(image.segmentationMaskBuffer.shape + (2,))
+        for r in range(segmented.shape[0]):
+            for c in range(segmented.shape[1]):
+                pixel = image.segmentationMaskBuffer[r, c]
+                segmented[r, c, :] = demask_pixel(pixel)
+    return CameraImage(image.rgbPixels, depth, segmented)
 
 def set_default_camera():
     set_camera(160, -35, 2.5, Point())
@@ -606,8 +714,9 @@ def unit_point():
 def unit_quat():
     return quat_from_euler([0, 0, 0]) # [X,Y,Z,W]
 
-def quat_from_vector_angle(vec, angle):
-    return get_unit_vector(np.append(vec, [angle]))
+def quat_from_axis_angle(axis, angle): # axis-angle
+    #return get_unit_vector(np.append(vec, [angle]))
+    return np.append(math.sin(angle/2) * get_unit_vector(axis), [math.cos(angle / 2)])
 
 def unit_pose():
     return (unit_point(), unit_quat())
@@ -684,7 +793,7 @@ def quat_angle_between(quat0, quat1): # quaternion_slerp
     #p.getDifferenceQuaternion()
     q0 = unit_vector(quat0[:4])
     q1 = unit_vector(quat1[:4])
-    d = np.dot(q0, q1)
+    d = max(-1., min(np.dot(q0, q1), 1.))
     angle = math.acos(d)
     return angle
 
@@ -870,6 +979,9 @@ def get_joint_position(body, joint):
 
 def get_joint_velocity(body, joint):
     return get_joint_state(body, joint).jointVelocity
+
+def get_joint_reaction_force(body, joint):
+    return get_joint_state(body, joint).jointReactionForces
 
 def get_joint_torque(body, joint):
     return get_joint_state(body, joint).appliedJointMotorTorque
@@ -1232,7 +1344,7 @@ def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
         del geometry['length']
     collision_id = p.createCollisionShape(**collision_args)
 
-    if (color is None) or not has_gui():
+    if (color is None): # or not has_gui():
         return collision_id, NULL_ID
     visual_args = {
         'rgbaColor': color,
@@ -1273,7 +1385,7 @@ def create_shape_array(geoms, poses, colors=None):
         collision_args['collisionFramePositions'].append(point)
         collision_args['collisionFrameOrientations'].append(quat)
     collision_id = p.createCollisionShapeArray(physicsClientId=CLIENT, **collision_args)
-    if (colors is None) or not has_gui():
+    if (colors is None): # or not has_gui():
         return collision_id, NULL_ID
 
     visual_args = mega_geom.copy()
@@ -1302,24 +1414,12 @@ def create_cylinder(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
     return create_body(collision_id, visual_id, mass=mass)
 
 def create_capsule(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
-    # TODO: combine this
-    collision_id = p.createCollisionShape(p.GEOM_CAPSULE, radius=radius, height=height, physicsClientId=CLIENT)
-    if (color is None) or not has_gui():
-        visual_id = -1
-    else:
-        visual_id = p.createVisualShape(p.GEOM_CAPSULE, radius=radius, height=height, rgbaColor=color, physicsClientId=CLIENT)
-    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
+    collision_id, visual_id = create_shape(get_capsule_geometry(radius, height), color=color)
+    return create_body(collision_id, visual_id, mass=mass)
 
 def create_sphere(radius, mass=STATIC_MASS, color=(0, 0, 1, 1)):
-    # mass = 0  => static
-    collision_id = p.createCollisionShape(p.GEOM_SPHERE, radius=radius, physicsClientId=CLIENT)
-    if (color is None) or not has_gui():
-        visual_id = -1
-    else:
-        visual_id = p.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color, physicsClientId=CLIENT)
-    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
+    collision_id, visual_id = create_shape(get_sphere_geometry(radius), color=color)
+    return create_body(collision_id, visual_id, mass=mass)
 
 def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(0, 0, 0, 1)):
     # color seems to be ignored in favor of a texture
@@ -1361,8 +1461,9 @@ def visual_shape_from_data(data, client):
     # visualFramePosition: translational offset of the visual shape with respect to the link
     # visualFrameOrientation: rotational offset (quaternion x,y,z,w) of the visual shape with respect to the link frame
     pose = (data.localVisualFrame_position, data.localVisualFrame_orientation)
-    inertial_pose = get_joint_inertial_pose(data.objectUniqueId, data.linkIndex)
-    point, quat = multiply(invert(inertial_pose), pose)
+    #inertial_pose = get_joint_inertial_pose(data.objectUniqueId, data.linkIndex)
+    #point, quat = multiply(invert(inertial_pose), pose)
+    point, quat = pose
     return p.createVisualShape(shapeType=data.visualGeometryType,
                                radius=get_data_radius(data),
                                halfExtents=np.array(get_data_extents(data))/2,
@@ -1406,21 +1507,21 @@ def collision_shape_from_data(data, body, link, client):
     #return p.createCollisionShapeArray()
 
 def clone_visual_shape(body, link, client):
-    if not has_gui(client):
-        return -1
+    #if not has_gui(client):
+    #    return -1
     visual_data = get_visual_data(body, link)
-    if visual_data:
-        assert (len(visual_data) == 1)
-        return visual_shape_from_data(visual_data[0], client)
-    return -1
+    if not visual_data:
+        return -1
+    assert (len(visual_data) == 1)
+    return visual_shape_from_data(visual_data[0], client)
 
 def clone_collision_shape(body, link, client):
     collision_data = get_collision_data(body, link)
-    if collision_data:
-        assert (len(collision_data) == 1)
-        # TODO: can do CollisionArray
-        return collision_shape_from_data(collision_data[0], body, link, client)
-    return -1
+    if not collision_data:
+        return -1
+    assert (len(collision_data) == 1)
+    # TODO: can do CollisionArray
+    return collision_shape_from_data(collision_data[0], body, link, client)
 
 def clone_body(body, links=None, collision=True, visual=True, client=None):
     # TODO: names are not retained
@@ -1501,6 +1602,7 @@ def clone_world(client=None, exclude=[]):
 #####################################
 
 def get_collision_data(body, link=BASE_LINK):
+    # TODO: try catch
     return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link, physicsClientId=CLIENT)]
 
 def get_data_type(data):
@@ -1604,7 +1706,9 @@ def set_color(body, color, link=BASE_LINK, shape_index=-1):
     :return:
     """
     # specularColor
-    return p.changeVisualShape(body, link, rgbaColor=color, physicsClientId=CLIENT)
+    return p.changeVisualShape(body, link, shapeIndex=shape_index, rgbaColor=color,
+                               #textureUniqueId=None, specularColor=None,
+                               physicsClientId=CLIENT)
 
 #####################################
 
@@ -1778,13 +1882,15 @@ def refine_path(body, joints, waypoints, num_steps):
         refined_path += list(refine_fn(v1, v2))
     return refined_path
 
-def get_extend_fn(body, joints, resolutions=None):
+def get_extend_fn(body, joints, resolutions=None, norm=2):
+    # norm = 1, 2, INF
     if resolutions is None:
         resolutions = 0.05*np.ones(len(joints))
     difference_fn = get_difference_fn(body, joints)
     def fn(q1, q2):
-        steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
-        refine_fn = get_refine_fn(body, joints, num_steps=int(np.max(steps)))
+        #steps = int(np.max(np.abs(np.divide(difference_fn(q2, q1), resolutions))))
+        steps = int(np.linalg.norm(np.divide(difference_fn(q2, q1), resolutions), ord=norm))
+        refine_fn = get_refine_fn(body, joints, num_steps=steps)
         return refine_fn(q1, q2)
     return fn
 
@@ -2248,6 +2354,7 @@ def joint_controller_hold2(body, joints, positions, velocities=None,
         target_velocities[movable_from_original[joint]] = velocity
     # return joint_controller(body, movable_joints, conf)
     current_conf = get_joint_positions(body, movable_joints)
+    #forces = [get_max_force(body, joint) for joint in movable_joints]
     while not np.allclose(current_conf, target_positions, atol=tolerance, rtol=0):
         # TODO: only enforce velocity constraints at end
         p.setJointMotorControlArray(body, movable_joints, p.POSITION_CONTROL,
@@ -2255,7 +2362,7 @@ def joint_controller_hold2(body, joints, positions, velocities=None,
                                     #targetVelocities=target_velocities,
                                     positionGains=[position_gain] * len(movable_joints),
                                     #velocityGains=[velocity_gain] * len(movable_joints),
-                                    #forces=[position_gain] * len(movable_joints)
+                                    #forces=forces,
                                     physicsClientId=CLIENT)
         yield current_conf
         current_conf = get_joint_positions(body, movable_joints)
@@ -2285,9 +2392,10 @@ def velocity_control_joints(body, joints, velocities):
 
 #####################################
 
-def compute_jacobian(robot, link, positions): #, joints=None):
-    #if joints is None:
+def compute_jacobian(robot, link, positions=None):
     joints = get_movable_joints(robot)
+    if positions is None:
+        positions = get_joint_positions(robot, joints)
     assert len(joints) == len(positions)
     velocities = [0.0] * len(positions)
     accelerations = [0.0] * len(positions)
@@ -2323,7 +2431,11 @@ def inverse_kinematics_helper(robot, link, target_pose):
     (target_point, target_quat) = target_pose
     assert target_point is not None
     if target_quat is None:
-        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, physicsClientId=CLIENT)
+        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point,
+                                                      #lowerLimits=ll, upperLimits=ul, jointRanges=jr, restPoses=rp,
+                                                      #jointDamping=jd, solver=ikSolver, maxNumIterations=100,
+                                                      #residualThreshold=.01,
+                                                      physicsClientId=CLIENT)
     else:
         kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, target_quat, physicsClientId=CLIENT)
     if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
