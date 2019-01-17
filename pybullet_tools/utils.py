@@ -325,7 +325,8 @@ def get_mouse_events():
 def wait_for_duration(duration): #, dt=0):
     t0 = time.time()
     while elapsed_time(t0) <= duration:
-        keys = p.getKeyboardEvents()
+        #keys = p.getKeyboardEvents()
+        get_mouse_events()
         #for k, v in keys.items():
         #    #p.KEY_IS_DOWN, p.KEY_WAS_RELEASED, p.KEY_WAS_TRIGGERED
         #    if (k == p.B3G_RETURN) and (v & p.KEY_WAS_TRIGGERED):
@@ -2472,7 +2473,7 @@ def inverse_kinematics(robot, link, target_pose, max_iterations=200, custom_limi
 
 #####################################
 
-def get_cartesian_waypoints(start_point, direction, quat, step_size=0.01):
+def get_position_waypoints(start_point, direction, quat, step_size=0.01):
     distance = get_length(direction)
     unit_direction = get_unit_vector(direction)
     for t in np.arange(0, distance, step_size):
@@ -2499,18 +2500,18 @@ def interpolate_poses(pose1, pose2, pos_step_size=0.01, ori_step_size=np.pi/16):
         yield (pos, quat)
     yield pose2
 
-def workspace_trajectory(robot, link, start_point, direction, quat, **kwargs):
-    # TODO: pushing example
-    # TODO: just use current configuration?
-    # TODO: check collisions?
-    # TODO: lower intermediate tolerance
-    traj = []
-    for pose in get_cartesian_waypoints(start_point, direction, quat):
-        conf = inverse_kinematics(robot, link, pose, **kwargs)
-        if conf is None:
-            return None
-        traj.append(conf)
-    return traj
+# def workspace_trajectory(robot, link, start_point, direction, quat, **kwargs):
+#     # TODO: pushing example
+#     # TODO: just use current configuration?
+#     # TODO: check collisions?
+#     # TODO: lower intermediate tolerance
+#     traj = []
+#     for pose in get_cartesian_waypoints(start_point, direction, quat):
+#         conf = inverse_kinematics(robot, link, pose, **kwargs)
+#         if conf is None:
+#             return None
+#         traj.append(conf)
+#     return traj
 
 #####################################
 

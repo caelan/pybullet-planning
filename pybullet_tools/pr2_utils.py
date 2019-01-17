@@ -333,18 +333,19 @@ def get_edge_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=u
 # Cylinder pushes
 
 def get_cylinder_push(body, theta, under=False, body_quat=unit_quat(),
-                      base_offset=0.02, side_offset=0.03):
+                      tilt=0., base_offset=0.02, side_offset=0.03):
     body_pose = (unit_point(), body_quat)
     center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
     translate_center = Pose(point=point_from_pose(body_pose)-center)
+    tilt_gripper = Pose(euler=Euler(pitch=tilt))
     translate_x = Pose(point=[-diameter / 2 - side_offset, 0, 0]) # Compute as a function of theta
     translate_z = Pose(point=[0, 0, -height / 2 + base_offset])
-    rotate_x = Pose(euler=[0, 0, theta])
-    reflect_z = Pose(euler=[0, math.pi, 0])
+    rotate_x = Pose(euler=Euler(yaw=theta))
+    reflect_z = Pose(euler=Euler(pitch=math.pi))
     grasps = []
     for i in range(1 + under):
-        rotate_z = Pose(euler=[0, 0, i * math.pi])
-        grasps.append(multiply(translate_x, translate_z, rotate_x, rotate_z,
+        rotate_z = Pose(euler=Euler(yaw=i * math.pi))
+        grasps.append(multiply(tilt_gripper, translate_x, translate_z, rotate_x, rotate_z,
                                reflect_z, translate_center, body_pose))
     return grasps
 
