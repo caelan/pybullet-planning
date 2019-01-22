@@ -12,7 +12,7 @@ from itertools import product, combinations, count
 
 import numpy as np
 
-from .transformations import quaternion_from_matrix, quaternion_slerp, unit_vector
+from .transformations import quaternion_from_matrix, unit_vector
 
 directory = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(directory, '../motion'))
@@ -204,6 +204,7 @@ class BodySaver(Saver):
 class WorldSaver(Saver):
     def __init__(self):
         self.body_savers = [BodySaver(body) for body in get_bodies()]
+        # TODO: add/remove new bodies
 
     def restore(self):
         for body_saver in self.body_savers:
@@ -409,6 +410,9 @@ def connect(use_gui=True, shadows=True):
         #  --window_backend=2 --render_device=0'
         sim_id = p.connect(method)
         #sim_id = p.connect(p.GUI, options="--opengl2") if use_gui else p.connect(p.DIRECT)
+    assert 0 <= sim_id
+    #sim_id2 = p.connect(p.SHARED_MEMORY)
+    #print(sim_id, sim_id2)
     if use_gui:
         # p.COV_ENABLE_PLANAR_REFLECTION
         # p.COV_ENABLE_SINGLE_STEP_RENDERING
@@ -436,12 +440,57 @@ def connect(use_gui=True, shadows=True):
     #    p.configureDebugVisualizer(*pair)
     return sim_id
 
+
+def SetViewerUserThread():
+    # https://github.com/bulletphysics/bullet3/blob/cb55094a118b7afd6c6af6daa648fac1152450ec/examples/pybullet/examples/userData.py
+    # https://github.com/bulletphysics/bullet3/tree/554208c98de4c87b4f5b97e912fcc52699006c05/examples/ExampleBrowser
+    #from pybullet_utils import bullet_client
+    #from pybullet_utils.bullet_client import BulletClient
+    #server = bullet_client.BulletClient(connection_mode=p.SHARED_MEMORY_SERVER) # GUI_SERVER
+    #sim_id = p.connect(p.GUI)
+    #print(dir(server))
+    #client = bullet_client.BulletClient(connection_mode=p.SHARED_MEMORY)
+    #print('Client: ', client)
+    #return
+
+
+    sim_id_1 = p.connect(p.GUI)
+    print('Main:', sim_id_1)
+    wait_for_interrupt()
+
+    #threading = __import__('threading')
+    import threading
+    Thread = threading.Thread
+    def localuserfn():
+        try:
+            sim_id = p.connect(p.SHARED_MEMORY)
+            print('Thread:', sim_id)
+        finally:
+            pass
+    userthread = Thread(target=localuserfn, args=[])
+    userthread.start()
+    sig_thread_id = 0
+    for tid, tobj in threading._active.items():
+        if tobj is userthread:
+            sig_thread_id = tid
+            break
+    print(sig_thread_id)
+    try:
+        #viewer.main(True,sig_thread_id)
+        #sim_id_1 = p.connect(p.GUI)
+        #print('Main:', sim_id_1)
+        pass
+
+    finally:
+        userthread.join()
+
 def disconnect():
     # TODO: change CLIENT?
     with HideOutput():
         return p.disconnect(physicsClientId=CLIENT)
 
 def is_connected():
+    # p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, "video.mp4")
     return p.getConnectionInfo(physicsClientId=CLIENT)['isConnected']
 
 def get_connection(client=None):
@@ -597,11 +646,11 @@ def quat_from_vector_angle(vec, angle):
 def unit_pose():
     return (unit_point(), unit_quat())
 
-def get_length(vec):
-    return np.linalg.norm(vec)
+def get_length(vec, norm=2):
+    return np.linalg.norm(vec, ord=norm)
 
-def get_distance(p1, p2):
-    return get_length(np.array(p2) - np.array(p1))
+def get_distance(p1, p2, **kwargs):
+    return get_length(np.array(p2) - np.array(p1), **kwargs)
 
 def angle_between(vec1, vec2):
     return np.math.acos(np.dot(vec1, vec2) / (get_length(vec1) *  get_length(vec2)))
@@ -665,12 +714,13 @@ def pose_from_base_values(base_values, default_pose):
     return (x, y, z), quat_from_euler([roll, pitch, yaw])
 
 def quat_angle_between(quat0, quat1): # quaternion_slerp
-    #p.getQuaternionSlerp()
-    #p.getDifferenceQuaternion()
+    #p.computeViewMatrixFromYawPitchRoll()
     q0 = unit_vector(quat0[:4])
     q1 = unit_vector(quat1[:4])
     d = np.dot(q0, q1)
     angle = math.acos(d)
+    #delta = p.getDifferenceQuaternion(quat0, quat1)
+    #angle = math.acos(delta[-1])
     return angle
 
 def all_between(lower_limits, values, upper_limits):
@@ -772,11 +822,11 @@ def dump_body(body):
     link = -1
     print('Link id: {} | Name: {} | Mass: {} | Collision: {} | Visual: {}'.format(
         link, get_base_name(body), get_mass(body),
-        len(get_collision_data(body, link)), len(get_visual_data(body, link))))
+        len(get_collision_data(body, link)), -1)) # len(get_visual_data(body, link))))
     for link in get_links(body):
         print('Link id: {} | Name: {} | Parent: {} | Mass: {} | Collision: {} | Visual: {}'.format(
             link, get_link_name(body, link), get_link_name(body, get_link_parent(body, link)), get_mass(body, link),
-            len(get_collision_data(body, link)), len(get_visual_data(body, link))))
+            len(get_collision_data(body, link)), -1)) # len(get_visual_data(body, link))))
         #print(get_joint_parent_frame(body, link))
         #print(map(get_data_geometry, get_visual_data(body, link)))
         #print(map(get_data_geometry, get_collision_data(body, link)))
@@ -1398,7 +1448,7 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
     # localVisualFrame orientation: orientation of local visual frame relative to link/joint frame
     # parentFramePos: joint position in parent frame
     # parentFrameOrn: joint orientation in parent frame
-    client = get_client(client)
+    client = get_client(client) # client is the new client for the body
     if links is None:
         links = get_links(body)
     #movable_joints = [joint for joint in links if is_movable(body, joint)]
@@ -2302,7 +2352,9 @@ def get_cartesian_waypoints(start_point, direction, quat, step_size=0.01):
 def get_quaternion_waypoints(point, start_quat, end_quat, step_size=np.pi/16):
     angle = quat_angle_between(start_quat, end_quat)
     for t in np.arange(0, angle, step_size):
-        quat = quaternion_slerp(start_quat, end_quat, fraction=t/angle)
+        fraction = t/angle
+        quat = p.getQuaternionSlerp(start_quat, end_quat, interpolationFraction=fraction)
+        #quat = quaternion_slerp(start_quat, end_quat, fraction=fraction)
         yield (point, quat)
     yield (point, end_quat)
 
@@ -2314,7 +2366,8 @@ def interpolate_poses(pose1, pose2, pos_step_size=0.01, ori_step_size=np.pi/16):
     for i in range(num_steps):
         fraction = float(i) / num_steps
         pos = (1-fraction)*np.array(pos1) + fraction*np.array(pos2)
-        quat = quaternion_slerp(quat1, quat2, fraction=fraction)
+        quat = p.getQuaternionSlerp(quat1, quat2, interpolationFraction=fraction)
+        #quat = quaternion_slerp(quat1, quat2, fraction=fraction)
         yield (pos, quat)
     yield pose2
 
@@ -2395,8 +2448,11 @@ def add_line(start, end, color=(0, 0, 0), width=1, lifetime=None, parent=-1, par
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
 
-def remove_debug(debug): # removeAllUserDebugItems
+def remove_debug(debug):
     p.removeUserDebugItem(debug, physicsClientId=CLIENT)
+
+def remove_all_debug():
+    p.removeAllUserDebugItems(physicsClientId=CLIENT)
 
 def add_body_name(body, name=None, **kwargs):
     if name is None:
@@ -2407,7 +2463,6 @@ def add_body_name(body, name=None, **kwargs):
     #position = (0, 0, upper[2])
     position = upper
     return add_text(name, position=position, parent=body, **kwargs)  # removeUserDebugItem
-
 
 def add_segments(points, closed=False, **kwargs):
     lines = []
@@ -2638,7 +2693,7 @@ def obj_file_from_mesh(mesh, under=True):
         assert(len(v) == 3)
         s += '\nv {}'.format(' '.join(map(str, v)))
     for f in faces:
-        assert(len(f) == 3)
+        #assert(len(f) == 3) # Not necessarily true
         f = [i+1 for i in f]
         s += '\nf {}'.format(' '.join(map(str, f)))
         if under:
@@ -2678,6 +2733,8 @@ def read_pcd_file(path):
 # TODO: factor out things that don't depend on pybullet
 
 #####################################
+
+# https://github.com/kohterai/OBJ-Parser
 
 """
 def readWrl(filename, name='wrlObj', scale=1.0, color='black'):
