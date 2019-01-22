@@ -11,9 +11,12 @@ from .pr2_never_collisions import NEVER_COLLISIONS
 from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, joints_from_names, \
     set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, \
-    unit_pose, joints_from_names, PoseSaver, get_lower_upper, get_joint_limits, get_joints, \
+    unit_pose, joints_from_names, PoseSaver, get_aabb, get_joint_limits, get_joints, \
     ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, \
-    violates_limits, add_line, get_body_name, get_num_joints, approximate_as_cylinder, approximate_as_prism
+    violates_limits, add_line, get_body_name, get_num_joints, approximate_as_cylinder, \
+    approximate_as_prism, unit_quat, unit_point, clip, get_joint_info, tform_point, get_yaw, \
+    get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
+    movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -76,6 +79,8 @@ PR2_LEFT_ARM_CONFS = {
 #####################################
 
 PR2_URDF = "models/pr2_description/pr2.urdf" # 87 joints
+PR2_URDF = "models/pr2_description/pr2_hpn.urdf"
+#PR2_URDF = "models/pr2_description/pr2_kinect.urdf"
 DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf" # 82 joints
 
 def is_drake_pr2(robot): # 87
@@ -131,8 +136,9 @@ def get_disabled_collisions(pr2):
     #disabled_names = PR2_DISABLED_COLLISIONS
     disabled_names = NEVER_COLLISIONS
     #disabled_names = PR2_DISABLED_COLLISIONS + NEVER_COLLISIONS
-    return {(link_from_name(pr2, name1), link_from_name(pr2, name2))
-            for name1, name2 in disabled_names if has_link(pr2, name1) and has_link(pr2, name2)}
+    link_mapping = {get_link_name(pr2, link): link for link in get_links(pr2)}
+    return {(link_mapping[name1], link_mapping[name2])
+            for name1, name2 in disabled_names if (name1 in link_mapping) and (name2 in link_mapping)}
 
 
 def load_dae_collisions():
@@ -327,20 +333,20 @@ def get_edge_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=u
 
 # Cylinder pushes
 
-PUSH_HEIGHT = 0.02
-PUSH_DISTANCE = 0.03
-
-def get_cylinder_push(body, theta, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose()):
+def get_cylinder_push(body, theta, under=False, body_quat=unit_quat(),
+                      tilt=0., base_offset=0.02, side_offset=0.03):
+    body_pose = (unit_point(), body_quat)
     center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
-    reflect_z = Pose(euler=[0, math.pi, 0])
-    translate_z = Pose(point=[0, 0, -height / 2 + PUSH_HEIGHT])
     translate_center = Pose(point=point_from_pose(body_pose)-center)
-    rotate_x = Pose(euler=[0, 0, theta])
-    translate_x = Pose(point=[-diameter / 2 - PUSH_DISTANCE, 0, 0])
+    tilt_gripper = Pose(euler=Euler(pitch=tilt))
+    translate_x = Pose(point=[-diameter / 2 - side_offset, 0, 0]) # Compute as a function of theta
+    translate_z = Pose(point=[0, 0, -height / 2 + base_offset])
+    rotate_x = Pose(euler=Euler(yaw=theta))
+    reflect_z = Pose(euler=Euler(pitch=math.pi))
     grasps = []
     for i in range(1 + under):
-        rotate_z = Pose(euler=[0, 0, i * math.pi])
-        grasps.append(multiply(tool_pose, translate_z, translate_x, rotate_x, rotate_z,
+        rotate_z = Pose(euler=Euler(yaw=i * math.pi))
+        grasps.append(multiply(tilt_gripper, translate_x, translate_z, rotate_x, rotate_z,
                                reflect_z, translate_center, body_pose))
     return grasps
 
@@ -421,6 +427,7 @@ def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
 
 # Camera
 
+# TODO: this is only for high_def_optical_frame
 WIDTH, HEIGHT = 640, 480
 FX, FY = 772.55, 772.5
 MAX_VISUAL_DISTANCE = 5.0
@@ -429,10 +436,13 @@ MAX_KINECT_DISTANCE = 2.5
 def get_camera_matrix(width, height, fx, fy):
     # cx, cy = 320.5, 240.5
     cx, cy = width / 2., height / 2.
-    return np.array([
-        [fx, 0, cx],
-        [0, fy, cy],
-        [0, 0, 1]])
+    return np.array([[fx, 0, cx],
+                     [0, fy, cy],
+                     [0, 0, 1]])
+
+def clip_pixel(pixel, width, height):
+    x, y = pixel
+    return clip(x, 0, width-1), clip(y, 0, height-1)
 
 def ray_from_pixel(camera_matrix, pixel):
     return np.linalg.inv(camera_matrix).dot(np.append(pixel, 1))
@@ -443,36 +453,40 @@ def pixel_from_ray(camera_matrix, ray):
 def get_pr2_camera_matrix():
     return get_camera_matrix(WIDTH, HEIGHT, FX, FY)
 
-def get_pr2_view_section(z):
-    camera_matrix = get_pr2_camera_matrix()
+def get_pr2_view_section(z, camera_matrix=None):
+    if camera_matrix is None:
+        camera_matrix = get_pr2_camera_matrix()
     pixels = [(0, 0), (WIDTH, HEIGHT)]
     return [z*ray_from_pixel(camera_matrix, p) for p in pixels]
 
-def get_pr2_field_of_view():
+def get_pr2_field_of_view(**kwargs):
     z = 1
-    view_lower, view_upper = get_pr2_view_section(z=z)
-    theta = angle_between([view_lower[0], 0, z],  [view_upper[0], 0, z]) # 0.7853966439794928
-    phi = angle_between([0, view_lower[1], z],  [0, view_upper[1], z]) # 0.6024511557247721
-    return theta, phi
+    view_lower, view_upper = get_pr2_view_section(z=z, **kwargs)
+    horizontal = angle_between([view_lower[0], 0, z],
+                               [view_upper[0], 0, z]) # 0.7853966439794928
+    vertical = angle_between([0, view_lower[1], z],
+                             [0, view_upper[1], z]) # 0.6024511557247721
+    return horizontal, vertical
 
 def is_visible_point(camera_matrix, depth, point):
     if not (0 <= point[2] < depth):
         return False
     px, py = pixel_from_ray(camera_matrix, point)
-    # TODO: bounding box methods?
     return (0 <= px < WIDTH) and (0 <= py < HEIGHT)
 
-def is_visible_aabb(body_lower, body_upper):
+def is_visible_aabb(aabb, **kwargs):
     # TODO: do intersect as well for identifying new obstacles
+    body_lower, body_upper = aabb
     z = body_lower[2]
     if z < 0:
         return False
-    view_lower, view_upper = get_pr2_view_section(z)
+    view_lower, view_upper = get_pr2_view_section(z, **kwargs)
     # TODO: bounding box methods?
     return not (np.any(body_lower[:2] < view_lower[:2]) or
                 np.any(view_upper[:2] < body_upper[:2]))
 
-def support_from_aabb(lower, upper):
+def support_from_aabb(aabb):
+    lower, upper = aabb
     min_x, min_y, z = lower
     max_x, max_y, _ = upper
     return [(min_x, min_y, z), (min_x, max_y, z),
@@ -510,10 +524,10 @@ def cone_mesh_from_support(support):
         faces.append((0, index1, index2))
     return vertices, faces
 
-def get_viewcone_base(depth=MAX_VISUAL_DISTANCE):
-    # TODO: attach to the pr2?
+def get_viewcone_base(depth=MAX_VISUAL_DISTANCE, camera_matrix=None):
     cone = [(0, 0), (WIDTH, 0), (WIDTH, HEIGHT), (0, HEIGHT)]
-    camera_matrix = get_pr2_camera_matrix()
+    if camera_matrix is None:
+        camera_matrix = get_pr2_camera_matrix()
     vertices = []
     for pixel in cone:
         ray = depth * ray_from_pixel(camera_matrix, pixel)
@@ -526,30 +540,37 @@ def get_viewcone(depth=MAX_VISUAL_DISTANCE, **kwargs):
     assert (mesh is not None)
     return create_mesh(mesh, **kwargs)
 
-def attach_viewcone(robot, head_name=HEAD_LINK_NAME, depth=MAX_VISUAL_DISTANCE, color=(1, 0, 0), **kwargs):
+def attach_viewcone(robot, head_name=HEAD_LINK_NAME, depth=MAX_VISUAL_DISTANCE,
+                    camera_matrix=None, color=(1, 0, 0), **kwargs):
+    # TODO: head_name likely needs to have a visual geometry to attach
     head_link = link_from_name(robot, head_name)
     lines = []
-    for v1, v2 in cone_wires_from_support(get_viewcone_base(depth=depth)):
-        lines.append(add_line(v1, v2, color=color, parent=robot, parent_link=head_link, **kwargs))
+    for v1, v2 in cone_wires_from_support(get_viewcone_base(depth=depth, camera_matrix=camera_matrix)):
+        if is_optical(head_name):
+            rotation = Pose()
+        else:
+            rotation = Pose(euler=Euler(roll=-np.pi/2, yaw=-np.pi/2)) # Apply in reverse order
+        p1 = tform_point(rotation, v1)
+        p2 = tform_point(rotation, v2)
+        lines.append(add_line(p1, p2, color=color, parent=robot, parent_link=head_link, **kwargs))
     return lines
 
 #####################################
 
-def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME):
+def is_optical(link_name):
+    return 'optical' in link_name
+
+def inverse_visibility_old(pr2, point, head_name=HEAD_LINK_NAME):
     # TODO: test visibility by getting box
-    # TODO: IK version
-    # https://github.com/PR2/pr2_controllers/blob/kinetic-devel/pr2_head_action/src/pr2_point_frame.cpp
     #head_joints = [joint_from_name(pr2, name) for name in PR2_GROUPS['head']]
     #head_link = head_joints[-1]
-    optical_frame = ('optical' in head_name)
     head_link = link_from_name(pr2, head_name)
-
     head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
     with ConfSaver(pr2):
         set_joint_positions(pr2, head_joints, np.zeros(len(head_joints)))
         head_pose = get_link_pose(pr2, head_link)
     point_head = point_from_pose(multiply(invert(head_pose), Pose(point)))
-    if optical_frame:
+    if is_optical(head_name):
         dy, dz, dx =  np.array([-1, -1, 1])*np.array(point_head)
     else:
         dx, dy, dz = np.array(point_head)
@@ -560,6 +581,38 @@ def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME):
     if violates_limits(pr2, head_joints, conf):
         return None
     return conf
+
+def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME,
+                       max_iterations=100, step_size=0.5, tolerance=np.pi*1e-2):
+    # https://github.com/PR2/pr2_controllers/blob/kinetic-devel/pr2_head_action/src/pr2_point_frame.cpp
+    head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
+    head_link = link_from_name(pr2, head_name)
+    camera_axis = np.array([0, 0, 1]) if is_optical(head_name) else np.array([1, 0, 0])
+    # TODO: could also set the target orientation for inverse kinematics
+    head_conf = np.zeros(len(head_joints))
+    with LockRenderer():
+        with ConfSaver(pr2):
+            for _ in range(max_iterations):
+                set_joint_positions(pr2, head_joints, head_conf)
+                world_from_head = get_link_pose(pr2, head_link)
+                point_head = tform_point(invert(world_from_head), point)
+                error_angle = angle_between(camera_axis, point_head)
+                if abs(error_angle) <= tolerance:
+                    break
+                normal_head = np.cross(camera_axis, point_head)
+                normal_world = tform_point((unit_point(), quat_from_pose(world_from_head)), normal_head)
+                correction_quat = quat_from_axis_angle(normal_world, step_size*error_angle)
+                correction_euler = euler_from_quat(correction_quat)
+                _, angular = compute_jacobian(pr2, head_link)
+                correction_conf = np.array([np.dot(angular[mj], correction_euler)
+                                            for mj in movable_from_joints(pr2, head_joints)])
+                head_conf += correction_conf
+                #wait_for_user()
+            else:
+                return None
+    if violates_limits(pr2, head_joints, head_conf):
+        return None
+    return head_conf
 
 def plan_scan_path(pr2, tilt=0):
     head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
@@ -590,20 +643,25 @@ def plan_pause_scan_path(pr2, tilt=0):
 
 Detection = namedtuple('Detection', ['body', 'distance'])
 
-def get_detection_cone(pr2, body, depth=MAX_VISUAL_DISTANCE):
-    head_link = link_from_name(pr2, HEAD_LINK_NAME)
+def get_view_aabb(body, view_pose, **kwargs):
     with PoseSaver(body):
-        body_head = multiply(invert(get_link_pose(pr2, head_link)), get_pose(body))
-        set_pose(body, body_head)
-        body_lower, body_upper = get_lower_upper(body)
-        z = body_lower[2]
-        if depth < z:
-            return None, z
-        if not is_visible_aabb(body_lower, body_upper):
-            return None, z
-        return cone_mesh_from_support(support_from_aabb(body_lower, body_upper)), z
+        body_view = multiply(invert(view_pose), get_pose(body))
+        set_pose(body, body_view)
+        aabb = get_aabb(body, **kwargs)
+        return aabb
 
-def get_detections(pr2, p_false_neg=0, **kwargs):
+def get_detection_cone(pr2, body, camera_link=HEAD_LINK_NAME, depth=MAX_VISUAL_DISTANCE, **kwargs):
+    head_link = link_from_name(pr2, camera_link)
+    body_aabb = get_view_aabb(body, get_link_pose(pr2, head_link))
+    lower_z = body_aabb[0][2]
+    if depth < lower_z:
+        return None, lower_z
+    if not is_visible_aabb(body_aabb, **kwargs):
+        return None, lower_z
+    return cone_mesh_from_support(support_from_aabb(body_aabb)), lower_z
+
+def get_detections(pr2, p_false_neg=0, camera_link=HEAD_LINK_NAME, **kwargs):
+    camera_pose = get_link_pose(pr2, link_from_name(pr2, camera_link))
     detections = []
     for body in get_bodies():
         if np.random.random() < p_false_neg:
@@ -612,6 +670,7 @@ def get_detections(pr2, p_false_neg=0, **kwargs):
         if mesh is None:
             continue
         cone = create_mesh(mesh, color=None)
+        set_pose(cone, camera_pose) # TODO: this previously wasn't here...
         if not single_collision(cone):
             detections.append(Detection(body, z))
         remove_body(cone)
