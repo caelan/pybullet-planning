@@ -123,19 +123,27 @@ class HideOutput(object):
     with HideOutput():
         os.system('ls -l')
     '''
-    def __init__(self, *args, **kw):
+    def __init__(self, enable=True):
+        self.enable = enable
+        if not self.enable:
+            return
         sys.stdout.flush()
         self._origstdout = sys.stdout
         self._oldstdout_fno = os.dup(sys.stdout.fileno())
         self._devnull = os.open(os.devnull, os.O_WRONLY)
 
     def __enter__(self):
+        if not self.enable:
+            return
         self._newstdout = os.dup(1)
         os.dup2(self._devnull, 1)
         os.close(self._devnull)
         sys.stdout = os.fdopen(self._newstdout, 'w')
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        if not self.enable:
+            return
+        sys.stdout.close()
         sys.stdout = self._origstdout
         sys.stdout.flush()
         os.dup2(self._oldstdout_fno, 1)
