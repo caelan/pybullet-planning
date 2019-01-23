@@ -143,10 +143,11 @@ class HideOutput(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         if not self.enable:
             return
-        sys.stdout.close()
+        #sys.stdout.close()
         sys.stdout = self._origstdout
         sys.stdout.flush()
         os.dup2(self._oldstdout_fno, 1)
+        os.close(self._oldstdout_fno) # Added
 
 #####################################
 
