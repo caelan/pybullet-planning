@@ -546,8 +546,10 @@ def add_data_path():
     p.setAdditionalSearchPath(data_path)
     return data_path
 
+GRAVITY = 9.8
+
 def enable_gravity():
-    p.setGravity(0, 0, -9.8, physicsClientId=CLIENT)
+    p.setGravity(0, 0, -GRAVITY, physicsClientId=CLIENT)
 
 def disable_gravity():
     p.setGravity(0, 0, 0, physicsClientId=CLIENT)
@@ -1207,9 +1209,11 @@ LinkState = namedtuple('LinkState', ['linkWorldPosition', 'linkWorldOrientation'
                                      'localInertialFramePosition', 'localInertialFrameOrientation',
                                      'worldLinkFramePosition', 'worldLinkFrameOrientation'])
 
-def get_link_state(body, link):
-    # computeLinkVelocity | computeForwardKinematics
-    return LinkState(*p.getLinkState(body, link, physicsClientId=CLIENT))
+def get_link_state(body, link, kinematics=True, velocity=True):
+    # TODO: the defaults are set to False?
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/pybullet.c
+    return LinkState(*p.getLinkState(body, link, #computeLinkVelocity=velocity, computeForwardKinematics=kinematics,
+                                     physicsClientId=CLIENT))
 
 def get_com_pose(body, link): # COM = center of mass
     link_state = get_link_state(body, link)
@@ -1223,7 +1227,7 @@ def get_link_pose(body, link):
     if link == BASE_LINK:
         return get_pose(body)
     # if set to 1 (or True), the Cartesian world position/orientation will be recomputed using forward kinematics.
-    link_state = get_link_state(body, link)
+    link_state = get_link_state(body, link) #, kinematics=True, velocity=False)
     return link_state.worldLinkFramePosition, link_state.worldLinkFrameOrientation
 
 def get_all_link_parents(body):
@@ -1310,7 +1314,10 @@ DynamicsInfo = namedtuple('DynamicsInfo', ['mass', 'lateral_friction',
 def get_dynamics_info(body, link=BASE_LINK):
     return DynamicsInfo(*p.getDynamicsInfo(body, link, physicsClientId=CLIENT))
 
+get_link_info = get_dynamics_info
+
 def get_mass(body, link=BASE_LINK):
+    # TOOD: get full mass
     return get_dynamics_info(body, link).mass
 
 def get_joint_inertial_pose(body, joint):
