@@ -9900,7 +9900,7 @@ int main(int argc, char** argv)
     bool bSuccess = ComputeIk(eetrans, eerot, vfree.size() > 0 ? &vfree[0] : NULL, solutions);
 
     if( !bSuccess ) {
-        fprintf(stderr,"Failed to get ik solution\n");
+        //fprintf(stderr,"Failed to get ik solution\n");
         return -1;
     }
 
@@ -9965,7 +9965,7 @@ static PyObject *get_ik(PyObject *self, PyObject *args)
 
     if (!bSuccess)
     {
-        fprintf(stderr,"Failed to get ik solution\n");
+        //fprintf(stderr,"Failed to get ik solution\n");
         return Py_BuildValue(""); // Equivalent to returning None in python
     }
 
