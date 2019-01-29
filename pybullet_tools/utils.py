@@ -1,18 +1,19 @@
 from __future__ import print_function
 
+import colorsys
 import math
 import os
 import pickle
 import platform
 import pybullet as p
-import numpy as np
 import sys
 import time
-
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
 
-from .transformations import quaternion_from_matrix, quaternion_slerp, unit_vector
+import numpy as np
+
+from .transformations import quaternion_from_matrix, unit_vector
 
 directory = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(directory, '../motion'))
@@ -22,10 +23,9 @@ from motion_planners.rrt_connect import birrt, direct_path
 # from future_builtins import map, filter
 # from builtins import input # TODO - use future
 try:
-   input = raw_input
+    user_input = raw_input
 except NameError:
-   pass
-user_input = input
+    user_input = input
 
 INF = np.inf
 PI = np.pi
@@ -86,6 +86,13 @@ def ensure_dir(f):
     if not os.path.exists(d):
         os.makedirs(d)
 
+def safe_zip(sequence1, sequence2):
+    assert len(sequence1) == len(sequence2)
+    return zip(sequence1, sequence2)
+
+def clip(value, min_value=-INF, max_value=+INF):
+    return min(max(min_value, value), max_value)
+
 #####################################
 
 class Verbose(object):
@@ -116,33 +123,41 @@ class HideOutput(object):
     with HideOutput():
         os.system('ls -l')
     '''
-    def __init__(self, *args, **kw):
+    def __init__(self, enable=True):
+        self.enable = enable
+        if not self.enable:
+            return
         sys.stdout.flush()
         self._origstdout = sys.stdout
         self._oldstdout_fno = os.dup(sys.stdout.fileno())
         self._devnull = os.open(os.devnull, os.O_WRONLY)
 
     def __enter__(self):
+        if not self.enable:
+            return
         self._newstdout = os.dup(1)
         os.dup2(self._devnull, 1)
         os.close(self._devnull)
         sys.stdout = os.fdopen(self._newstdout, 'w')
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        if not self.enable:
+            return
+        #sys.stdout.close()
         sys.stdout = self._origstdout
         sys.stdout.flush()
         os.dup2(self._oldstdout_fno, 1)
+        os.close(self._oldstdout_fno) # Added
 
 #####################################
 
 # Savers
 
-# TODO: move the saving to enter?
-
 class Saver(object):
     def restore(self):
         raise NotImplementedError()
     def __enter__(self):
+        # TODO: move the saving to enter?
         pass
     def __exit__(self, type, value, traceback):
         self.restore()
@@ -156,14 +171,12 @@ class ClientSaver(Saver):
     def restore(self):
         set_client(self.client)
 
-
 class StateSaver(Saver):
     def __init__(self):
         self.state = save_state()
 
     def restore(self):
         restore_state(self.state)
-
 
 #####################################
 
@@ -192,6 +205,7 @@ class BodySaver(Saver):
         self.body = body
         self.pose_saver = PoseSaver(body)
         self.conf_saver = ConfSaver(body)
+        # TODO: store velocities
 
     def restore(self):
         self.pose_saver.restore()
@@ -200,6 +214,7 @@ class BodySaver(Saver):
 class WorldSaver(Saver):
     def __init__(self):
         self.body_savers = [BodySaver(body) for body in get_bodies()]
+        # TODO: add/remove new bodies
 
     def restore(self):
         for body_saver in self.body_savers:
@@ -221,16 +236,32 @@ def set_client(client):
     global CLIENT
     CLIENT = client
 
-BODIES = defaultdict(dict)
-# TODO: update delete as well
+ModelInfo = namedtuple('URDFInfo', ['name', 'path', 'fixed_base', 'scale'])
 
-URDFInfo = namedtuple('URDFInfo', ['name', 'path'])
+INFO_FROM_BODY = {}
 
-def load_pybullet(filename, fixed_base=False):
+def get_model_info(body):
+    return INFO_FROM_BODY.get((CLIENT, body), None)
+
+def load_pybullet(filename, fixed_base=False, scale=1.):
     # fixed_base=False implies infinite base mass
-    body = p.loadURDF(filename, useFixedBase=fixed_base, physicsClientId=CLIENT)
-    BODIES[CLIENT][body] = URDFInfo(None, filename)
+    with LockRenderer():
+        # URDF_USE_IMPLICIT_CYLINDER
+        # URDF_INITIALIZE_SAT_FEATURES
+        # URDF_ENABLE_CACHED_GRAPHICS_SHAPES
+        body = p.loadURDF(filename, useFixedBase=fixed_base, globalScaling=scale, physicsClientId=CLIENT)
+    INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, filename, fixed_base, scale)
     return body
+
+def load_model_info(info):
+    # TODO: disable file caching to reuse old filenames
+    # p.setPhysicsEngineParameter(enableFileCaching=0, physicsClientId=CLIENT)
+    if info.path.endswith('.urdf'):
+        return load_pybullet(info.path, fixed_base=info.fixed_base, scale=info.scale)
+    if info.path.endswith('.obj'):
+        mass = STATIC_MASS if info.fixed_base else 1.
+        return create_obj(info.path, mass=mass, scale=info.scale)
+    raise NotImplementedError(info.path)
 
 URDF_FLAGS = [p.URDF_USE_INERTIA_FROM_FILE,
               p.URDF_USE_SELF_COLLISION,
@@ -242,13 +273,18 @@ def get_model_path(rel_path): # TODO: add to search path
     directory = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(directory, '..', rel_path)
 
-def load_model(rel_path, pose=None, fixed_base=True):
+def load_model(rel_path, pose=None, fixed_base=True, scale=1.):
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
     abs_path = get_model_path(rel_path)
     flags = 0 # by default, Bullet disables self-collision
     add_data_path()
+    #with LockRenderer():
     if abs_path.endswith('.urdf'):
-        body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags, physicsClientId=CLIENT)
+        # URDF_ENABLE_CACHED_GRAPHICS_SHAPES seems to help
+        # but URDF_INITIALIZE_SAT_FEATURES does not (might need to be provided a mesh)
+        #flags = p.URDF_INITIALIZE_SAT_FEATURES | p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
+        body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags,
+                          globalScaling=scale, physicsClientId=CLIENT)
     elif abs_path.endswith('.sdf'):
         body = p.loadSDF(abs_path, physicsClientId=CLIENT)
     elif abs_path.endswith('.xml'):
@@ -259,55 +295,73 @@ def load_model(rel_path, pose=None, fixed_base=True):
         raise ValueError(abs_path)
     if pose is not None:
         set_pose(body, pose)
-    BODIES[CLIENT][body] = URDFInfo(None, abs_path)
+    INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, abs_path, fixed_base, scale)
     return body
 
 #####################################
 
-class World(object):
-    def __init__(self, client):
-        self.client = client
-        self.bodies = {}
-    def activate(self):
-        set_client(self.client)
-    def load(self, path, name=None, fixed_base=False):
-        body = p.loadURDF(path, useFixedBase=fixed_base, physicsClientId=self.client)
-        self.bodies[body] = URDFInfo(name, path)
-        return body
-    def remove(self, body):
-        del self.bodies[body]
-        return p.removeBody(body, physicsClientId=CLIENT)
-    def reset(self):
-        p.resetSimulation(physicsClientId=self.client)
-        self.bodies = {}
-    # TODO: with statement
-    def copy(self):
-        raise NotImplementedError()
-    def __repr__(self):
-        return '{}({})'.format(self.__class__.__name__, len(self.bodies))
+# class World(object):
+#     def __init__(self, client):
+#         self.client = client
+#         self.bodies = {}
+#     def activate(self):
+#         set_client(self.client)
+#     def load(self, path, name=None, fixed_base=False, scale=1.):
+#         body = p.loadURDF(path, useFixedBase=fixed_base, physicsClientId=self.client)
+#         self.bodies[body] = URDFInfo(name, path, fixed_base, scale)
+#         return body
+#     def remove(self, body):
+#         del self.bodies[body]
+#         return p.removeBody(body, physicsClientId=self.client)
+#     def reset(self):
+#         p.resetSimulation(physicsClientId=self.client)
+#         self.bodies = {}
+#     # TODO: with statement
+#     def copy(self):
+#         raise NotImplementedError()
+#     def __repr__(self):
+#         return '{}({})'.format(self.__class__.__name__, len(self.bodies))
 
 #####################################
 
 def elapsed_time(start_time):
     return time.time() - start_time
 
+MouseEvent = namedtuple('MouseEvent', ['eventType', 'mousePosX', 'mousePosY', 'buttonIndex', 'buttonState'])
+
+def get_mouse_events():
+    return list(MouseEvent(*event) for event in p.getMouseEvents(physicsClientId=CLIENT))
+
 def wait_for_duration(duration): #, dt=0):
     t0 = time.time()
     while elapsed_time(t0) <= duration:
-        disable_gravity()
-    # TODO: wait until keypress
+        #keys = p.getKeyboardEvents()
+        get_mouse_events()
+        #for k, v in keys.items():
+        #    #p.KEY_IS_DOWN, p.KEY_WAS_RELEASED, p.KEY_WAS_TRIGGERED
+        #    if (k == p.B3G_RETURN) and (v & p.KEY_WAS_TRIGGERED):
+        #        return
+        #time.sleep(1e-3) # Doesn't work
+        #disable_gravity()
 
-def simulate_for_duration(duration, dt=0):
-    # WARNING: this simulates for a wall-clock duration rather than simulator duration
-    t0 = time.time()
-    while elapsed_time(t0) <= duration:
+def simulate_for_duration(duration):
+    dt = get_time_step()
+    for i in range(int(duration / dt)):
         step_simulation()
-        time.sleep(dt)
 
 def get_time_step():
     # {'gravityAccelerationX', 'useRealTimeSimulation', 'gravityAccelerationZ', 'numSolverIterations',
     # 'gravityAccelerationY', 'numSubSteps', 'fixedTimeStep'}
     return p.getPhysicsEngineParameters(physicsClientId=CLIENT)['fixedTimeStep']
+
+def enable_separating_axis_test():
+    p.setPhysicsEngineParameter(enableSAT=1, physicsClientId=CLIENT)
+    #p.setCollisionFilterPair()
+    #p.setCollisionFilterGroupMask()
+    #p.setInternalSimFlags()
+    # enableFileCaching: Set to 0 to disable file caching, such as .obj wavefront file loading
+    #p.getAPIVersion() # TODO: check that API is up-to-date
+    #p.isNumpyEnabled()
 
 def simulate_for_sim_duration(sim_duration, real_dt=0, frequency=INF):
     t0 = time.time()
@@ -354,14 +408,58 @@ def wait_for_interrupt(max_time=np.inf):
 #         # https://docs.python.org/2/library/select.html
 
 
+def disable_viewer():
+    p.configureDebugVisualizer(p.COV_ENABLE_GUI, False, physicsClientId=CLIENT)
+    p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, False, physicsClientId=CLIENT)
+    p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, False, physicsClientId=CLIENT)
+    p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, False, physicsClientId=CLIENT)
+    #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, False, physicsClientId=CLIENT)
+    #p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING, True, physicsClientId=CLIENT)
+    #p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, False, physicsClientId=CLIENT)
+    #p.configureDebugVisualizer(p.COV_ENABLE_WIREFRAME, True, physicsClientId=CLIENT)
+    #p.COV_ENABLE_MOUSE_PICKING, p.COV_ENABLE_KEYBOARD_SHORTCUTS
+
+def set_renderer(enable):
+    p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, int(enable), physicsClientId=CLIENT)
+
+class LockRenderer(Saver):
+    # disabling rendering temporary makes adding objects faster
+    def __init__(self, lock=True):
+        # skip if the visualizer isn't active
+        if lock:
+            set_renderer(enable=False)
+
+    def restore(self):
+        set_renderer(enable=True)
+
+CLIENTS = set()
+
 def connect(use_gui=True, shadows=True):
+    # Shared Memory: execute the physics simulation and rendering in a separate process
+    # http://openrave.org/docs/0.8.2/_modules/openravepy/misc/#SetViewerUserThread
+    # https://github.com/bulletphysics/bullet3/blob/6b2cae1b1d63056ef48c64b39c8db6027e897663/examples/pybullet/examples/vrminitaur.py#L7
+    # make sure to compile pybullet with PYBULLET_USE_NUMPY enabled
     method = p.GUI if use_gui else p.DIRECT
     with HideOutput():
+        # options="--width=1024 --height=768"
+        #  --window_backend=2 --render_device=0'
         sim_id = p.connect(method)
         #sim_id = p.connect(p.GUI, options="--opengl2") if use_gui else p.connect(p.DIRECT)
+    assert 0 <= sim_id
+    #sim_id2 = p.connect(p.SHARED_MEMORY)
+    #print(sim_id, sim_id2)
+    CLIENTS.add(sim_id)
     if use_gui:
+        # p.COV_ENABLE_PLANAR_REFLECTION
+        # p.COV_ENABLE_SINGLE_STEP_RENDERING
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, False, physicsClientId=sim_id)
+        p.configureDebugVisualizer(p.COV_ENABLE_TINY_RENDERER, False, physicsClientId=sim_id)
+        p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, False, physicsClientId=sim_id)
+        p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, False, physicsClientId=sim_id)
+        p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, False, physicsClientId=sim_id)
         p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, shadows, physicsClientId=sim_id)
+
+    # you can also use GUI mode, for faster OpenGL rendering (instead of TinyRender CPU)
     #visualizer_options = {
     #    p.COV_ENABLE_WIREFRAME: 1,
     #    p.COV_ENABLE_SHADOWS: 0,
@@ -378,12 +476,59 @@ def connect(use_gui=True, shadows=True):
     #    p.configureDebugVisualizer(*pair)
     return sim_id
 
+
+def SetViewerUserThread():
+    # https://github.com/bulletphysics/bullet3/blob/cb55094a118b7afd6c6af6daa648fac1152450ec/examples/pybullet/examples/userData.py
+    # https://github.com/bulletphysics/bullet3/tree/554208c98de4c87b4f5b97e912fcc52699006c05/examples/ExampleBrowser
+    #from pybullet_utils import bullet_client
+    #from pybullet_utils.bullet_client import BulletClient
+    #server = bullet_client.BulletClient(connection_mode=p.SHARED_MEMORY_SERVER) # GUI_SERVER
+    #sim_id = p.connect(p.GUI)
+    #print(dir(server))
+    #client = bullet_client.BulletClient(connection_mode=p.SHARED_MEMORY)
+    #print('Client: ', client)
+    #return
+
+
+    sim_id_1 = p.connect(p.GUI)
+    print('Main:', sim_id_1)
+    wait_for_interrupt()
+
+    #threading = __import__('threading')
+    import threading
+    Thread = threading.Thread
+    def localuserfn():
+        try:
+            sim_id = p.connect(p.SHARED_MEMORY)
+            print('Thread:', sim_id)
+        finally:
+            pass
+    userthread = Thread(target=localuserfn, args=[])
+    userthread.start()
+    sig_thread_id = 0
+    for tid, tobj in threading._active.items():
+        if tobj is userthread:
+            sig_thread_id = tid
+            break
+    print(sig_thread_id)
+    try:
+        #viewer.main(True,sig_thread_id)
+        #sim_id_1 = p.connect(p.GUI)
+        #print('Main:', sim_id_1)
+        pass
+
+    finally:
+        userthread.join()
+
 def disconnect():
     # TODO: change CLIENT?
+    if CLIENT in CLIENTS:
+        CLIENTS.remove(CLIENT)
     with HideOutput():
         return p.disconnect(physicsClientId=CLIENT)
 
 def is_connected():
+    # p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, "video.mp4")
     return p.getConnectionInfo(physicsClientId=CLIENT)['isConnected']
 
 def get_connection(client=None):
@@ -397,10 +542,14 @@ def get_data_path():
     return pybullet_data.getDataPath()
 
 def add_data_path():
-    return p.setAdditionalSearchPath(get_data_path())
+    data_path = get_data_path()
+    p.setAdditionalSearchPath(data_path)
+    return data_path
+
+GRAVITY = 9.8
 
 def enable_gravity():
-    p.setGravity(0, 0, -9.8, physicsClientId=CLIENT)
+    p.setGravity(0, 0, -GRAVITY, physicsClientId=CLIENT)
 
 def disable_gravity():
     p.setGravity(0, 0, 0, physicsClientId=CLIENT)
@@ -433,8 +582,11 @@ def update_state():
 def reset_simulation():
     p.resetSimulation(physicsClientId=CLIENT)
 
+CameraInfo = namedtuple('CameraInfo', ['width', 'height', 'viewMatrix', 'projectionMatrix', 'cameraUp', 'cameraForward',
+                                       'horizontal', 'vertical', 'yaw', 'pitch', 'dist', 'target'])
+
 def get_camera():
-    return p.getDebugVisualizerCamera(physicsClientId=CLIENT)
+    return CameraInfo(*p.getDebugVisualizerCamera(physicsClientId=CLIENT))
 
 def set_camera(yaw, pitch, distance, target_position=np.zeros(3)):
     p.resetDebugVisualizerCamera(distance, yaw, pitch, target_position, physicsClientId=CLIENT)
@@ -455,14 +607,106 @@ def set_camera_pose(camera_point, target_point=np.zeros(3)):
     p.resetDebugVisualizerCamera(distance, math.degrees(yaw), math.degrees(pitch),
                                  target_point, physicsClientId=CLIENT)
 
-def get_image(width=640, height=480):
+def set_camera_pose2(world_from_camera, distance=2):
+    target_camera = np.array([0, 0, distance])
+    target_world = tform_point(world_from_camera, target_camera)
+    camera_world = point_from_pose(world_from_camera)
+    set_camera_pose(camera_world, target_world)
+    #roll, pitch, yaw = euler_from_quat(quat_from_pose(world_from_camera))
+    # TODO: assert that roll is about zero?
+    #p.resetDebugVisualizerCamera(cameraDistance=distance, cameraYaw=math.degrees(yaw), cameraPitch=math.degrees(-pitch),
+    #                             cameraTargetPosition=target_world, physicsClientId=CLIENT)
+
+CameraImage = namedtuple('CameraImage', ['rgbPixels', 'depthPixels', 'segmentationMaskBuffer'])
+
+def demask_pixel(pixel):
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/segmask_linkindex.py
+    # Not needed when p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX is not enabled
+    #if 0 <= pixel:
+    #    return None
+    # Returns a large value when undefined
+    body = pixel & ((1 << 24) - 1)
+    link = (pixel >> 24) - 1
+    return body, link
+
+def save_image(filename, rgba):
     import scipy.misc
-    rgb, depth, _ = p.getCameraImage(width, height, physicsClientId=CLIENT)[2:]
-    print(rgb.shape) # (480, 640, 4)
-    print(depth.shape) # (480, 640)
-    scipy.misc.imsave('image.jpg', rgb[:,:,:3])
-    # scipy.misc.toimage(image_array, cmin=0.0, cmax=...).save('outfile.jpg')
-    return rgb # np.reshape(rgb, [width, height, 4])
+    if filename.endswith('.jpg'):
+        scipy.misc.imsave(filename, rgba[:, :, :3])
+    elif filename.endswith('.png'):
+        scipy.misc.imsave(filename, rgba)  # (480, 640, 4)
+        # scipy.misc.toimage(image_array, cmin=0.0, cmax=...).save('outfile.jpg')
+    else:
+        raise ValueError(filename)
+    print('Saved image at {}'.format(filename))
+
+def get_projection_matrix(width, height, vertical_fov, near, far):
+    """
+    OpenGL projection matrix
+    :param width: 
+    :param height: 
+    :param vertical_fov: vertical field of view in radians
+    :param near: 
+    :param far: 
+    :return: 
+    """
+    # http://www.songho.ca/opengl/gl_projectionmatrix.html
+    # http://www.songho.ca/opengl/gl_transform.html#matrix
+    # https://www.edmundoptics.fr/resources/application-notes/imaging/understanding-focal-length-and-field-of-view/
+    # gluPerspective() requires only 4 parameters; vertical field of view (FOV),
+    # the aspect ratio of width to height and the distances to near and far clipping planes.
+    aspect = float(width) / height
+    fov_degrees = math.degrees(vertical_fov)
+    projection_matrix = p.computeProjectionMatrixFOV(fov=fov_degrees, aspect=aspect,
+                                                     nearVal=near, farVal=far, physicsClientId=CLIENT)
+    # projection_matrix = p.computeProjectionMatrix(0, width, height, 0, near, far, physicsClientId=CLIENT)
+    return projection_matrix
+    #return np.reshape(projection_matrix, [4, 4])
+
+def spaced_colors(n, s=1, v=1):
+    return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]
+
+def image_from_segmented(segmented, color_from_body=None):
+    if color_from_body is None:
+        bodies = get_bodies()
+        color_from_body = dict(zip(bodies, spaced_colors(len(bodies))))
+    image = np.zeros(segmented.shape[:2] + (3,))
+    for r in range(segmented.shape[0]):
+        for c in range(segmented.shape[1]):
+            body, link = segmented[r, c, :]
+            image[r, c, :] = color_from_body.get(body, (0, 0, 0))
+    return image
+
+def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, near=0.02, far=5.0,
+              segment=False, segment_links=False):
+    # computeViewMatrixFromYawPitchRoll
+    view_matrix = p.computeViewMatrix(cameraEyePosition=camera_pos, cameraTargetPosition=target_pos,
+                                      cameraUpVector=[0, 0, 1], physicsClientId=CLIENT)
+    projection_matrix = get_projection_matrix(width, height, vertical_fov, near, far)
+    if segment:
+        if segment_links:
+            flags = p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX
+        else:
+            flags = 0
+    else:
+        flags = p.ER_NO_SEGMENTATION_MASK
+    image = CameraImage(*p.getCameraImage(width, height, viewMatrix=view_matrix,
+                                          projectionMatrix=projection_matrix,
+                                          shadow=False,
+                                          flags=flags,
+                                          renderer=p.ER_TINY_RENDERER, # p.ER_BULLET_HARDWARE_OPENGL
+                                          physicsClientId=CLIENT)[2:])
+    depth = far * near / (far - (far - near) * image.depthPixels)
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/pointCloudFromCameraImage.py
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/getCameraImageTest.py
+    segmented = None
+    if segment:
+        segmented = np.zeros(image.segmentationMaskBuffer.shape + (2,))
+        for r in range(segmented.shape[0]):
+            for c in range(segmented.shape[1]):
+                pixel = image.segmentationMaskBuffer[r, c]
+                segmented[r, c, :] = demask_pixel(pixel)
+    return CameraImage(image.rgbPixels, depth, segmented)
 
 def set_default_camera():
     set_camera(160, -35, 2.5, Point())
@@ -482,6 +726,8 @@ def restore_bullet(filename):
 #####################################
 
 # Geometry
+
+#Pose = namedtuple('Pose', ['position', 'orientation'])
 
 def Point(x=0., y=0., z=0.):
     return np.array([x, y, z])
@@ -529,17 +775,18 @@ def unit_point():
 def unit_quat():
     return quat_from_euler([0, 0, 0]) # [X,Y,Z,W]
 
-def quat_from_vector_angle(vec, angle):
-    return get_unit_vector(np.append(vec, [angle]))
+def quat_from_axis_angle(axis, angle): # axis-angle
+    #return get_unit_vector(np.append(vec, [angle]))
+    return np.append(math.sin(angle/2) * get_unit_vector(axis), [math.cos(angle / 2)])
 
 def unit_pose():
     return (unit_point(), unit_quat())
 
-def get_length(vec):
-    return np.linalg.norm(vec)
+def get_length(vec, norm=2):
+    return np.linalg.norm(vec, ord=norm)
 
-def get_distance(p1, p2):
-    return get_length(np.array(p2) - np.array(p1))
+def get_distance(p1, p2, **kwargs):
+    return get_length(np.array(p2) - np.array(p1), **kwargs)
 
 def angle_between(vec1, vec2):
     return np.math.acos(np.dot(vec1, vec2) / (get_length(vec1) *  get_length(vec2)))
@@ -603,10 +850,13 @@ def pose_from_base_values(base_values, default_pose):
     return (x, y, z), quat_from_euler([roll, pitch, yaw])
 
 def quat_angle_between(quat0, quat1): # quaternion_slerp
+    #p.computeViewMatrixFromYawPitchRoll()
     q0 = unit_vector(quat0[:4])
     q1 = unit_vector(quat1[:4])
-    d = np.dot(q0, q1)
+    d = max(-1., min(np.dot(q0, q1), 1.))
     angle = math.acos(d)
+    #delta = p.getDifferenceQuaternion(quat0, quat1)
+    #angle = math.acos(delta[-1])
     return angle
 
 def all_between(lower_limits, values, upper_limits):
@@ -653,6 +903,8 @@ def body_from_name(name):
     raise ValueError(name)
 
 def remove_body(body):
+    if (CLIENT, body) in INFO_FROM_BODY:
+        del INFO_FROM_BODY[CLIENT, body]
     return p.removeBody(body, physicsClientId=CLIENT)
 
 def get_pose(body):
@@ -705,11 +957,14 @@ def dump_body(body):
             print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
                 joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
                 is_circular(body, joint), get_joint_limits(body, joint)))
-    print('Link id: {} | Name: {} | Mass: {}'.format(-1, get_base_name(body), get_mass(body)))
+    link = -1
+    print('Link id: {} | Name: {} | Mass: {} | Collision: {} | Visual: {}'.format(
+        link, get_base_name(body), get_mass(body),
+        len(get_collision_data(body, link)), -1)) # len(get_visual_data(body, link))))
     for link in get_links(body):
-        print('Link id: {} | Name: {} | Parent: {} | Mass: {}'.format(
-            link, get_link_name(body, link), get_link_name(body, get_link_parent(body, link)),
-            get_mass(body, link)))
+        print('Link id: {} | Name: {} | Parent: {} | Mass: {} | Collision: {} | Visual: {}'.format(
+            link, get_link_name(body, link), get_link_name(body, get_link_parent(body, link)), get_mass(body, link),
+            len(get_collision_data(body, link)), -1)) # len(get_visual_data(body, link))))
         #print(get_joint_parent_frame(body, link))
         #print(map(get_data_geometry, get_visual_data(body, link)))
         #print(map(get_data_geometry, get_collision_data(body, link)))
@@ -756,8 +1011,8 @@ def get_joint_info(body, joint):
 def get_joint_name(body, joint):
     return get_joint_info(body, joint).jointName.decode('UTF-8')
 
-#def get_joint_names(body):
-#    return [get_joint_name(body, joint) for joint in get_joints(body)]
+def get_joint_names(body, joints):
+    return [get_joint_name(body, joint) for joint in joints]
 
 def joint_from_name(body, name):
     for joint in get_joints(body):
@@ -776,7 +1031,7 @@ def joints_from_names(body, names):
     return tuple(joint_from_name(body, name) for name in names)
 
 JointState = namedtuple('JointState', ['jointPosition', 'jointVelocity',
-                                     'jointReactionForces', 'appliedJointMotorTorque'])
+                                       'jointReactionForces', 'appliedJointMotorTorque'])
 
 def get_joint_state(body, joint):
     return JointState(*p.getJointState(body, joint, physicsClientId=CLIENT))
@@ -784,11 +1039,20 @@ def get_joint_state(body, joint):
 def get_joint_position(body, joint):
     return get_joint_state(body, joint).jointPosition
 
+def get_joint_velocity(body, joint):
+    return get_joint_state(body, joint).jointVelocity
+
+def get_joint_reaction_force(body, joint):
+    return get_joint_state(body, joint).jointReactionForces
+
 def get_joint_torque(body, joint):
     return get_joint_state(body, joint).appliedJointMotorTorque
 
 def get_joint_positions(body, joints): # joints=None):
     return tuple(get_joint_position(body, joint) for joint in joints)
+
+def get_joint_velocities(body, joints):
+    return tuple(get_joint_velocity(body, joint) for joint in joints)
 
 def set_joint_position(body, joint, value):
     p.resetJointState(body, joint, value, physicsClientId=CLIENT)
@@ -807,6 +1071,11 @@ def set_configuration(body, values):
 def get_full_configuration(body):
     # Cannot alter fixed joints
     return get_joint_positions(body, get_joints(body))
+
+def get_labeled_configuration(body):
+    movable_joints = get_movable_joints(body)
+    return dict(zip(get_joint_names(body, movable_joints),
+                    get_joint_positions(body, movable_joints)))
 
 def get_joint_type(body, joint):
     return get_joint_info(body, joint).jointType
@@ -940,9 +1209,11 @@ LinkState = namedtuple('LinkState', ['linkWorldPosition', 'linkWorldOrientation'
                                      'localInertialFramePosition', 'localInertialFrameOrientation',
                                      'worldLinkFramePosition', 'worldLinkFrameOrientation'])
 
-def get_link_state(body, link):
-    # computeLinkVelocity | computeForwardKinematics
-    return LinkState(*p.getLinkState(body, link, physicsClientId=CLIENT))
+def get_link_state(body, link, kinematics=True, velocity=True):
+    # TODO: the defaults are set to False?
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/pybullet.c
+    return LinkState(*p.getLinkState(body, link, #computeLinkVelocity=velocity, computeForwardKinematics=kinematics,
+                                     physicsClientId=CLIENT))
 
 def get_com_pose(body, link): # COM = center of mass
     link_state = get_link_state(body, link)
@@ -956,7 +1227,7 @@ def get_link_pose(body, link):
     if link == BASE_LINK:
         return get_pose(body)
     # if set to 1 (or True), the Cartesian world position/orientation will be recomputed using forward kinematics.
-    link_state = get_link_state(body, link)
+    link_state = get_link_state(body, link) #, kinematics=True, velocity=False)
     return link_state.worldLinkFramePosition, link_state.worldLinkFrameOrientation
 
 def get_all_link_parents(body):
@@ -1043,7 +1314,10 @@ DynamicsInfo = namedtuple('DynamicsInfo', ['mass', 'lateral_friction',
 def get_dynamics_info(body, link=BASE_LINK):
     return DynamicsInfo(*p.getDynamicsInfo(body, link, physicsClientId=CLIENT))
 
+get_link_info = get_dynamics_info
+
 def get_mass(body, link=BASE_LINK):
+    # TOOD: get full mass
     return get_dynamics_info(body, link).mass
 
 def get_joint_inertial_pose(body, joint):
@@ -1078,6 +1352,7 @@ SHAPE_TYPES = {
     p.GEOM_MESH: 'mesh', # 5
     p.GEOM_PLANE: 'plane',  # 6
     p.GEOM_CAPSULE: 'capsule',  # 7
+    # p.GEOM_FORCE_CONCAVE_TRIMESH
 }
 
 # TODO: clean this up to avoid repeated work
@@ -1092,7 +1367,7 @@ def get_cylinder_geometry(radius, height):
     return {
         'shapeType': p.GEOM_CYLINDER,
         'radius': radius,
-        'height': height,
+        'length': height,
     }
 
 def get_sphere_geometry(radius):
@@ -1106,6 +1381,12 @@ def get_capsule_geometry(radius, height):
         'shapeType': p.GEOM_CAPSULE,
         'radius': radius,
         'length': height,
+    }
+
+def get_plane_geometry(normal):
+    return {
+        'shapeType': p.GEOM_PLANE,
+        'planeNormal': normal,
     }
 
 def get_mesh_geometry(path, scale=1.):
@@ -1125,14 +1406,13 @@ def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
         'physicsClientId': CLIENT,
     }
     collision_args.update(geometry)
+    if 'length' in collision_args: # TODO: pybullet bug
+        geometry['height'] = geometry['length']
+        del geometry['length']
     collision_id = p.createCollisionShape(**collision_args)
 
-    if (color is None) or not has_gui():
-    #if not has_gui():
+    if (color is None): # or not has_gui():
         return collision_id, NULL_ID
-    if 'height' in geometry: # TODO: pybullet bug
-        geometry['length'] = geometry['height']
-        del geometry['height']
     visual_args = {
         'rgbaColor': color,
         'visualFramePosition': point,
@@ -1154,29 +1434,31 @@ def plural(word):
     return word + 's'
 
 def create_shape_array(geoms, poses, colors=None):
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/pybullet.c
+    # createCollisionShape: height
+    # createVisualShape: length
+    # createCollisionShapeArray: lengths
+    # createVisualShapeArray: lengths
     mega_geom = defaultdict(list)
     for geom in geoms:
         extended_geom = get_default_geometry()
         extended_geom.update(geom)
-        if 'height' in extended_geom:
-            extended_geom['length'] = extended_geom['height']
-            del extended_geom['height']
+        #extended_geom = geom.copy()
         for key, value in extended_geom.items():
             mega_geom[plural(key)].append(value)
 
     collision_args = mega_geom.copy()
-    for pose in poses:
-        point, quat = pose
+    for (point, quat) in poses:
         collision_args['collisionFramePositions'].append(point)
         collision_args['collisionFrameOrientations'].append(quat)
     collision_id = p.createCollisionShapeArray(physicsClientId=CLIENT, **collision_args)
-    if (colors is None) or not has_gui():
+    if (colors is None): # or not has_gui():
         return collision_id, NULL_ID
 
     visual_args = mega_geom.copy()
-    for pose, color in zip(poses, colors):
-        point, quat = pose
-        visual_args['rgbaColors'].append(color)
+    for (point, quat), color in zip(poses, colors):
+        # TODO: color doesn't seem to work correctly here
+        #visual_args['rgbaColors'].append(color)
         visual_args['visualFramePositions'].append(point)
         visual_args['visualFrameOrientations'].append(quat)
     visual_id = p.createVisualShapeArray(physicsClientId=CLIENT, **visual_args)
@@ -1188,11 +1470,9 @@ def create_body(collision_id, visual_id, mass=STATIC_MASS):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
 
-
 def create_box(w, l, h, mass=STATIC_MASS, color=(1, 0, 0, 1)):
     collision_id, visual_id = create_shape(get_box_geometry(w, l, h), color=color)
-    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
+    return create_body(collision_id, visual_id, mass=mass)
     # basePosition | baseOrientation
     # linkCollisionShapeIndices | linkVisualShapeIndices
 
@@ -1201,49 +1481,37 @@ def create_cylinder(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
     return create_body(collision_id, visual_id, mass=mass)
 
 def create_capsule(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
-    # TODO: combine this
-    collision_id = p.createCollisionShape(p.GEOM_CAPSULE, radius=radius, height=height, physicsClientId=CLIENT)
-    if (color is None) or not has_gui():
-        visual_id = -1
-    else:
-        visual_id = p.createVisualShape(p.GEOM_CAPSULE, radius=radius, height=height, rgbaColor=color, physicsClientId=CLIENT)
-    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
-
-def create_sphere(radius, mass=STATIC_MASS, color=(0, 0, 1, 1)):
-    # mass = 0  => static
-    collision_id = p.createCollisionShape(p.GEOM_SPHERE, radius=radius, physicsClientId=CLIENT)
-    if (color is None) or not has_gui():
-        visual_id = -1
-    else:
-        visual_id = p.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color, physicsClientId=CLIENT)
-    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
-
-def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(.5, .5, .5, 1)):
-    collision_id = p.createCollisionShape(p.GEOM_PLANE, normal=normal, physicsClientId=CLIENT)
-    if (color is None) or not has_gui():
-        visual_id = -1
-    else:
-        visual_id = p.createVisualShape(p.GEOM_PLANE, normal=normal, rgbaColor=color, physicsClientId=CLIENT)
-    return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
-                             baseVisualShapeIndex=visual_id, physicsClientId=CLIENT) # basePosition | baseOrientation
-
-def create_obj(path, scale=1., mass=STATIC_MASS, color=(.5, .5, .5, 1.)):
-    collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), color=color)
+    collision_id, visual_id = create_shape(get_capsule_geometry(radius, height), color=color)
     return create_body(collision_id, visual_id, mass=mass)
 
+def create_sphere(radius, mass=STATIC_MASS, color=(0, 0, 1, 1)):
+    collision_id, visual_id = create_shape(get_sphere_geometry(radius), color=color)
+    return create_body(collision_id, visual_id, mass=mass)
 
+def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(0, 0, 0, 1)):
+    # color seems to be ignored in favor of a texture
+    collision_id, visual_id = create_shape(get_plane_geometry(normal), color=color)
+    return create_body(collision_id, visual_id, mass=mass)
+
+def create_obj(path, scale=1., mass=STATIC_MASS, color=(0.5, 0.5, 0.5, 1)):
+    collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), color=color)
+    body = create_body(collision_id, visual_id, mass=mass)
+    fixed_base = (mass == STATIC_MASS)
+    INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, path, fixed_base, scale) # TODO: store geometry info instead?
+    return body
+
+
+Mesh = namedtuple('Mesh', ['vertices', 'faces'])
 mesh_count = count()
-MESH_DIR = 'temp/'
+TEMP_DIR = 'temp/'
 
-def create_mesh(mesh, **kwargs):
+def create_mesh(mesh, under=True, **kwargs):
     # http://people.sc.fsu.edu/~jburkardt/data/obj/obj.html
     # TODO: read OFF / WRL / OBJ files
     # TODO: maintain dict to file
-    ensure_dir(MESH_DIR)
-    path = os.path.join(MESH_DIR, 'mesh{}.obj'.format(next(mesh_count)))
-    write(path, obj_file_from_mesh(mesh))
+    ensure_dir(TEMP_DIR)
+    path = os.path.join(TEMP_DIR, 'mesh{}.obj'.format(next(mesh_count)))
+    write(path, obj_file_from_mesh(mesh, under=under))
     return create_obj(path, **kwargs)
     #safe_remove(path) # TODO: removing might delete mesh?
 
@@ -1252,7 +1520,7 @@ def create_mesh(mesh, **kwargs):
 VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
                                                  'visualGeometryType', 'dimensions', 'meshAssetFileName',
                                                  'localVisualFrame_position', 'localVisualFrame_orientation',
-                                                 'rgbaColor'])
+                                                 'rgbaColor']) # 'textureUniqueId'
 
 def visual_shape_from_data(data, client):
     if (data.visualGeometryType == p.GEOM_MESH) and (data.meshAssetFileName == 'unknown_file'):
@@ -1260,8 +1528,9 @@ def visual_shape_from_data(data, client):
     # visualFramePosition: translational offset of the visual shape with respect to the link
     # visualFrameOrientation: rotational offset (quaternion x,y,z,w) of the visual shape with respect to the link frame
     pose = (data.localVisualFrame_position, data.localVisualFrame_orientation)
-    inertial_pose = get_joint_inertial_pose(data.objectUniqueId, data.linkIndex)
-    point, quat = multiply(invert(inertial_pose), pose)
+    #inertial_pose = get_joint_inertial_pose(data.objectUniqueId, data.linkIndex)
+    #point, quat = multiply(invert(inertial_pose), pose)
+    point, quat = pose
     return p.createVisualShape(shapeType=data.visualGeometryType,
                                radius=get_data_radius(data),
                                halfExtents=np.array(get_data_extents(data))/2,
@@ -1305,21 +1574,21 @@ def collision_shape_from_data(data, body, link, client):
     #return p.createCollisionShapeArray()
 
 def clone_visual_shape(body, link, client):
-    if not has_gui(client):
-        return -1
+    #if not has_gui(client):
+    #    return -1
     visual_data = get_visual_data(body, link)
-    if visual_data:
-        assert (len(visual_data) == 1)
-        return visual_shape_from_data(visual_data[0], client)
-    return -1
+    if not visual_data:
+        return -1
+    assert (len(visual_data) == 1)
+    return visual_shape_from_data(visual_data[0], client)
 
 def clone_collision_shape(body, link, client):
     collision_data = get_collision_data(body, link)
-    if collision_data:
-        assert (len(collision_data) == 1)
-        # TODO: can do CollisionArray
-        return collision_shape_from_data(collision_data[0], body, link, client)
-    return -1
+    if not collision_data:
+        return -1
+    assert (len(collision_data) == 1)
+    # TODO: can do CollisionArray
+    return collision_shape_from_data(collision_data[0], body, link, client)
 
 def clone_body(body, links=None, collision=True, visual=True, client=None):
     # TODO: names are not retained
@@ -1328,7 +1597,7 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
     # localVisualFrame orientation: orientation of local visual frame relative to link/joint frame
     # parentFramePos: joint position in parent frame
     # parentFrameOrn: joint orientation in parent frame
-    client = get_client(client)
+    client = get_client(client) # client is the new client for the body
     if links is None:
         links = get_links(body)
     #movable_joints = [joint for joint in links if is_movable(body, joint)]
@@ -1400,6 +1669,7 @@ def clone_world(client=None, exclude=[]):
 #####################################
 
 def get_collision_data(body, link=BASE_LINK):
+    # TODO: try catch
     return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link, physicsClientId=CLIENT)]
 
 def get_data_type(data):
@@ -1412,7 +1682,7 @@ def get_default_geometry():
     return {
         'halfExtents': DEFAULT_EXTENTS,
         'radius': DEFAULT_RADIUS,
-        'height': DEFAULT_HEIGHT,
+        'length': DEFAULT_HEIGHT, # 'height'
         'fileName': DEFAULT_MESH,
         'meshScale': DEFAULT_SCALE,
         'planeNormal': DEFAULT_NORMAL,
@@ -1503,25 +1773,40 @@ def set_color(body, color, link=BASE_LINK, shape_index=-1):
     :return:
     """
     # specularColor
-    return p.changeVisualShape(body, link, rgbaColor=color, physicsClientId=CLIENT)
+    return p.changeVisualShape(body, link, shapeIndex=shape_index, rgbaColor=color,
+                               #textureUniqueId=None, specularColor=None,
+                               physicsClientId=CLIENT)
 
 #####################################
 
 # Bounding box
 
+AABB = namedtuple('AABB', ['lower', 'upper'])
+
 def aabb_from_points(points):
-    return np.min(points, axis=0), np.max(points, axis=0)
+    return AABB(np.min(points, axis=0), np.max(points, axis=0))
 
 def aabb_union(aabbs):
     return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
 
-def get_lower_upper(body, link=None):
-    if link is not None:
-        return p.getAABB(body, linkIndex=link, physicsClientId=CLIENT)
-    return aabb_union(get_lower_upper(body, link=link)
-                      for link in [BASE_LINK] + list(get_links(body)))
+def get_aabbs(body):
+    return [get_aabb(body, link=link) for link in get_all_links(body)]
 
-get_aabb = get_lower_upper
+def get_aabb(body, link=None):
+    # getOverlappingObjects
+    # Note that the query is conservative and may return additional objects that don't have actual AABB overlap.
+    # This happens because the acceleration structures have some heuristic that enlarges the AABBs a bit
+    # (extra margin and extruded along the velocity vector).
+    # AABBs are extended by this number. Defaults to 0.02 in Bullet 2.x
+    #p.setPhysicsEngineParameter(contactBreakingThreshold=0.0, physicsClientId=CLIENT)
+    if link is None:
+        aabb = aabb_union(get_aabbs(body))
+    else:
+        aabb = p.getAABB(body, linkIndex=link, physicsClientId=CLIENT)
+    #p.setPhysicsEngineParameter(contactBreakingThreshold=0.02, physicsClientId=CLIENT)
+    return aabb
+
+get_lower_upper = get_aabb
 
 def get_center_extent(body):
     lower, upper = get_aabb(body)
@@ -1566,7 +1851,7 @@ def approximate_as_cylinder(body, body_pose=unit_pose()):
 # Collision
 
 #MAX_DISTANCE = 1e-3
-MAX_DISTANCE = 0
+MAX_DISTANCE = 0.
 
 def contact_collision():
     step_simulation()
@@ -1664,13 +1949,15 @@ def refine_path(body, joints, waypoints, num_steps):
         refined_path += list(refine_fn(v1, v2))
     return refined_path
 
-def get_extend_fn(body, joints, resolutions=None):
+def get_extend_fn(body, joints, resolutions=None, norm=2):
+    # norm = 1, 2, INF
     if resolutions is None:
         resolutions = 0.05*np.ones(len(joints))
     difference_fn = get_difference_fn(body, joints)
     def fn(q1, q2):
-        steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
-        refine_fn = get_refine_fn(body, joints, num_steps=int(np.max(steps)))
+        #steps = int(np.max(np.abs(np.divide(difference_fn(q2, q1), resolutions))))
+        steps = int(np.linalg.norm(np.divide(difference_fn(q2, q1), resolutions), ord=norm))
+        refine_fn = get_refine_fn(body, joints, num_steps=steps)
         return refine_fn(q1, q2)
     return fn
 
@@ -2128,6 +2415,37 @@ def joint_controller_hold(body, joints, target, **kwargs):
         conf[joint] = value
     return joint_controller(body, movable_joints, conf, **kwargs)
 
+def joint_controller_hold2(body, joints, positions, velocities=None,
+                           tolerance=1e-2 * np.pi, position_gain=0.05, velocity_gain=0.01):
+    """
+    Keeps other joints in place
+    """
+    # TODO: velocity_gain causes the PR2 to oscillate
+    if velocities is None:
+        velocities = [0.] * len(positions)
+    movable_joints = get_movable_joints(body)
+    target_positions = list(get_joint_positions(body, movable_joints))
+    target_velocities = [0.] * len(movable_joints)
+    movable_from_original = {o: m for m, o in enumerate(movable_joints)}
+    #print(list(positions), list(velocities))
+    for joint, position, velocity in zip(joints, positions, velocities):
+        target_positions[movable_from_original[joint]] = position
+        target_velocities[movable_from_original[joint]] = velocity
+    # return joint_controller(body, movable_joints, conf)
+    current_conf = get_joint_positions(body, movable_joints)
+    #forces = [get_max_force(body, joint) for joint in movable_joints]
+    while not np.allclose(current_conf, target_positions, atol=tolerance, rtol=0):
+        # TODO: only enforce velocity constraints at end
+        p.setJointMotorControlArray(body, movable_joints, p.POSITION_CONTROL,
+                                    targetPositions=target_positions,
+                                    #targetVelocities=target_velocities,
+                                    positionGains=[position_gain] * len(movable_joints),
+                                    #velocityGains=[velocity_gain] * len(movable_joints),
+                                    #forces=forces,
+                                    physicsClientId=CLIENT)
+        yield current_conf
+        current_conf = get_joint_positions(body, movable_joints)
+
 def trajectory_controller(body, joints, path, **kwargs):
     for target in path:
         for positions in joint_controller(body, joints, target, **kwargs):
@@ -2153,9 +2471,10 @@ def velocity_control_joints(body, joints, velocities):
 
 #####################################
 
-def compute_jacobian(robot, link, positions): #, joints=None):
-    #if joints is None:
+def compute_jacobian(robot, link, positions=None):
     joints = get_movable_joints(robot)
+    if positions is None:
+        positions = get_joint_positions(robot, joints)
     assert len(joints) == len(positions)
     velocities = [0.0] * len(positions)
     accelerations = [0.0] * len(positions)
@@ -2191,7 +2510,11 @@ def inverse_kinematics_helper(robot, link, target_pose):
     (target_point, target_quat) = target_pose
     assert target_point is not None
     if target_quat is None:
-        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, physicsClientId=CLIENT)
+        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point,
+                                                      #lowerLimits=ll, upperLimits=ul, jointRanges=jr, restPoses=rp,
+                                                      #jointDamping=jd, solver=ikSolver, maxNumIterations=100,
+                                                      #residualThreshold=.01,
+                                                      physicsClientId=CLIENT)
     else:
         kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, target_quat, physicsClientId=CLIENT)
     if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
@@ -2228,7 +2551,7 @@ def inverse_kinematics(robot, link, target_pose, max_iterations=200, custom_limi
 
 #####################################
 
-def get_cartesian_waypoints(start_point, direction, quat, step_size=0.01):
+def get_position_waypoints(start_point, direction, quat, step_size=0.01):
     distance = get_length(direction)
     unit_direction = get_unit_vector(direction)
     for t in np.arange(0, distance, step_size):
@@ -2239,7 +2562,9 @@ def get_cartesian_waypoints(start_point, direction, quat, step_size=0.01):
 def get_quaternion_waypoints(point, start_quat, end_quat, step_size=np.pi/16):
     angle = quat_angle_between(start_quat, end_quat)
     for t in np.arange(0, angle, step_size):
-        quat = quaternion_slerp(start_quat, end_quat, fraction=t/angle)
+        fraction = t/angle
+        quat = p.getQuaternionSlerp(start_quat, end_quat, interpolationFraction=fraction)
+        #quat = quaternion_slerp(start_quat, end_quat, fraction=fraction)
         yield (point, quat)
     yield (point, end_quat)
 
@@ -2251,22 +2576,23 @@ def interpolate_poses(pose1, pose2, pos_step_size=0.01, ori_step_size=np.pi/16):
     for i in range(num_steps):
         fraction = float(i) / num_steps
         pos = (1-fraction)*np.array(pos1) + fraction*np.array(pos2)
-        quat = quaternion_slerp(quat1, quat2, fraction=fraction)
+        quat = p.getQuaternionSlerp(quat1, quat2, interpolationFraction=fraction)
+        #quat = quaternion_slerp(quat1, quat2, fraction=fraction)
         yield (pos, quat)
     yield pose2
 
-def workspace_trajectory(robot, link, start_point, direction, quat, **kwargs):
-    # TODO: pushing example
-    # TODO: just use current configuration?
-    # TODO: check collisions?
-    # TODO: lower intermediate tolerance
-    traj = []
-    for pose in get_cartesian_waypoints(start_point, direction, quat):
-        conf = inverse_kinematics(robot, link, pose, **kwargs)
-        if conf is None:
-            return None
-        traj.append(conf)
-    return traj
+# def workspace_trajectory(robot, link, start_point, direction, quat, **kwargs):
+#     # TODO: pushing example
+#     # TODO: just use current configuration?
+#     # TODO: check collisions?
+#     # TODO: lower intermediate tolerance
+#     traj = []
+#     for pose in get_cartesian_waypoints(start_point, direction, quat):
+#         conf = inverse_kinematics(robot, link, pose, **kwargs)
+#         if conf is None:
+#             return None
+#         traj.append(conf)
+#     return traj
 
 #####################################
 
@@ -2332,8 +2658,11 @@ def add_line(start, end, color=(0, 0, 0), width=1, lifetime=None, parent=-1, par
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
 
-def remove_debug(debug): # removeAllUserDebugItems
+def remove_debug(debug):
     p.removeUserDebugItem(debug, physicsClientId=CLIENT)
+
+def remove_all_debug():
+    p.removeAllUserDebugItems(physicsClientId=CLIENT)
 
 def add_body_name(body, name=None, **kwargs):
     if name is None:
@@ -2344,7 +2673,6 @@ def add_body_name(body, name=None, **kwargs):
     #position = (0, 0, upper[2])
     position = upper
     return add_text(name, position=position, parent=body, **kwargs)  # removeUserDebugItem
-
 
 def add_segments(points, closed=False, **kwargs):
     lines = []
@@ -2369,6 +2697,14 @@ def draw_base_limits(limits, z=1e-2, **kwargs):
     vertices = [(lower[0], lower[1], z), (lower[0], upper[1], z),
                 (upper[0], upper[1], z), (upper[0], lower[1], z)]
     return add_segments(vertices, closed=True, **kwargs)
+
+def draw_circle(center, radius, n=24, **kwargs):
+  vertices = []
+  for i in range(n):
+      theta = i*2*math.pi/n
+      unit = np.array([math.cos(theta), math.sin(theta), 0])
+      vertices.append(center+radius*unit)
+  return add_segments(vertices, closed=True, **kwargs)
 
 def draw_aabb(aabb, **kwargs):
     lower, upper = aabb
@@ -2522,6 +2858,13 @@ def convex_hull(points):
     faces = np.vectorize(lambda i: new_indices[i])(hull.simplices)
     return vertices, faces
 
+def convex_area(vertices):
+    if len(vertices) < 3:
+        return 0.
+    vertices = [v[:2] for v in vertices]
+    segments = zip(vertices, vertices[1:] + vertices[-1:])
+    return 0.5 * abs(sum(x0*y1 - x1*y0 for ((x0, y0), (x1, y1)) in segments))
+
 def mesh_from_points(points):
     vertices, indices = convex_hull(points)
     new_indices = []
@@ -2533,7 +2876,7 @@ def mesh_from_points(points):
             # if normal.dot(centroid) < 0:
             triplet = triplet[::-1]
         new_indices.append(tuple(triplet))
-    return vertices.tolist(), new_indices
+    return Mesh(vertices.tolist(), new_indices)
 
 def mesh_from_body(body, link=BASE_LINK):
     # TODO: read obj files so I can always obtain the pointcloud
@@ -2542,12 +2885,13 @@ def mesh_from_body(body, link=BASE_LINK):
     print(get_collision_data(body, link))
     print(get_visual_data(body, link))
     # TODO: these aren't working...
+    raise NotImplementedError()
 
 #####################################
 
 # Mesh & Pointcloud Files
 
-def obj_file_from_mesh(mesh):
+def obj_file_from_mesh(mesh, under=True):
     """
     Creates a *.obj mesh string
     :param mesh: tuple of list of vertices and list of faces
@@ -2559,10 +2903,11 @@ def obj_file_from_mesh(mesh):
         assert(len(v) == 3)
         s += '\nv {}'.format(' '.join(map(str, v)))
     for f in faces:
-        assert(len(f) == 3)
-        f = [i+1 for i in f]
+        #assert(len(f) == 3) # Not necessarily true
+        f = [i+1 for i in f] # Assumes mesh is indexed from zero
         s += '\nf {}'.format(' '.join(map(str, f)))
-        s += '\nf {}'.format(' '.join(map(str, reversed(f))))
+        if under:
+            s += '\nf {}'.format(' '.join(map(str, reversed(f))))
     return s
 
 def read_mesh_off(path, scale=1.0):
@@ -2576,7 +2921,7 @@ def read_mesh_off(path, scale=1.0):
         nv, nf, ne = [int(x) for x in f.readline().split()]
         verts = [tuple(scale * float(v) for v in f.readline().split()) for _ in range(nv)]
         faces = [tuple(map(int, f.readline().split()[1:])) for _ in range(nf)]
-        return verts, faces
+        return Mesh(verts, faces)
 
 
 def read_pcd_file(path):
@@ -2598,6 +2943,8 @@ def read_pcd_file(path):
 # TODO: factor out things that don't depend on pybullet
 
 #####################################
+
+# https://github.com/kohterai/OBJ-Parser
 
 """
 def readWrl(filename, name='wrlObj', scale=1.0, color='black'):
