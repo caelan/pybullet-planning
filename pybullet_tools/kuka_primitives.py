@@ -16,6 +16,7 @@ GRASP_INFO = {
 }
 TOOL_FRAMES = {
     'iiwa14': 'iiwa_link_ee_kuka', # iiwa_link_ee
+    'abb_irb6600_track': 'robot_tool0'
 }
 
 DEBUG_FAILURE = False
@@ -244,7 +245,7 @@ def assign_fluent_state(fluents):
             raise ValueError(name)
     return obstacles
 
-def get_free_motion_gen(robot, fixed=[], teleport=False):
+def get_free_motion_gen(robot, fixed=[], teleport=False, self_collisions=True):
     def fn(conf1, conf2, fluents=[]):
         assert ((conf1.body == conf2.body) and (conf1.joints == conf2.joints))
         if teleport:
@@ -252,7 +253,7 @@ def get_free_motion_gen(robot, fixed=[], teleport=False):
         else:
             conf1.assign()
             obstacles = fixed + assign_fluent_state(fluents)
-            path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=obstacles)
+            path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=obstacles, self_collisions=self_collisions)
             if path is None:
                 if DEBUG_FAILURE: user_input('Free motion failed')
                 return None
@@ -261,7 +262,7 @@ def get_free_motion_gen(robot, fixed=[], teleport=False):
     return fn
 
 
-def get_holding_motion_gen(robot, fixed=[], teleport=False):
+def get_holding_motion_gen(robot, fixed=[], teleport=False, self_collisions=True):
     def fn(conf1, conf2, body, grasp, fluents=[]):
         assert ((conf1.body == conf2.body) and (conf1.joints == conf2.joints))
         if teleport:
@@ -270,7 +271,7 @@ def get_holding_motion_gen(robot, fixed=[], teleport=False):
             conf1.assign()
             obstacles = fixed + assign_fluent_state(fluents)
             path = plan_joint_motion(robot, conf2.joints, conf2.configuration,
-                                     obstacles=obstacles, attachments=[grasp.attachment()])
+                                     obstacles=obstacles, attachments=[grasp.attachment()], self_collisions=self_collisions)
             if path is None:
                 if DEBUG_FAILURE: user_input('Holding motion failed')
                 return None
