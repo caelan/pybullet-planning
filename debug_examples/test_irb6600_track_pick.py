@@ -15,6 +15,7 @@ from pybullet_tools.utils import get_movable_joints, get_configuration, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, INF, \
     inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
     step_simulation, refine_path, plan_direct_joint_motion
+from pybullet_tools.ikfast.abb_irb6600_track.ik import sample_tool_ik
 
 USE_IKFAST = True
 DEBUG_FAILURE = True
@@ -23,21 +24,34 @@ ENABLE_SELF_COLLISION = False
 def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10, self_collisions=True):
     movable_joints = get_movable_joints(robot)
     sample_fn = get_sample_fn(robot, movable_joints)
+
     def fn(body, pose, grasp):
         obstacles = [body] + fixed
         gripper_pose = end_effector_from_body(pose.pose, grasp.grasp_pose)
         approach_pose = approach_from_grasp(grasp.approach_pose, gripper_pose)
 
         for _ in range(num_attempts):
-            set_joint_positions(robot, movable_joints, sample_fn()) # Random seed
-            # TODO: multiple attempts?
-            q_approach = inverse_kinematics(robot, grasp.link, approach_pose)
+            if USE_IKFAST:
+                q_approach = sample_tool_ik(robot, approach_pose)
+            else:
+                set_joint_positions(robot, movable_joints, sample_fn()) # Random seed
+                q_approach = inverse_kinematics(robot, grasp.link, approach_pose)
+
             if (q_approach is None) or any(pairwise_collision(robot, b) for b in obstacles):
                 continue
+
+            # set_joint_positions(robot, movable_joints, q_approach) # Random seed
+
             conf = BodyConf(robot, q_approach)
-            q_grasp = inverse_kinematics(robot, grasp.link, gripper_pose)
+
+            if USE_IKFAST:
+                q_grasp = sample_tool_ik(robot, gripper_pose, nearby_conf=q_approach)
+            else:
+                q_grasp = inverse_kinematics(robot, grasp.link, gripper_pose)
+
             if (q_grasp is None) or any(pairwise_collision(robot, b) for b in obstacles):
                 continue
+
             if teleport:
                 path = [q_approach, q_grasp]
             else:
