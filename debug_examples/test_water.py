@@ -5,7 +5,7 @@ from __future__ import print_function
 import time
 import numpy as np
 
-from pybullet_tools.utils import add_data_path, connect, enable_gravity, input, disconnect, create_sphere, set_point, Point, \
+from pybullet_tools.utils import add_data_path, connect, enable_gravity, user_input, disconnect, create_sphere, set_point, Point, \
     enable_real_time, dump_world, load_model, wait_for_interrupt, set_camera, stable_z, \
     set_color, get_lower_upper, wait_for_duration, simulate_for_duration, load_pybullet
 
@@ -55,7 +55,7 @@ def main():
     #dump_world()
     wait_for_interrupt()
 
-    #input('Start?')
+    #user_input('Start?')
     #dt = 1. / 240
     dt = 0.01
     #dt = 0
@@ -74,7 +74,7 @@ def main():
 
     #time.sleep(1.0)
     #wait_for_interrupt()
-    input('Finish?')
+    user_input('Finish?')
     disconnect()
 
 if __name__ == '__main__':

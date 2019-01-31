@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<robot name="square">
+  <link name="base_link">
+    <visual>
+      <geometry>
+		<mesh filename="square.obj"/>
+      </geometry>
+      <material name="white">
+        <color rgba="1 1 1 1" />
+      </material>
+    </visual>
+  </link>
+</robot>
