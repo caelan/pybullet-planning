@@ -109,7 +109,6 @@ def main(display='execute'): # control | execute | step
     connect(use_gui=True)
     disable_real_time()
 
-
     IRB6600_TRACK_URDF = "../models/abb_irb6600_track/urdf/irb6600_track.urdf"
     robot = load_pybullet(os.path.join(root_directory, IRB6600_TRACK_URDF), fixed_base=True)
     floor = load_model('models/short_floor.urdf')

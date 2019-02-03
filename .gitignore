@@ -6,3 +6,6 @@ temp
 
 # windows extension build
 *.pyd
+
+**/.DS_Store
+**~
