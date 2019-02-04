@@ -12,7 +12,7 @@
 /// See the License for the specific language governing permissions and
 /// limitations under the License.
 ///
-/// ikfast version 0x10000049 generated on 2019-02-03 17:35:43.583768
+/// ikfast version 0x10000049 generated on 2019-02-03 18:24:41.158430
 /// To compile with gcc:
 ///     gcc -lstdc++ ik.cpp
 /// To compile without any main function as a shared object (might need -llapack):
@@ -351,15 +351,15 @@ eerot[0]=(((x38*x6))+((x5*(((((-1.0)*x14*x39))+x31)))));
 eerot[1]=(((x11*x47))+((x10*((x32+(((-1.0)*x21*x40)))))));
 eerot[2]=(((x11*(((((-1.0)*x32))+((x40*x9))))))+((x10*x47)));
 IkReal x49=((1.0)*x25);
-eetrans[0]=((2.095)+(((-1.0)*x0*x20))+((x6*((((x19*x28))+(((-1.0)*x13*x49))))))+((x5*(((((-1.0)*x18*x39))+((x17*x9))))))+(((-0.2)*x0))+(((-0.15)*x2*x25))+(((-1.0)*x12*x49))+(((1.38)*x0*x28))+j[0]+(((-0.15)*x0*x26)));
+eetrans[0]=((0.545)+(((-1.0)*x0*x20))+((x6*((((x19*x28))+(((-1.0)*x13*x49))))))+((x5*(((((-1.0)*x18*x39))+((x17*x9))))))+(((-0.2)*x0))+(((-0.15)*x2*x25))+(((-1.0)*x12*x49))+(((1.38)*x0*x28))+j[0]+(((-0.15)*x0*x26)));
 eerot[3]=(((x6*(((((-1.0)*x34))+((x27*x3))))))+((x45*x5)));
 eerot[4]=(((x10*((((x0*x7))+((x41*x9))))))+((x11*x48)));
 eerot[5]=(((x10*x48))+((x11*(((((-1.0)*x0*x14))+(((-1.0)*x21*x41)))))));
-eetrans[1]=((0.86)+(((0.2)*x8))+(((-1.38)*x28*x8))+((x16*x30))+((x6*(((((-1.0)*x17*x28))+((x13*x27))))))+((x16*x26))+((x12*x27))+j[1]+((x5*((((x19*x9))+((x18*x42))))))+((x20*x8)));
+eetrans[1]=((-0.0075)+(((0.2)*x8))+(((-1.38)*x28*x8))+((x16*x30))+((x6*(((((-1.0)*x17*x28))+((x13*x27))))))+((x16*x26))+((x12*x27))+j[1]+((x5*((((x19*x9))+((x18*x42))))))+((x20*x8)));
 eerot[6]=(((x29*x36))+((x37*x6)));
 eerot[7]=(((x11*x46))+((x10*x35*x9)));
 eerot[8]=(((x10*x46))+((x11*x36*x9)));
-eetrans[2]=((3.8966)+(((1.38)*x30))+(((-1.0)*j[2]))+((x6*(((((0.14)*x30))+((x13*x4))))))+((x29*((((x1*x13))+(((-0.14)*x28))))))+((x12*x4))+(((0.15)*x28))+(((-0.89)*x1))+(((-0.15)*x1*x3)));
+eetrans[2]=((-1.88)+(((1.38)*x30))+(((-1.0)*j[2]))+((x6*(((((0.14)*x30))+((x13*x4))))))+((x29*((((x1*x13))+(((-0.14)*x28))))))+((x12*x4))+(((0.15)*x28))+(((-0.89)*x1))+(((-0.15)*x1*x3)));
 }
 
 IKFAST_API int GetNumFreeParameters() { return 3; }
@@ -398,15 +398,15 @@ px = eetrans[0]; py = eetrans[1]; pz = eetrans[2];
 new_r00=r02;
 new_r01=((-1.0)*r01);
 new_r02=((-1.0)*r00);
-new_px=((2.095)+(((-1.0)*px))+(((0.14)*r00))+j0);
+new_px=((0.545)+(((-1.0)*px))+(((0.14)*r00))+j0);
 new_r10=((-1.0)*r12);
 new_r11=r11;
 new_r12=r10;
-new_py=((-0.86)+(((-0.14)*r10))+py+(((-1.0)*j1)));
+new_py=((0.0075)+(((-0.14)*r10))+py+(((-1.0)*j1)));
 new_r20=r22;
 new_r21=((-1.0)*r21);
 new_r22=((-1.0)*r20);
-new_pz=((4.5766)+(((0.14)*r20))+(((-1.0)*pz))+(((-1.0)*j2)));
+new_pz=((-1.2)+(((0.14)*r20))+(((-1.0)*pz))+(((-1.0)*j2)));
 r00 = new_r00; r01 = new_r01; r02 = new_r02; r10 = new_r10; r11 = new_r11; r12 = new_r12; r20 = new_r20; r21 = new_r21; r22 = new_r22; px = new_px; py = new_py; pz = new_pz;
 IkReal x50=((1.0)*px);
 IkReal x51=((1.0)*pz);
@@ -11031,7 +11031,7 @@ IKSolver solver;
 return solver.ComputeIk(eetrans,eerot,pfree,solutions);
 }
 
-IKFAST_API const char* GetKinematicsHash() { return "72416f6186cb158a2e476f45a0642e8e"; }
+IKFAST_API const char* GetKinematicsHash() { return "0c8ff61e16133fa34b82ea8fb36b9f9f"; }
 
 IKFAST_API const char* GetIkFastVersion() { return "0x10000049"; }
 
