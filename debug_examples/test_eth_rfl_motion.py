@@ -104,8 +104,8 @@ def main(use_pr2_drake=True):
 
     plane = p.loadURDF("plane.urdf")
     #table_path = "table/table.urdf"
-    table_path = "models/table_collision/table.urdf"
-    table = p.loadURDF(table_path, 0, 0, 0, 0, 0, 0.707107, 0.707107)
+    # table_path = "models/table_collision/table.urdf"
+    # table = p.loadURDF(table_path, 0, 0, 0, 0, 0, 0.707107, 0.707107)
     # table_square/table_square.urdf, cube.urdf, block.urdf, door.urdf
 
     pr2_urdf = DRAKE_PR2_URDF if use_pr2_drake else PR2_URDF

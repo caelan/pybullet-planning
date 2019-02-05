@@ -25,8 +25,8 @@ def test_base_motion(pr2, base_start, base_goal):
     print(len(base_path))
     for bq in base_path:
         set_base_values(pr2, bq)
-        user_input('Continue?')
-        # time.sleep(0.05)
+        # user_input('Continue?')
+        time.sleep(0.05)
 
 def test_drake_base_motion(pr2, base_start, base_goal):
     # TODO: combine this with test_arm_motion
@@ -138,7 +138,7 @@ def main(use_pr2_drake=False):
         test_base_motion(pr2, base_start, base_goal)
 
     test_arm_motion(pr2, left_joints, arm_goal)
-    test_arm_control(pr2, left_joints, arm_start)
+    # test_arm_control(pr2, left_joints, arm_start)
 
     user_input('Finish?')
     disconnect()

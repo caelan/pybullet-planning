@@ -205,11 +205,13 @@
     <child link="robot_base"/>
   </joint>
   <!-- link list -->
+  <link name="eef_base_link"/>
+  <!--
   <link name="eef_base_link">
     <visual>
       <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
       <geometry>
-        <mesh filename="../meshes/eth_tfl_gripper/visual/eth_rfl_gripper_visual.stl" scale=".001 .001 .001"/>
+        <mesh filename="../meshes/eth_rfl_gripper/visual/eth_rfl_gripper_visual.stl" scale=".001 .001 .001"/>
       </geometry>
       <material name="grey">
         <color rgba="0.5 0.5 0.5 1.0"/>
@@ -218,21 +220,29 @@
     <collision>
       <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
       <geometry>
-        <mesh filename="../meshes/eth_tfl_gripper/collision/eth_rfl_gripper_collision.stl" scale=".001 .001 .001"/>
+        <mesh filename="../meshes/eth_rfl_gripper/collision/eth_rfl_gripper_collision.stl" scale=".001 .001 .001"/>
       </geometry>
       <material name="red">
         <color rgba="1 0 0 1"/>
       </material>
     </collision>
   </link>
+  -->
   <link name="eef_tcp_frame"/>
   <!-- end of link list -->
   <!-- joint list -->
   <joint name="eef_base_to_tcp" type="fixed">
-    <origin rpy="1.57079632679 0.0 0" xyz="0.0 0.0 0.475"/>
+    <origin rpy="0 0 0" xyz="0.0 0.0 0"/>
     <parent link="eef_base_link"/>
     <child link="eef_tcp_frame"/>
   </joint>
+  <!--
+  <joint name="eef_base_to_tcp" type="fixed">
+    <origin rpy="0 0 0" xyz="0.0 0.0 0.475"/>
+    <parent link="eef_base_link"/>
+    <child link="eef_tcp_frame"/>
+  </joint>
+  -->
   <!-- end of joint list -->
   <!--	Link list-->
   <link name="gantry_base_link">
@@ -310,6 +320,7 @@
   <link name="gantry_robot_mount"/>
   <!--	End of link list-->
   <!-- Joint list -->
+  <!--
 <joint name="gantry_x_joint" type="prismatic">
     <parent link="gantry_base_link"/>
     <child link="gantry_y_bridge"/>
@@ -324,6 +335,7 @@
     <axis xyz="0 1 0"/>
     <limit effort="1" lower="0" upper="12.673" velocity="1.5"/>
   </joint>
+  -->
   <joint name="gantry_z_joint" type="prismatic">
     <parent link="gantry_xy_carriage"/>
     <child link="gantry_z_carriage"/>
@@ -331,11 +343,13 @@
     <axis xyz="0 0 -1"/>
     <limit effort="1" lower="0" upper="1.227" velocity="1"/>
   </joint>
-<!--  <joint name="gantry_x_joint" type="fixed">
+  
+ <joint name="gantry_x_joint" type="fixed">
     <parent link="gantry_base_link"/>
     <child link="gantry_y_bridge"/>
-    <origin rpy="0 0 0" xyz="10.5 0 0"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/> <!-- 10.5 x -->
   </joint>
+  <!--
   <joint name="gantry_y_joint" type="prismatic">
     <parent link="gantry_y_bridge"/>
     <child link="gantry_xy_carriage"/>
@@ -343,12 +357,21 @@
     <axis xyz="0 1 0"/>
     <limit effort="1" lower="0" upper="12.673" velocity="1.5"/>
   </joint>
+  -->
+ <joint name="gantry_y_joint" type="fixed">
+    <parent link="gantry_y_bridge"/>
+    <child link="gantry_xy_carriage"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>   
+</joint>
+ 
+<!--
   <joint name="gantry_z_joint" type="fixed">
     <parent link="gantry_xy_carriage"/>
     <child link="gantry_z_carriage"/>
     <origin rpy="0 0 0" xyz="0 0 -1"/>
   </joint>
--->
+  -->
+
   <joint name="gantry_z_carriage_mount" type="fixed">
     <parent link="gantry_z_carriage"/>
     <child link="gantry_robot_mount"/>
@@ -391,11 +414,20 @@
     <parent link="gantry_robot_mount"/>
     <child link="robot_base_link"/>
   </joint>
+
   <joint name="ee_to_robot" type="fixed">
     <parent link="robot_tool0"/>
     <child link="eef_base_link"/>
     <origin rpy="0 1.57079632679 0" xyz="0 0 0"/>
   </joint>
+
+  <!--
+  <joint name="ee_to_robot" type="fixed">
+    <parent link="robot_tool0"/>
+    <child link="eef_base_link"/>
+    <origin rpy="0 1.57079632679 0" xyz="0 0 0"/>
+  </joint>
+  -->
   <joint name="world_to_workspace" type="fixed">
     <parent link="base_link"/>
     <child link="workspace_base_link"/>
