@@ -101,7 +101,7 @@ def plan(robot, block, fixed, teleport):
         result1 = ik_fn(block, pose0, grasp)
         if result1 is None:
             print('ik fn fails!')
-            continue
+            # continue
         conf1, path2 = result1
         pose0.assign()
         result2 = free_motion_fn(conf0, conf1)

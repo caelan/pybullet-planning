@@ -13,7 +13,7 @@ def torso_from_arm(arm_name):
 ETH_RFL_GROUPS = {
         'base': ['x', 'y'],
         torso_from_arm('right'): ['gantry_z_joint'],
-        arm_joints('right'): ['robot_joint_1', 'robot_joint_2', 'robot_joint_3', 'robot_joint_4', 'robot_joint_5', 'robot_joint_6']
+        arm_joints('right'): ['r_robot_joint_1', 'r_robot_joint_2', 'r_robot_joint_3', 'r_robot_joint_4', 'r_robot_joint_5', 'r_robot_joint_6']
         }
 
 def get_torso_arm_joints(robot, arm):

@@ -7,7 +7,7 @@
   <!-- Conversion were obtained from http://www.e-paint.co.uk/Lab_values.asp
        unless otherwise stated. -->
   <!-- link list -->
-  <link name="robot_base_link">
+  <link name="r_robot_base_link">
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
@@ -26,7 +26,7 @@
       </material>
     </collision>
   </link>
-  <link name="robot_link_1">
+  <link name="r_robot_link_1">
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
@@ -46,7 +46,7 @@
       </material>
     </collision>
   </link>
-  <link name="robot_link_2">
+  <link name="r_robot_link_2">
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
@@ -66,7 +66,7 @@
       </material>
     </collision>
   </link>
-  <link name="robot_link_3">
+  <link name="r_robot_link_3">
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
@@ -86,7 +86,7 @@
       </material>
     </collision>
   </link>
-  <link name="robot_link_4">
+  <link name="r_robot_link_4">
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
@@ -106,7 +106,7 @@
       </material>
     </collision>
   </link>
-  <link name="robot_link_5">
+  <link name="r_robot_link_5">
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
@@ -126,7 +126,7 @@
       </material>
     </collision>
   </link>
-  <link name="robot_link_6">
+  <link name="r_robot_link_6">
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
@@ -146,70 +146,70 @@
       </material>
     </collision>
   </link>
-  <link name="robot_tool0"/>
+  <link name="r_robot_tool0"/>
   <!-- end of link list -->
   <!-- joint list -->
-  <joint name="robot_joint_1" type="revolute">
+  <joint name="r_robot_joint_1" type="revolute">
     <origin rpy="0 0 0" xyz="0 0 0"/>
-    <parent link="robot_base_link"/>
-    <child link="robot_link_1"/>
+    <parent link="r_robot_base_link"/>
+    <child link="r_robot_link_1"/>
     <axis xyz="0 0 1"/>
     <limit effort="0" lower="-2.87979" upper="2.87979" velocity="2.618"/>
   </joint>
-  <joint name="robot_joint_2" type="revolute">
+  <joint name="r_robot_joint_2" type="revolute">
     <origin rpy="0 0 0" xyz="0.2 0 0.68"/>
-    <parent link="robot_link_1"/>
-    <child link="robot_link_2"/>
+    <parent link="r_robot_link_1"/>
+    <child link="r_robot_link_2"/>
     <axis xyz="0 1 0"/>
     <limit effort="0" lower="-1.2217" upper="1.658" velocity="2.0944"/>
   </joint>
-  <joint name="robot_joint_3" type="revolute">
+  <joint name="r_robot_joint_3" type="revolute">
     <origin rpy="0 0 0" xyz="0 0 0.89"/>
-    <parent link="robot_link_2"/>
-    <child link="robot_link_3"/>
+    <parent link="r_robot_link_2"/>
+    <child link="r_robot_link_3"/>
     <axis xyz="0 1 0"/>
     <limit effort="0" lower="-1.0472" upper="1.1345" velocity="2.0944"/>
   </joint>
-  <joint name="robot_joint_4" type="revolute">
+  <joint name="r_robot_joint_4" type="revolute">
     <origin rpy="0 0 0" xyz="1.38 0 0.15"/>
-    <parent link="robot_link_3"/>
-    <child link="robot_link_4"/>
+    <parent link="r_robot_link_3"/>
+    <child link="r_robot_link_4"/>
     <axis xyz="1 0 0"/>
     <limit effort="0" lower="-3.49" upper="3.49" velocity="3.927"/>
   </joint>
-  <joint name="robot_joint_5" type="revolute">
+  <joint name="r_robot_joint_5" type="revolute">
     <origin rpy="0 0 0" xyz="0 0 0"/>
-    <parent link="robot_link_4"/>
-    <child link="robot_link_5"/>
+    <parent link="r_robot_link_4"/>
+    <child link="r_robot_link_5"/>
     <axis xyz="0 1 0"/>
     <limit effort="0" lower="-2.0944" upper="2.0944" velocity="4.3633"/>
   </joint>
-  <joint name="robot_joint_6" type="revolute">
+  <joint name="r_robot_joint_6" type="revolute">
     <origin rpy="0 0 0" xyz="0 0 0"/>
-    <parent link="robot_link_5"/>
-    <child link="robot_link_6"/>
+    <parent link="r_robot_link_5"/>
+    <child link="r_robot_link_6"/>
     <axis xyz="1 0 0"/>
     <limit effort="0" lower="-6.9813" upper="6.9813" velocity="5.7596"/>
   </joint>
-  <joint name="robot_joint_6-tool0" type="fixed">
-    <parent link="robot_link_6"/>
-    <child link="robot_tool0"/>
+  <joint name="r_robot_joint_6-tool0" type="fixed">
+    <parent link="r_robot_link_6"/>
+    <child link="r_robot_tool0"/>
     <origin rpy="0 0 0" xyz="0.14 0 0"/>
   </joint>
   <!-- end of joint list -->
   <!-- ROS base_link to ABB World Coordinates transform -->
-  <link name="robot_base"/>
-  <joint name="robot_base_link-base" type="fixed">
+  <link name="r_robot_base"/>
+  <joint name="r_robot_base_link-base" type="fixed">
     <origin rpy="0 0 0" xyz="0 0 0"/>
-    <parent link="robot_base_link"/>
-    <child link="robot_base"/>
+    <parent link="r_robot_base_link"/>
+    <child link="r_robot_base"/>
   </joint>
   <!-- link list -->
   <!--
-  <link name="eef_base_link"/>
+  <link name="r_eef_base_link"/>
   -->
 
-  <link name="eef_base_link">
+  <link name="r_eef_base_link">
     <visual>
       <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
       <geometry>
@@ -230,20 +230,20 @@
     </collision>
   </link>
 
-  <link name="eef_tcp_frame"/>
+  <link name="r_eef_tcp_frame"/>
   <!-- end of link list -->
   <!-- joint list -->
   <!--
-  <joint name="eef_base_to_tcp" type="fixed">
+  <joint name="r_eef_base_to_tcp" type="fixed">
     <origin rpy="0 0 0" xyz="0.0 0.0 0"/>
-    <parent link="eef_base_link"/>
-    <child link="eef_tcp_frame"/>
+    <parent link="r_eef_base_link"/>
+    <child link="r_eef_tcp_frame"/>
   </joint>
   -->
-  <joint name="eef_base_to_tcp" type="fixed">
+  <joint name="r_eef_base_to_tcp" type="fixed">
     <origin rpy="0 0 0" xyz="0.0 0.0 0.475"/>
-    <parent link="eef_base_link"/>
-    <child link="eef_tcp_frame"/>
+    <parent link="r_eef_base_link"/>
+    <child link="r_eef_tcp_frame"/>
   </joint>
 
   <!-- end of joint list -->
@@ -284,7 +284,7 @@
       </material>
     </collision>
   </link>
-  <link name="gantry_xy_carriage">
+  <link name="r_gantry_xy_carriage">
     <visual>
       <geometry>
         <mesh filename="../meshes/eth_rfl_track/visual/eth_gudel_track_xy_carriage_visual.stl" scale=".001 .001 .001"/>
@@ -320,11 +320,10 @@
       </material>
     </collision>
   </link>
-  <link name="gantry_robot_mount"/>
+  <link name="gantry_r_robot_mount"/>
   <!--	End of link list-->
   <!-- Joint list -->
-  <!--
-<joint name="gantry_x_joint" type="prismatic">
+  <joint name="gantry_x_joint" type="prismatic">
     <parent link="gantry_base_link"/>
     <child link="gantry_y_bridge"/>
     <origin rpy="0 0 0" xyz="0 0 0"/>
@@ -333,43 +332,42 @@
   </joint>
   <joint name="gantry_y_joint" type="prismatic">
     <parent link="gantry_y_bridge"/>
-    <child link="gantry_xy_carriage"/>
+    <child link="r_gantry_xy_carriage"/>
     <origin rpy="0 0 0" xyz="0 0 0"/>
     <axis xyz="0 1 0"/>
     <limit effort="1" lower="0" upper="12.673" velocity="1.5"/>
   </joint>
-  -->
   <joint name="gantry_z_joint" type="prismatic">
-    <parent link="gantry_xy_carriage"/>
+    <parent link="r_gantry_xy_carriage"/>
     <child link="gantry_z_carriage"/>
     <origin rpy="0 0 0" xyz="0 0 0"/>
     <axis xyz="0 0 -1"/>
     <limit effort="1" lower="0" upper="1.227" velocity="1"/>
   </joint>
   
- <joint name="gantry_x_joint" type="fixed">
-    <parent link="gantry_base_link"/>
-    <child link="gantry_y_bridge"/>
-    <origin rpy="0 0 0" xyz="0 0 0"/> <!-- 10.5 x -->
-  </joint>
+ <!--<joint name="gantry_x_joint" type="fixed">-->
+    <!--<parent link="gantry_base_link"/>-->
+    <!--<child link="gantry_y_bridge"/>-->
+    <!--<origin rpy="0 0 0" xyz="0 0 0"/> &lt;!&ndash; 10.5 x &ndash;&gt;-->
+  <!--</joint>-->
   <!--
   <joint name="gantry_y_joint" type="prismatic">
     <parent link="gantry_y_bridge"/>
-    <child link="gantry_xy_carriage"/>
+    <child link="r_gantry_xy_carriage"/>
     <origin rpy="0 0 0" xyz="0 0 0"/>
     <axis xyz="0 1 0"/>
     <limit effort="1" lower="0" upper="12.673" velocity="1.5"/>
   </joint>
   -->
- <joint name="gantry_y_joint" type="fixed">
-    <parent link="gantry_y_bridge"/>
-    <child link="gantry_xy_carriage"/>
-    <origin rpy="0 0 0" xyz="0 0 0"/>   
-</joint>
+ <!--<joint name="gantry_y_joint" type="fixed">-->
+    <!--<parent link="gantry_y_bridge"/>-->
+    <!--<child link="r_gantry_xy_carriage"/>-->
+    <!--<origin rpy="0 0 0" xyz="0 0 0"/>   -->
+<!--</joint>-->
  
 <!--
   <joint name="gantry_z_joint" type="fixed">
-    <parent link="gantry_xy_carriage"/>
+    <parent link="r_gantry_xy_carriage"/>
     <child link="gantry_z_carriage"/>
     <origin rpy="0 0 0" xyz="0 0 -1"/>
   </joint>
@@ -377,7 +375,7 @@
 
   <joint name="gantry_z_carriage_mount" type="fixed">
     <parent link="gantry_z_carriage"/>
-    <child link="gantry_robot_mount"/>
+    <child link="gantry_r_robot_mount"/>
     <origin rpy="0 3.14159265359 0" xyz="0.545 -0.0075 -1.2"/>
   </joint>
   <!-- End of joint list -->
@@ -412,15 +410,15 @@
     <parent link="base_link"/>
     <child link="gantry_base_link"/>
   </joint>
-  <joint name="robot_to_gantry" type="fixed">
+  <joint name="r_robot_to_gantry" type="fixed">
     <origin rpy="0 0 0" xyz="0 0 0"/>
-    <parent link="gantry_robot_mount"/>
-    <child link="robot_base_link"/>
+    <parent link="gantry_r_robot_mount"/>
+    <child link="r_robot_base_link"/>
   </joint>
 
-<joint name="ee_to_robot" type="fixed">
-    <parent link="robot_tool0"/>
-    <child link="eef_base_link"/>
+<joint name="r_ee_to_r_robot" type="fixed">
+    <parent link="r_robot_tool0"/>
+    <child link="r_eef_base_link"/>
     <origin rpy="0 1.57079632679 0" xyz="0 0 0"/>
   </joint>
 

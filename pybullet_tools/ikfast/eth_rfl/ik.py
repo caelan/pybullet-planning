@@ -5,9 +5,9 @@ from ...utils import multiply, get_link_pose, \
     link_from_name, get_joint_positions, invert, violates_limits, joint_from_name, joints_from_names
 from ...eth_rfl_utils import get_torso_arm_joints
 
-BASE_FRAME = 'gantry_xy_carriage'
-IK_FRAME = 'robot_tool0'
-TOOL_FRAME = 'eef_tcp_frame' #robot_tool0 | eef_tcp_frame
+BASE_FRAME = 'r_gantry_xy_carriage'
+IK_FRAME = 'r_robot_tool0'
+TOOL_FRAME = 'r_eef_tcp_frame' #robot_tool0 | eef_tcp_frame
 
 GANTRY_JOINTS = {
     # 'x': 'gantry_x_joint',

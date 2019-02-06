@@ -2,12 +2,12 @@ import time
 # dump_body(robot)
 
 from .pr2_utils import get_top_grasps, get_side_grasps, get_bottom_grasps
-from .utils import get_pose, set_pose, get_movable_joints, get_configuration, \
+from .utils import get_pose, set_pose, get_movable_joints, \
     set_joint_positions, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, user_input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
     inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
-    step_simulation, refine_path, plan_direct_joint_motion
+    step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions
 
 GRASP_INFO = {
     # get_grasp_fun, approach_pose
@@ -25,7 +25,7 @@ GRASP_INFO = {
 TOOL_FRAMES = {
     'iiwa14': 'iiwa_link_ee_kuka', # iiwa_link_ee
     'abb_irb6600_track': 'eef_tcp_frame',
-    'eth_rfl': 'eef_tcp_frame' # robot_tool0 | eef_tcp_frame
+    'eth_rfl': 'r_eef_tcp_frame' # robot_tool0 | eef_tcp_frame
 }
 
 DEBUG_FAILURE = False
@@ -65,7 +65,7 @@ class BodyConf(object):
         if joints is None:
             joints = get_movable_joints(body)
         if configuration is None:
-            configuration = get_configuration(body)
+            configuration = get_joint_positions(body, joints)
         self.body = body
         self.joints = joints
         self.configuration = configuration
@@ -266,7 +266,7 @@ def get_free_motion_gen(robot, fixed=[], teleport=False, self_collisions=True):
             if path is None:
                 if DEBUG_FAILURE: user_input('Free motion failed')
                 return None
-        command = Command([BodyPath(robot, path)])
+        command = Command([BodyPath(robot, path, joints=conf2.joints)])
         return (command,)
     return fn
 
@@ -284,7 +284,7 @@ def get_holding_motion_gen(robot, fixed=[], teleport=False, self_collisions=True
             if path is None:
                 if DEBUG_FAILURE: user_input('Holding motion failed')
                 return None
-        command = Command([BodyPath(robot, path, attachments=[grasp])])
+        command = Command([BodyPath(robot, path, joints=conf2.joints, attachments=[grasp])])
         return (command,)
     return fn
 
