@@ -25,7 +25,6 @@ GRASP_INFO = {
 TOOL_FRAMES = {
     'iiwa14': 'iiwa_link_ee_kuka', # iiwa_link_ee
     'abb_irb6600_track': 'eef_tcp_frame',
-    'eth_rfl': 'r_eef_tcp_frame' # robot_tool0 | eef_tcp_frame
 }
 
 DEBUG_FAILURE = False
@@ -287,7 +286,6 @@ def get_holding_motion_gen(robot, fixed=[], teleport=False, self_collisions=True
         command = Command([BodyPath(robot, path, joints=conf2.joints, attachments=[grasp])])
         return (command,)
     return fn
-
 
 def get_movable_collision_test():
     def test(command, body, pose):
