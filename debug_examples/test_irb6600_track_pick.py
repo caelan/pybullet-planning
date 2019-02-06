@@ -9,21 +9,24 @@ from pybullet_tools.utils import WorldSaver, enable_gravity, connect, dump_world
     Pose, Point, set_default_camera, stable_z, \
     BLOCK_URDF, load_model, wait_for_interrupt, disconnect, user_input, update_state, disable_real_time, \
     load_pybullet
-from pybullet_tools.utils import get_movable_joints, get_configuration, \
+from pybullet_tools.utils import get_configuration, get_movable_joints, \
     set_joint_positions, add_fixed_constraint, enable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, INF, \
     inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
     step_simulation, refine_path, plan_direct_joint_motion
-from pybullet_tools.ikfast.abb_irb6600_track.ik import sample_tool_ik
+from pybullet_tools.ikfast.abb_irb6600_track.ik import sample_tool_ik, get_track_arm_joints
 
 USE_IKFAST = True
 DEBUG_FAILURE = True
 ENABLE_SELF_COLLISION = False
 
 def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10, self_collisions=True):
-    movable_joints = get_movable_joints(robot)
-    sample_fn = get_sample_fn(robot, movable_joints)
+    if USE_IKFAST:
+        movable_joints = get_track_arm_joints(robot)
+    else:
+        movable_joints = get_movable_joints(robot)
+        sample_fn = get_sample_fn(robot, movable_joints)
 
     def fn(body, pose, grasp):
         obstacles = [body] + fixed
@@ -42,7 +45,7 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10, self_collisions=
 
             # set_joint_positions(robot, movable_joints, q_approach) # Random seed
 
-            conf = BodyConf(robot, q_approach)
+            conf = BodyConf(robot, q_approach, movable_joints)
 
             if USE_IKFAST:
                 q_grasp = sample_tool_ik(robot, gripper_pose, nearby_conf=q_approach)
@@ -64,9 +67,9 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10, self_collisions=
                 if path is None:
                     if DEBUG_FAILURE: user_input('Approach motion failed')
                     continue
-            command = Command([BodyPath(robot, path),
+            command = Command([BodyPath(robot, path, joints=movable_joints),
                                Attach(body, robot, grasp.link),
-                               BodyPath(robot, path[::-1], attachments=[grasp])])
+                               BodyPath(robot, path[::-1], joints=movable_joints, attachments=[grasp])])
             return (conf, command)
             # TODO: holding collisions
         return None
@@ -79,8 +82,13 @@ def plan(robot, block, fixed, teleport):
     free_motion_fn = get_free_motion_gen(robot, fixed=([block] + fixed), teleport=teleport, self_collisions=ENABLE_SELF_COLLISION)
     holding_motion_fn = get_holding_motion_gen(robot, fixed=fixed, teleport=teleport, self_collisions=ENABLE_SELF_COLLISION)
 
+    if USE_IKFAST:
+        movable_joints = get_track_arm_joints(robot)
+    else:
+        movable_joints = get_movable_joints(robot)
+
     pose0 = BodyPose(block)
-    conf0 = BodyConf(robot)
+    conf0 = BodyConf(robot, joints=movable_joints)
     saved_world = WorldSaver()
     for grasp, in grasp_gen(block):
         saved_world.restore()
@@ -116,13 +124,16 @@ def main(display='execute'): # control | execute | step
     floor_x = 2
     set_pose(floor, Pose(Point(x=floor_x, z=0.5)))
     set_pose(block, Pose(Point(x=floor_x+0, y=0, z=stable_z(block, floor))))
-    set_default_camera()
+    # set_default_camera()
     dump_world()
 
     saved_world = WorldSaver()
     command = plan(robot, block, fixed=[floor], teleport=False)
     if (command is None) or (display is None):
         print('Unable to find a plan!')
+        print('Quit?')
+        wait_for_interrupt()
+        disconnect()
         return
 
     saved_world.restore()

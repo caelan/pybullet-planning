@@ -259,16 +259,7 @@ def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose()
 
 def get_bottom_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
-    """generate ee_from_body, grasp the box from the bottom face
-
-    :param body: body name
-    :param under:
-    :param tool_pose:
-    :param body_pose:
-    :param max_width:
-    :param grasp_length:
-    :return:
-    """
+    """used for eth_rfl_pick test"""
     center, (w, l, h) = approximate_as_prism(body, body_pose=body_pose)
     reflect_z = Pose(euler=[0, 0, 0])
     translate_z = Pose(point=[0, 0, h / 2])

@@ -30,7 +30,7 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10, self_collisions=
     sample_fn = get_sample_fn(robot, torso_arm)
 
     def fn(body, pose, grasp):
-        obstacles = [] #[body] + fixed
+        obstacles = [body] + fixed
         gripper_pose = end_effector_from_body(pose.pose, grasp.grasp_pose)
         approach_pose = approach_from_grasp(grasp.approach_pose, gripper_pose)
 
@@ -77,7 +77,7 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10, self_collisions=
                 if path is None:
                     if DEBUG_FAILURE: print('Approach motion failed')
                     continue
-            command = Command([BodyPath(robot, path, torso_arm),
+            command = Command([BodyPath(robot, path, joints=torso_arm),
                                Attach(body, robot, grasp.link),
                                BodyPath(robot, path[::-1], joints=torso_arm, attachments=[grasp])])
             return (conf, command)
@@ -136,8 +136,6 @@ def main(display='execute'): # control | execute | step
     set_pose(block, Pose(Point(x=floor_x, y=1, z=3.5)))
     # set_default_camera()
     dump_world()
-
-    wait_for_interrupt()
 
     saved_world = WorldSaver()
     command = plan(robot, block, fixed=[], teleport=False) # fixed=[floor],

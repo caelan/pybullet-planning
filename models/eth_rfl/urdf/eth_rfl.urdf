@@ -205,8 +205,10 @@
     <child link="robot_base"/>
   </joint>
   <!-- link list -->
-  <link name="eef_base_link"/>
   <!--
+  <link name="eef_base_link"/>
+  -->
+
   <link name="eef_base_link">
     <visual>
       <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
@@ -227,22 +229,23 @@
       </material>
     </collision>
   </link>
-  -->
+
   <link name="eef_tcp_frame"/>
   <!-- end of link list -->
   <!-- joint list -->
+  <!--
   <joint name="eef_base_to_tcp" type="fixed">
     <origin rpy="0 0 0" xyz="0.0 0.0 0"/>
     <parent link="eef_base_link"/>
     <child link="eef_tcp_frame"/>
   </joint>
-  <!--
+  -->
   <joint name="eef_base_to_tcp" type="fixed">
     <origin rpy="0 0 0" xyz="0.0 0.0 0.475"/>
     <parent link="eef_base_link"/>
     <child link="eef_tcp_frame"/>
   </joint>
-  -->
+
   <!-- end of joint list -->
   <!--	Link list-->
   <link name="gantry_base_link">
@@ -415,19 +418,12 @@
     <child link="robot_base_link"/>
   </joint>
 
-  <joint name="ee_to_robot" type="fixed">
+<joint name="ee_to_robot" type="fixed">
     <parent link="robot_tool0"/>
     <child link="eef_base_link"/>
     <origin rpy="0 1.57079632679 0" xyz="0 0 0"/>
   </joint>
 
-  <!--
-  <joint name="ee_to_robot" type="fixed">
-    <parent link="robot_tool0"/>
-    <child link="eef_base_link"/>
-    <origin rpy="0 1.57079632679 0" xyz="0 0 0"/>
-  </joint>
-  -->
   <joint name="world_to_workspace" type="fixed">
     <parent link="base_link"/>
     <child link="workspace_base_link"/>

@@ -3,7 +3,7 @@ import random
 from ..utils import get_ik_limits, compute_forward_kinematics, compute_inverse_kinematics, select_solution
 from ...utils import multiply, get_link_pose, \
     link_from_name, get_joint_positions, invert, violates_limits, joint_from_name, joints_from_names
-from ...eth_rfl_utils import ETH_RFL_GROUPS
+from ...eth_rfl_utils import get_torso_arm_joints
 
 BASE_FRAME = 'gantry_xy_carriage'
 IK_FRAME = 'robot_tool0'
@@ -19,7 +19,7 @@ GANTRY_JOINTS = {
 
 def get_tool_pose(robot):
     from .ikfast_eth_rfl import get_fk
-    ik_joints = joints_from_names(robot, ETH_RFL_GROUPS['right_torso'] + ETH_RFL_GROUPS['right_arm'])
+    ik_joints = get_torso_arm_joints(robot, 'right')
     conf = get_joint_positions(robot, ik_joints)
     # TODO: this should be linked to ikfast's get numOfJoint junction
     base_from_ik = compute_forward_kinematics(get_fk, conf)
@@ -47,7 +47,7 @@ def get_ik_generator(robot, tool_pose, gantry_z_limits=False):
 
     while True:
         sampled_values = [random.uniform(*sampled_limits)]
-        ik_joints = joints_from_names(robot, ETH_RFL_GROUPS['right_torso'] + ETH_RFL_GROUPS['right_arm'])
+        ik_joints = get_torso_arm_joints(robot, 'right')
         confs = compute_inverse_kinematics(get_ik, base_from_ik, sampled_values)
         yield [q for q in confs if not violates_limits(robot, ik_joints, q)]
 
@@ -58,8 +58,7 @@ def get_tool_from_ik(robot):
     return multiply(invert(world_from_tool), world_from_ik)
 
 def sample_tool_ik(robot, tool_pose, nearby_conf=None, max_attempts=10, **kwargs):
-    ik_pose = multiply(tool_pose, get_tool_from_ik(robot))
-    generator = get_ik_generator(robot, ik_pose, **kwargs)
+    generator = get_ik_generator(robot, tool_pose, **kwargs)
     for _ in range(max_attempts):
         try:
             solutions = next(generator)

@@ -209,8 +209,37 @@
     <child link="robot_base"/>
   </joint>
 
-    <!--TODO end effector-->
-  <!-- link list -->
+    <!--end effector-->
+   <link name="eef_base_link">
+     <visual>
+       <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+       <geometry>
+         <mesh filename="../meshes/eth_rfl_gripper/visual/eth_rfl_gripper_visual.stl" scale=".001 .001 .001"/>
+       </geometry>
+       <material name="grey">
+         <color rgba="0.5 0.5 0.5 1.0"/>
+       </material>
+     </visual>
+     <collision>
+       <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+       <geometry>
+         <mesh filename="../meshes/eth_rfl_gripper/collision/eth_rfl_gripper_collision.stl" scale=".001 .001 .001"/>
+       </geometry>
+       <material name="red">
+         <color rgba="1 0 0 1"/>
+       </material>
+     </collision>
+   </link>
+
+  <joint name="eef_base_to_tcp" type="fixed">
+    <origin rpy="0 0 0" xyz="0.0 0.0 0.475"/>
+    <parent link="eef_base_link"/>
+    <child link="eef_tcp_frame"/>
+  </joint>
+
+   <link name="eef_tcp_frame"/>
+
+<!-- link list -->
   <!--<link name="eef_base_link">-->
     <!--<visual>-->
       <!--<origin rpy="0 0 0" xyz="8.8e-05 0.000769 -0.002121"/>-->
@@ -301,8 +330,8 @@
   </joint>
   <!-- End of joint list -->
 
-  <!--TODO: base_link-->
-  <!-- Link list -->
+  <!--base_link-->
+  <!--Link list-->
   <link name="base_link"/>
   <!--bind the rail to word_frame, can be disabled if using modile platform-->
   <joint name="linear_axis_to_base_link" type="fixed">
@@ -318,10 +347,11 @@
     <child link="robot_base_link"/>
   </joint>
 
-  <!--<joint name="ee_to_robot" type="fixed">-->
-    <!--<parent link="robot_tool0"/>-->
-    <!--<child link="eef_base_link"/>-->
-    <!--<origin rpy="0 0 0" xyz="0 0 0"/>-->
-  <!--</joint>-->
+   <joint name="ee_to_robot" type="fixed">
+     <parent link="robot_tool0"/>
+     <child link="eef_base_link"/>
+     <origin rpy="0 0 0" xyz="0 0 0"/>
+   </joint>
+
   <!-- End of joint list -->
 </robot>

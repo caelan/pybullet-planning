@@ -24,7 +24,7 @@ GRASP_INFO = {
 
 TOOL_FRAMES = {
     'iiwa14': 'iiwa_link_ee_kuka', # iiwa_link_ee
-    'abb_irb6600_track': 'robot_tool0',
+    'abb_irb6600_track': 'eef_tcp_frame',
     'eth_rfl': 'eef_tcp_frame' # robot_tool0 | eef_tcp_frame
 }
 
