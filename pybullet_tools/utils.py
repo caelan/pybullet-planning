@@ -2469,7 +2469,7 @@ def compute_jacobian(robot, link, positions=None):
     translate, rotate = p.calculateJacobian(robot, link, unit_point(), positions,
                                             velocities, accelerations, physicsClientId=CLIENT)
     #movable_from_joints(robot, joints)
-    return zip(*translate), zip(*rotate) # len(joints) x 3
+    return list(zip(*translate)), list(zip(*rotate)) # len(joints) x 3
 
 
 def compute_joint_weights(robot, num=100):
