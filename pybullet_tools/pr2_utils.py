@@ -16,7 +16,7 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     violates_limits, add_line, get_body_name, get_num_joints, approximate_as_cylinder, \
     approximate_as_prism, unit_quat, unit_point, clip, get_joint_info, tform_point, get_yaw, \
     get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
-    movable_from_joints, quat_from_axis_angle, LockRenderer, Euler
+    movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -136,8 +136,9 @@ def get_disabled_collisions(pr2):
     #disabled_names = PR2_DISABLED_COLLISIONS
     disabled_names = NEVER_COLLISIONS
     #disabled_names = PR2_DISABLED_COLLISIONS + NEVER_COLLISIONS
-    return {(link_from_name(pr2, name1), link_from_name(pr2, name2))
-            for name1, name2 in disabled_names if has_link(pr2, name1) and has_link(pr2, name2)}
+    link_mapping = {get_link_name(pr2, link): link for link in get_links(pr2)}
+    return {(link_mapping[name1], link_mapping[name2])
+            for name1, name2 in disabled_names if (name1 in link_mapping) and (name2 in link_mapping)}
 
 
 def load_dae_collisions():
