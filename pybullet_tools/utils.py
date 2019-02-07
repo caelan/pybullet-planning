@@ -1398,9 +1398,10 @@ def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
         'physicsClientId': CLIENT,
     }
     collision_args.update(geometry)
-    if 'length' in collision_args: # TODO: pybullet bug
-        geometry['height'] = geometry['length']
-        del geometry['length']
+    if 'length' in collision_args:
+        # TODO: pybullet bug visual => length, collision => height
+        collision_args['height'] = collision_args['length']
+        del collision_args['length']
     collision_id = p.createCollisionShape(**collision_args)
 
     if (color is None): # or not has_gui():
