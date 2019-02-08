@@ -257,27 +257,6 @@ def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose()
                                 reflect_z, translate_center, body_pose)]
     return grasps
 
-def get_bottom_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
-                   max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
-    """used for eth_rfl_pick test"""
-    center, (w, l, h) = approximate_as_prism(body, body_pose=body_pose)
-    reflect_z = Pose(euler=[0, 0, 0])
-    translate_z = Pose(point=[0, 0, h / 2])
-    translate_center = Pose(point=point_from_pose(body_pose)-center)
-    grasps = []
-    if w <= max_width:
-        for i in range(1 + under):
-            rotate_z = Pose(euler=[0, 0, math.pi / 2 + i * math.pi])
-            grasps += [multiply(tool_pose, translate_z, rotate_z,
-                                reflect_z, translate_center, body_pose)]
-    if l <= max_width:
-        for i in range(1 + under):
-            rotate_z = Pose(euler=[0, 0, i * math.pi])
-            grasps += [multiply(tool_pose, translate_z, rotate_z,
-                                reflect_z, translate_center, body_pose)]
-
-    return grasps
-
 def get_side_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                     max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH, top_offset=SIDE_HEIGHT_OFFSET):
     # TODO: compute bounding box width wrt tool frame
