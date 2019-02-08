@@ -2043,12 +2043,16 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         return any(pairwise_collision(*pair, **kwargs) for pair in check_body_pairs)
     return collision_fn
 
-def plan_waypoints_joint_motion(body, joints, waypoints, obstacles=None, attachments=[],
+def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstacles=None, attachments=[],
                       self_collisions=True, disabled_collisions=set(), custom_limits={}, max_distance=MAX_DISTANCE):
     extend_fn = get_extend_fn(body, joints)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, max_distance=max_distance)
-    start_conf = get_joint_positions(body, joints)
+    if start_conf is None:
+        start_conf = get_joint_positions(body, joints)
+    else:
+        assert len(start_conf) == len(joints)
+
     for i, waypoint in enumerate([start_conf] + list(waypoints)):
         if collision_fn(waypoint):
             #print("Warning: waypoint configuration {}/{} is in collision".format(i, len(waypoints)))
@@ -2077,6 +2081,7 @@ def check_initial_end(start_conf, end_conf, collision_fn):
 def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
                       self_collisions=True, disabled_collisions=set(),
                       weights=None, resolutions=None, max_distance=MAX_DISTANCE, custom_limits={}, **kwargs):
+
     assert len(joints) == len(end_conf)
     sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
     distance_fn = get_distance_fn(body, joints, weights=weights)
@@ -2085,6 +2090,7 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
                                     custom_limits=custom_limits, max_distance=max_distance)
 
     start_conf = get_joint_positions(body, joints)
+
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
     return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
@@ -2340,7 +2346,13 @@ def body_from_end_effector(end_effector_pose, grasp_pose):
 
 def end_effector_from_body(body_pose, grasp_pose):
     """
+    grasp_pose: the body's pose in gripper's frame
+
     world_from_child * (parent_from_child)^(-1) = world_from_parent
+    (parent: gripper, child: body to be grasped)
+
+    Pose_{world,gripper} = Pose_{world,block}*Pose_{block,gripper}
+                         = Pose_{world,block}*(Pose_{gripper,block})^{-1}
     """
     return multiply(body_pose, invert(grasp_pose))
 
