@@ -16,7 +16,8 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     violates_limits, add_line, get_body_name, get_num_joints, approximate_as_cylinder, \
     approximate_as_prism, unit_quat, unit_point, clip, get_joint_info, tform_point, get_yaw, \
     get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
-    movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name
+    movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name,\
+    draw_point, draw_pose
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -255,7 +256,6 @@ def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose()
             grasps += [multiply(tool_pose, translate_z, rotate_z,
                                 reflect_z, translate_center, body_pose)]
     return grasps
-
 
 def get_side_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                     max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH, top_offset=SIDE_HEIGHT_OFFSET):

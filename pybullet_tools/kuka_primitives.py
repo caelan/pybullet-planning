@@ -1,18 +1,20 @@
 import time
+# dump_body(robot)
 
 from .pr2_utils import get_top_grasps
-from .utils import get_pose, set_pose, get_movable_joints, get_configuration, \
+from .utils import get_pose, set_pose, get_movable_joints, \
     set_joint_positions, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, user_input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
     inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
-    step_simulation, refine_path, plan_direct_joint_motion
+    step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
                                                  max_width=INF,  grasp_length=0),
                      Pose(0.1*Point(z=1))),
 }
+
 TOOL_FRAMES = {
     'iiwa14': 'iiwa_link_ee_kuka', # iiwa_link_ee
 }
@@ -54,7 +56,7 @@ class BodyConf(object):
         if joints is None:
             joints = get_movable_joints(body)
         if configuration is None:
-            configuration = get_configuration(body)
+            configuration = get_joint_positions(body, joints)
         self.body = body
         self.joints = joints
         self.configuration = configuration
@@ -243,7 +245,7 @@ def assign_fluent_state(fluents):
             raise ValueError(name)
     return obstacles
 
-def get_free_motion_gen(robot, fixed=[], teleport=False):
+def get_free_motion_gen(robot, fixed=[], teleport=False, self_collisions=True):
     def fn(conf1, conf2, fluents=[]):
         assert ((conf1.body == conf2.body) and (conf1.joints == conf2.joints))
         if teleport:
@@ -251,16 +253,16 @@ def get_free_motion_gen(robot, fixed=[], teleport=False):
         else:
             conf1.assign()
             obstacles = fixed + assign_fluent_state(fluents)
-            path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=obstacles)
+            path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=obstacles, self_collisions=self_collisions)
             if path is None:
                 if DEBUG_FAILURE: user_input('Free motion failed')
                 return None
-        command = Command([BodyPath(robot, path)])
+        command = Command([BodyPath(robot, path, joints=conf2.joints)])
         return (command,)
     return fn
 
 
-def get_holding_motion_gen(robot, fixed=[], teleport=False):
+def get_holding_motion_gen(robot, fixed=[], teleport=False, self_collisions=True):
     def fn(conf1, conf2, body, grasp, fluents=[]):
         assert ((conf1.body == conf2.body) and (conf1.joints == conf2.joints))
         if teleport:
@@ -269,14 +271,13 @@ def get_holding_motion_gen(robot, fixed=[], teleport=False):
             conf1.assign()
             obstacles = fixed + assign_fluent_state(fluents)
             path = plan_joint_motion(robot, conf2.joints, conf2.configuration,
-                                     obstacles=obstacles, attachments=[grasp.attachment()])
+                                     obstacles=obstacles, attachments=[grasp.attachment()], self_collisions=self_collisions)
             if path is None:
                 if DEBUG_FAILURE: user_input('Holding motion failed')
                 return None
-        command = Command([BodyPath(robot, path, attachments=[grasp])])
+        command = Command([BodyPath(robot, path, joints=conf2.joints, attachments=[grasp])])
         return (command,)
     return fn
-
 
 def get_movable_collision_test():
     def test(command, body, pose):
