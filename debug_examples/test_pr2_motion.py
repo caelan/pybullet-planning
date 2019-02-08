@@ -25,8 +25,8 @@ def test_base_motion(pr2, base_start, base_goal):
     print(len(base_path))
     for bq in base_path:
         set_base_values(pr2, bq)
-        user_input('Continue?')
-        # time.sleep(0.05)
+        # user_input('Continue?')
+        time.sleep(0.05)
 
 def test_drake_base_motion(pr2, base_start, base_goal):
     # TODO: combine this with test_arm_motion
@@ -77,13 +77,13 @@ def test_arm_control(pr2, left_joints, arm_start):
 #####################################
 
 def test_ikfast(pr2):
-    from pybullet_tools.pr2_ik.ik import forward_kinematics, inverse_kinematics, get_tool_pose, get_ik_generator
+    from pybullet_tools.ikfast.pr2.ik import get_tool_pose, get_ik_generator
     left_joints = joints_from_names(pr2, PR2_GROUPS['left_arm'])
     #right_joints = joints_from_names(pr2, PR2_GROUPS['right_arm'])
     torso_joints = joints_from_names(pr2, PR2_GROUPS['torso'])
     torso_left = torso_joints + left_joints
     print(get_link_pose(pr2, link_from_name(pr2, 'l_gripper_tool_frame')))
-    print(forward_kinematics('left', get_joint_positions(pr2, torso_left)))
+    # print(forward_kinematics('left', get_joint_positions(pr2, torso_left)))
     print(get_tool_pose(pr2, 'left'))
 
     arm = 'left'
@@ -98,14 +98,14 @@ def test_ikfast(pr2):
 
 #####################################
 
-def main(use_pr2_drake=True):
+def main(use_pr2_drake=False):
     connect(use_gui=True)
     add_data_path()
 
     plane = p.loadURDF("plane.urdf")
     #table_path = "table/table.urdf"
-    table_path = "models/table_collision/table.urdf"
-    table = p.loadURDF(table_path, 0, 0, 0, 0, 0, 0.707107, 0.707107)
+    # table_path = "models/table_collision/table.urdf"
+    # table = p.loadURDF(table_path, 0, 0, 0, 0, 0, 0.707107, 0.707107)
     # table_square/table_square.urdf, cube.urdf, block.urdf, door.urdf
 
     pr2_urdf = DRAKE_PR2_URDF if use_pr2_drake else PR2_URDF
@@ -128,17 +128,17 @@ def main(use_pr2_drake=True):
     set_joint_positions(pr2, right_joints, rightarm_from_leftarm(REST_LEFT_ARM))
     set_joint_positions(pr2, torso_joints, [0.2])
     open_arm(pr2, 'left')
-    test_ikfast(pr2)
+    # test_ikfast(pr2)
 
     p.addUserDebugLine(base_start, base_goal, lineColorRGB=(1, 0, 0)) # addUserDebugText
     print(base_start, base_goal)
-    # if use_pr2_drake:
-    #     test_drake_base_motion(pr2, base_start, base_goal)
-    # else:
-    #     test_base_motion(pr2, base_start, base_goal)
+    if use_pr2_drake:
+        test_drake_base_motion(pr2, base_start, base_goal)
+    else:
+        test_base_motion(pr2, base_start, base_goal)
 
     test_arm_motion(pr2, left_joints, arm_goal)
-    test_arm_control(pr2, left_joints, arm_start)
+    # test_arm_control(pr2, left_joints, arm_start)
 
     user_input('Finish?')
     disconnect()
