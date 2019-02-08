@@ -10,21 +10,13 @@ from .utils import get_pose, set_pose, get_movable_joints, \
     step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions
 
 GRASP_INFO = {
-    # get_grasp_fun, approach_pose
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
                                                  max_width=INF,  grasp_length=0),
                      Pose(0.1*Point(z=1))),
-    'side': GraspInfo(lambda body: get_side_grasps(body, under=True, tool_pose=Pose(),
-                                                 max_width=INF,  grasp_length=0),
-                     Pose(0.1*Point(z=1))),
-    'bottom': GraspInfo(lambda body: get_bottom_grasps(body, under=True, tool_pose=Pose(),
-                                                 max_width=INF,  grasp_length=0),
-                     Pose(0.1*Point(z=-1)))
 }
 
 TOOL_FRAMES = {
     'iiwa14': 'iiwa_link_ee_kuka', # iiwa_link_ee
-    'abb_irb6600_track': 'eef_tcp_frame',
 }
 
 DEBUG_FAILURE = False
