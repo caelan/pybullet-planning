@@ -5,7 +5,7 @@ from __future__ import print_function
 import pybullet as p
 
 from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, disconnect, wait_for_interrupt, \
-    get_movable_joints, get_sample_fn, set_joint_positions, get_joint_name, joints_from_names
+    get_movable_joints, get_sample_fn, set_joint_positions, get_joint_name, joints_from_names, get_configuration, LockRenderer
 
 MOVO_URDF = "models/movo_description/movo.urdf"
 
@@ -27,7 +27,8 @@ def main():
 
     plane = p.loadURDF("plane.urdf")
     #with HideOutput(False):
-    robot = load_model(MOVO_URDF, fixed_base=True)
+    with LockRenderer():
+        robot = load_model(MOVO_URDF, fixed_base=True)
     dump_body(robot)
     print('Start?')
     wait_for_interrupt()

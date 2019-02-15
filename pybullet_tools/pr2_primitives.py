@@ -5,26 +5,27 @@ import random
 import time
 import numpy as np
 
-from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, GET_GRASPS, \
+from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, GET_GRASPS, get_gripper_joints, \
     get_carry_conf, get_top_grasps, get_side_grasps, close_arm, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, TOOL_DIRECTION, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, \
-    ARM_NAMES, is_drake_pr2, get_group_joints, get_group_conf, get_torso_arm_joints
+    ARM_NAMES, is_drake_pr2, get_group_joints, get_group_conf, get_torso_arm_joints, compute_grasp_width
 from .utils import invert, multiply, get_name, set_pose, get_link_pose, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, waypoints_from_path, \
     unit_quat, plan_base_motion, plan_joint_motion, base_values_from_pose, pose_from_base_values, \
     uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, remove_fixed_constraint, \
     enable_real_time, disable_real_time, enable_gravity, joint_controller_hold, get_distance, \
     get_min_limit, user_input, step_simulation, update_state, get_body_name, get_bodies, BASE_LINK, \
-    add_segments, set_base_values, get_max_limit, link_from_name, BodySaver, get_aabb, plan_direct_joint_motion
+    add_segments, set_base_values, get_max_limit, link_from_name, BodySaver, get_aabb, \
+    plan_direct_joint_motion, has_gui, LockRenderer, create_attachment, wait_for_duration, get_extend_fn
 from .pr2_problems import get_fixed_bodies
 from .ikfast.pr2.ik import sample_tool_ik, is_ik_compiled
 
 BASE_EXTENT = 3.5 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
-PLAN_JOINTS = True
+APPROACH_DISTANCE = 0.1
 
 def get_base_limits(robot):
-    if PLAN_JOINTS and is_drake_pr2(robot):
+    if is_drake_pr2(robot):
         joints = get_group_joints(robot, 'base')[:2]
         lower = [get_min_limit(robot, j) for j in joints]
         upper = [get_max_limit(robot, j) for j in joints]
@@ -75,26 +76,31 @@ class Conf(object):
 class Command(object):
     def control(self, real_time=False, dt=0):
         raise NotImplementedError()
-    def step(self):
+    def iterate(self, attachments):
         raise NotImplementedError()
     def apply(self, state, **kwargs):
         raise NotImplementedError()
 
+# class Commands(object):
+#    def __init__(self, commands):
+#        self.commands = tuple(commands)
+#    def __repr__(self):
+#        return 'c{}'.format(id(self) % 1000)
+
+#####################################
+
 class Trajectory(Command):
-    _draw = True
+    _draw = False
     def __init__(self, path):
         self.path = tuple(path)
-        link = BASE_LINK
-        #link = 1
-        self.points = self.to_points(link) if self._draw else None
         # TODO: constructor that takes in this info
     def apply(self, state, time_step=None, simulate=False, sample=1):
-        handles = [] if self.points is None else add_segments(self.points)
+        handles = add_segments(self.to_points()) if self._draw and has_gui() else []
         #user_input('Execute?')
         for conf in self.path[1::sample]:
-            conf.step()
+            conf.assign()
             for attach in state.attachments.values():
-                attach.step()
+                attach.assign()
             update_state()
             if simulate:
                 step_simulation()
@@ -121,11 +127,16 @@ class Trajectory(Command):
                 if not real_time:
                     step_simulation()
                 time.sleep(dt)
+    def iterate(self, attachments):
+        for conf in self.path:
+            conf.assign()
+            yield
     def to_points(self, link=BASE_LINK):
+        # TODO: this is compp
         points = []
         for conf in self.path:
             with BodySaver(conf.body):
-                conf.step()
+                conf.assign()
                 #point = np.array(point_from_pose(get_link_pose(conf.body, link)))
                 point = np.array(get_group_conf(conf.body, 'base'))
                 point[2] = 0
@@ -155,6 +166,23 @@ def create_trajectory(robot, joints, path):
 
 ##################################################
 
+class GripperCommand(Command):
+    def __init__(self, robot, arm, position):
+        self.robot = robot
+        self.arm = arm
+        self.position = position
+    def iterate(self, attachments):
+        joints = get_gripper_joints(self.robot, self.arm)
+        start_conf = get_joint_positions(self.robot, joints)
+        end_conf = [self.position] * len(joints)
+        extend_fn = get_extend_fn(self.robot, joints)
+        path = [start_conf] + list(extend_fn(start_conf, end_conf))
+        for positions in path:
+            set_joint_positions(self.robot, joints, positions)
+            yield positions
+    def __repr__(self):
+        return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
+                                     self.arm, self.position)
 class Attach(Command):
     vacuum = True
     def __init__(self, robot, arm, grasp, body):
@@ -166,16 +194,13 @@ class Attach(Command):
     def apply(self, state, **kwargs):
         state.attachments[self.body] = self
         del state.poses[self.body]
-    def step(self):
-        gripper_pose = get_link_pose(self.robot, self.link)
-        body_pose = multiply(gripper_pose, self.grasp.value)
-        set_pose(self.body, body_pose)
-        if self.arm in ARM_NAMES: # TODO: do I want this?
-            close_arm(self.robot, self.arm)
+    def iterate(self, attachments):
+        attachments[self.body] = create_attachment(self.robot, self.link, self.body)
+        yield
     def control(self, **kwargs):
         if self.vacuum:
-            #add_fixed_constraint(self.body, self.robot, self.link)
-            add_fixed_constraint(self.body, self.robot, self.link, max_force=1) # Less force makes it easier to pick
+            add_fixed_constraint(self.body, self.robot, self.link)
+            #add_fixed_constraint(self.body, self.robot, self.link, max_force=1) # Less force makes it easier to pick
             #for _ in range(10):
             #    p.stepSimulation()
         else:
@@ -204,9 +229,10 @@ class Detach(Command):
     def apply(self, state, **kwargs):
         del state.attachments[self.body]
         state.poses[self.body] = Pose(self.body, get_pose(self.body))
-    def step(self):
-        if self.arm in ARM_NAMES: # TODO: do I want this?
-            open_arm(self.robot, self.arm)
+    def iterate(self, attachments):
+        if self.body in attachments:
+            del attachments[self.body]
+        yield
     def control(self, **kwargs):
         remove_fixed_constraint(self.body, self.robot, self.link)
     def __repr__(self):
@@ -220,12 +246,14 @@ class Clean(Command):
         self.body = body
     def apply(self, state, **kwargs):
         state.cleaned.add(self.body)
-        self.step()
-    def step(self):
+        for _ in self.iterate():
+            pass
+    def iterate(self, *args):
         p.addUserDebugText('Cleaned', textPosition=(0, 0, .25), textColorRGB=(0,0,1), #textSize=1,
                            lifeTime=0, parentObjectUniqueId=self.body)
         #p.setDebugObjectColor(self.body, 0, objectDebugColorRGB=(0,0,1))
-    control = step
+        yield
+    control = iterate
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.body)
 
@@ -236,69 +264,52 @@ class Cook(Command):
     def apply(self, state, **kwargs):
         state.cleaned.remove(self.body)
         state.cooked.add(self.body)
-        self.step()
-    def step(self):
+        for _ in self.iterate():
+            pass
+    def iterate(self, *args):
         # changeVisualShape
         # setDebugObjectColor
         #p.removeUserDebugItem # TODO: remove cleaned
         p.addUserDebugText('Cooked', textPosition=(0, 0, .5), textColorRGB=(1,0,0), #textSize=1,
                            lifeTime=0, parentObjectUniqueId=self.body)
         #p.setDebugObjectColor(self.body, 0, objectDebugColorRGB=(1,0,0))
-    control = step
+        yield
+    control = iterate
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.body)
 
-#class Commands(object):
-#    def __init__(self, commands):
-#        self.commands = tuple(commands)
-#    def __repr__(self):
-#        return 'c{}'.format(id(self) % 1000)
-
 ##################################################
 
-# TODO: context aware
 def get_motion_gen(problem, teleport=False):
+    # TODO: include fluents
     robot = problem.robot
-    fixed = get_fixed_bodies(problem)
+    obstacles = problem.fixed
     def fn(bq1, bq2):
         if teleport:
             path = [bq1, bq2]
         elif not is_drake_pr2(robot):
-            set_pose(robot, bq1.value)
-            #start_conf = base_values_from_pose(bq1.value)
+            bq1.assign()
             goal_conf = base_values_from_pose(bq2.value)
-            raw_path = plan_base_motion(robot, goal_conf, BASE_LIMITS, obstacles=fixed)
+            raw_path = plan_base_motion(robot, goal_conf, BASE_LIMITS, obstacles=obstacles)
             if raw_path is None:
                 print('Failed motion plan!')
                 return None
             path = [Pose(robot, pose_from_base_values(q, bq1.value)) for q in raw_path]
         else:
-            base_joints = get_group_joints(robot, 'base')
-            if PLAN_JOINTS:
-                # set_pose(robot, unit_pose())
-                # set_group_conf(robot, 'base', start_conf)
-                set_joint_positions(robot, base_joints, bq1.values)
-                raw_path = plan_joint_motion(robot, base_joints, bq2.values,
-                                             obstacles=fixed, self_collisions=False)
-            else:
-                with BodySaver(robot):
-                    set_base_values(robot, bq1.values)
-                    set_joint_positions(robot, base_joints, np.zeros(len(base_joints)))
-                    raw_path = plan_base_motion(robot, bq2.values, BASE_LIMITS, obstacles=fixed)
+            bq1.assign()
+            raw_path = plan_joint_motion(robot, bq2.joints, bq2.values,
+                                         obstacles=obstacles, self_collisions=False)
             if raw_path is None:
                 print('Failed motion plan!')
                 return None
-            #path = [Pose(robot, pose_from_base_values(q, bq1.value)) for q in raw_path]
-            path = [Conf(robot, base_joints, q) for q in raw_path]
+            path = [Conf(robot, bq2.joints, q) for q in raw_path]
         bt = Trajectory(path)
         return (bt,)
     return fn
 
 ##################################################
 
-APPROACH_DISTANCE = 0.1
-
-def get_grasp_gen(problem, randomize=True):
+def get_grasp_gen(problem, collisions=True, randomize=True):
     for grasp_type in problem.grasp_types:
         if grasp_type not in GET_GRASPS:
             raise ValueError('Unexpected grasp type:', grasp_type)
@@ -306,29 +317,36 @@ def get_grasp_gen(problem, randomize=True):
         grasps = []
         if 'top' in problem.grasp_types:
             approach = (APPROACH_DISTANCE*np.array(TOOL_DIRECTION), unit_quat())
-            for grasp in get_top_grasps(body):
-                g = Grasp('top', body, grasp, approach, TOP_HOLDING_LEFT_ARM)
-                grasps += [(g,)]
+            grasps.extend(Grasp('top', body, g, approach, TOP_HOLDING_LEFT_ARM) for g in get_top_grasps(body))
         if 'side' in problem.grasp_types:
             # TODO: change this tool direction
             approach = (APPROACH_DISTANCE*np.array(TOOL_DIRECTION), unit_quat())
-            for grasp in get_side_grasps(body):
-                g = Grasp('side', body, grasp, approach, SIDE_HOLDING_LEFT_ARM)
-                grasps += [(g,)]
+            grasps.extend(Grasp('side', body, g, approach, SIDE_HOLDING_LEFT_ARM) for g in get_side_grasps(body))
+        filtered_grasps = []
+        for grasp in grasps:
+            if collisions:
+                grasp_width = compute_grasp_width(problem.robot, 'left', body, grasp.value)
+            else:
+                grasp_width = 0.0
+            if grasp_width is not None:
+                grasp.grasp_width = grasp_width
+                filtered_grasps.append((grasp,))
         if randomize:
-            random.shuffle(grasps)
-        return grasps
+            random.shuffle(filtered_grasps)
+        return filtered_grasps
     return fn
 
 def get_stable_gen(problem):
     def gen(body, surface):
+        obstacles = set(problem.fixed) - {surface}
         while True:
             body_pose = sample_placement(body, surface)
             if body_pose is None:
                 break
             p = Pose(body, body_pose)
-            # TODO: collisions with fixed bodies
-            yield [(p,)]
+            p.assign()
+            if not any(pairwise_collision(body, obst) for obst in obstacles):
+                yield [(p,)]
     return gen
 
 ##################################################
@@ -372,7 +390,7 @@ def pr2_inverse_kinematics(robot, arm, gripper_pose, **kwargs):
 
 def get_ik_fn(problem, teleport=False):
     robot = problem.robot
-    fixed = get_fixed_bodies(problem)
+    obstacles = problem.fixed
     if is_ik_compiled():
         print('Using ikfast for inverse kinematics')
     else:
@@ -389,22 +407,27 @@ def get_ik_fn(problem, teleport=False):
         # TODO: randomly sample initial position to make sampler?
         # TODO: perturb this randomly
         set_joint_positions(robot, arm_joints, default_conf)
+        open_arm(robot, arm)
         approach_conf = pr2_inverse_kinematics(robot, arm, approach_pose)
-        if (approach_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
+        if (approach_conf is None) or any(pairwise_collision(robot, b) for b in obstacles):
             return None
         #grasp_conf = pr2_inverse_kinematics(robot, arm, gripper_pose)
         grasp_conf =  sub_inverse_kinematics(robot, arm_joints[0], arm_link, gripper_pose)
-        if (grasp_conf is None) or any(pairwise_collision(robot, b) for b in fixed):
+        if (grasp_conf is None) or any(pairwise_collision(robot, b) for b in obstacles):
             return None
         if teleport:
             path = [default_conf, approach_conf, grasp_conf]
         else:
             #set_joint_positions(robot, arm_joints, approach_conf)
             control_path = plan_direct_joint_motion(robot, arm_joints, approach_conf,
-                                             obstacles=fixed, self_collisions=False)
+                                                    obstacles=obstacles, self_collisions=False)
+            if control_path is None:
+                return None
             set_joint_positions(robot, arm_joints, approach_conf)
             retreat_path = plan_direct_joint_motion(robot, arm_joints, default_conf,
-                                             obstacles=fixed, self_collisions=False)
+                                                    obstacles=obstacles, self_collisions=False)
+            if retreat_path is None:
+                return None
             path = retreat_path[::-1] + control_path[::-1]
         mt = create_trajectory(robot, arm_joints, path)
         return (mt,)
@@ -498,35 +521,21 @@ def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
 
 #####################################
 
-def step_commands(commands, time_step=None, simulate=False):
-    # update_state()
-    #if simulate: step_simulation()
+def step_commands(commands, time_step=None):
     user_input('Execute?')
     attachments = {}
     for i, command in enumerate(commands):
         print(i, command)
-        if type(command) is Attach:
-            attachments[command.body] = command
-        elif type(command) is Detach:
-            del attachments[command.body]
-        elif type(command) is Trajectory:
-            # for conf in command.path:
-            for conf in command.path[1:]:
-                conf.step()
-                for attach in attachments.values():
-                    attach.step()
-                update_state()
-                # print attachments
-                if simulate:
-                    step_simulation()
-                if time_step is None:
-                    user_input('Continue?')
-                else:
-                    time.sleep(time_step)
-        elif type(command) in [Clean, Cook]:
-            command.step()
-        else:
-            raise ValueError(command)
+        for j, _ in enumerate(command.iterate(attachments)):
+            for attach in attachments.values():
+                attach.assign()
+            if j == 0:
+                continue
+            if time_step is None:
+                wait_for_duration(1e-2)
+                user_input('Command {}, Step {}) Next?'.format(i, j))
+            else:
+                wait_for_duration(time_step)
 
 
 def control_commands(commands):
@@ -539,7 +548,8 @@ def control_commands(commands):
 
 class State(object):
     def __init__(self, attachments={}, cleaned=set(), cooked=set()):
-        self.poses = {body: Pose(body, get_pose(body)) for body in get_bodies() if body not in attachments}
+        self.poses = {body: Pose(body, get_pose(body))
+                      for body in get_bodies() if body not in attachments}
         self.attachments = attachments
         self.cleaned = cleaned
         self.cooked = cooked
@@ -562,7 +572,7 @@ def get_target_point(conf):
     # TODO: look such that cone bottom touches at bottom
     # TODO: the target isn't the center which causes it to drift
     with BodySaver(conf.body):
-        conf.step()
+        conf.assign()
         lower, upper = get_aabb(robot, link)
         center = np.average([lower, upper], axis=0)
         point = np.array(get_group_conf(conf.body, 'base'))
@@ -574,9 +584,4 @@ def get_target_point(conf):
 
 def get_target_path(trajectory):
     # TODO: only do bounding boxes for moving links on the trajectory
-    target_path = []
-    for conf in trajectory.path:
-        # TODO: could draw the target point path sequence
-        target_path.append(get_target_point(conf))
-    #add_segments(target_path)
-    return target_path
+    return [get_target_point(conf) for conf in trajectory.path]

@@ -17,7 +17,7 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     approximate_as_prism, unit_quat, unit_point, clip, get_joint_info, tform_point, get_yaw, \
     get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name,\
-    draw_point, draw_pose
+    draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -80,7 +80,7 @@ PR2_LEFT_ARM_CONFS = {
 #####################################
 
 PR2_URDF = "models/pr2_description/pr2.urdf" # 87 joints
-PR2_URDF = "models/pr2_description/pr2_hpn.urdf"
+#PR2_URDF = "models/pr2_description/pr2_hpn.urdf"
 #PR2_URDF = "models/pr2_description/pr2_kinect.urdf"
 DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf" # 82 joints
 
@@ -702,3 +702,28 @@ def get_base_extend_fn(robot):
     # TODO: rotate such that in field of view of the camera first
     # TODO: plan base movements while checking edge feasibility with camera
     raise NotImplementedError()
+
+#####################################
+
+def compute_grasp_width(robot, arm, body, grasp_pose, num_steps=25):
+    # TODO: merge with the LTAMP version
+    gripper_joints = get_gripper_joints(robot, arm)
+    closed_conf = [get_min_limit(robot, joint) for joint in gripper_joints]
+    open_conf = [get_max_limit(robot, joint) for joint in gripper_joints]
+    resolutions = np.abs(np.array(open_conf) - np.array(closed_conf)) / num_steps
+    extend_fn = get_extend_fn(robot, gripper_joints, resolutions=resolutions)
+    collision_links = get_moving_links(robot, gripper_joints)
+    close_path = [open_conf] + list(extend_fn(open_conf, closed_conf))
+
+    tool_link = link_from_name(robot, PR2_TOOL_FRAMES[arm])
+    tool_pose = get_link_pose(robot, tool_link)
+    body_pose = multiply(tool_pose, grasp_pose)
+    set_pose(body, body_pose)
+
+    for i, conf in enumerate(close_path):
+        set_joint_positions(robot, gripper_joints, conf)
+        if link_pairs_collision(robot, collision_links, body):
+            if i == 0:
+                return None
+            return close_path[i-1][0]
+    return close_path[-1][0]

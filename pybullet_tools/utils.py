@@ -426,11 +426,12 @@ class LockRenderer(Saver):
     # disabling rendering temporary makes adding objects faster
     def __init__(self, lock=True):
         # skip if the visualizer isn't active
+        self.renderer = has_gui()
         if lock:
             set_renderer(enable=False)
 
     def restore(self):
-        set_renderer(enable=True)
+        set_renderer(enable=self.renderer)
 
 CLIENTS = set()
 
@@ -715,7 +716,7 @@ def save_state():
     return p.saveState(physicsClientId=CLIENT)
 
 def restore_state(state_id):
-    p.restoreState(stateId=state_id, clientServerId=CLIENT)
+    p.restoreState(stateId=state_id, physicsClientId=CLIENT)
 
 def save_bullet(filename):
     p.saveBullet(filename, physicsClientId=CLIENT)
@@ -862,7 +863,8 @@ def quat_angle_between(quat0, quat1): # quaternion_slerp
 def all_between(lower_limits, values, upper_limits):
     assert len(lower_limits) == len(values)
     assert len(values) == len(upper_limits)
-    return np.less_equal(lower_limits, values).all() and np.less_equal(values, upper_limits).all()
+    return np.less_equal(lower_limits, values).all() and \
+           np.less_equal(values, upper_limits).all()
 
 #####################################
 
@@ -1459,7 +1461,7 @@ def create_shape_array(geoms, poses, colors=None):
     visual_args = mega_geom.copy()
     for (point, quat), color in zip(poses, colors):
         # TODO: color doesn't seem to work correctly here
-        #visual_args['rgbaColors'].append(color)
+        visual_args['rgbaColors'].append(color)
         visual_args['visualFramePositions'].append(point)
         visual_args['visualFrameOrientations'].append(quat)
     visual_id = p.createVisualShapeArray(physicsClientId=CLIENT, **visual_args)
@@ -1660,10 +1662,11 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
     return new_body
 
 def clone_world(client=None, exclude=[]):
+    visual = has_gui(client)
     mapping = {}
     for body in get_bodies():
         if body not in exclude:
-            new_body = clone_body(body, collision=True, visual=True, client=client)
+            new_body = clone_body(body, collision=True, visual=visual, client=client)
             mapping[body] = new_body
     return mapping
 
@@ -1882,13 +1885,17 @@ def single_collision(body1, **kwargs):
             return True
     return False
 
-def all_collision(**kwargs):
-    bodies = get_bodies()
-    for i in range(len(bodies)):
-        for j in range(i+1, len(bodies)):
-            if pairwise_collision(bodies[i], bodies[j], **kwargs):
-                return True
+def link_pairs_collision(body1, links1, body2, links2=None, **kwargs):
+    if links2 is None:
+        links2 = get_all_links(body2)
+    for link1, link2 in product(links1, links2):
+        if (body1 == body2) and (link1 == link2):
+            continue
+        if pairwise_link_collision(body1, link1, body2, link2, **kwargs):
+            return True
     return False
+
+#####################################
 
 RayResult = namedtuple('RayResult', ['objectUniqueId', 'linkIndex',
                                      'hit_fraction', 'hit_position', 'hit_normal'])
@@ -1913,12 +1920,11 @@ def get_sample_fn(body, joints, custom_limits={}):
     return fn
 
 def get_difference_fn(body, joints):
+    circular_joints = [is_circular(body, joint) for joint in joints]
+
     def fn(q2, q1):
-        difference = []
-        for joint, value2, value1 in zip(joints, q2, q1):
-            difference.append(circular_difference(value2, value1)
-                              if is_circular(body, joint) else (value2 - value1))
-        return tuple(difference)
+        return tuple(circular_difference(value2, value1) if circular else (value2 - value1)
+                     for circular, value2, value1 in zip(circular_joints, q2, q1))
     return fn
 
 def get_distance_fn(body, joints, weights=None):
