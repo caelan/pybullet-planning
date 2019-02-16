@@ -1,0 +1,30 @@
+# square.obj
+
+# Named objects
+o square
+
+# List of geometric vertices, with (x, y, z [,w]) coordinates
+# w is optional and defaults to 1.0
+v -0.5 -0.5 0
+v +0.5 -0.5 0
+v +0.5 +0.5 0
+v -0.5 +0.5 0
+
+# List of texture coordinates, in (u, [v ,w]) coordinates
+# These will vary between 0 and 1, v and w are optional and default to 0
+vt 0.0 0.0
+vt 1.0 0.0
+vt 1.0 1.0
+vt 0.0 1.0
+
+# List of vertex normals in (x,y,z) form
+# Normals might not be unit vectors
+
+# Parameter space vertices in ( u [,v] [,w] ) form
+# Free form geometry statement
+
+# Named groups
+g square
+
+# Polygonal face element
+f 1/1 2/2 3/3 4/4
