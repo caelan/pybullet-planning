@@ -1800,11 +1800,13 @@ def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
     return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
+    #return plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn)
 
 def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kwargs):
+    # TODO: cost metric based on total robot movement (encouraging greater distances possibly)
     from motion_planners.lazy_prm import lazy_prm
     path, samples, edges, colliding_vertices, colliding_edges = lazy_prm(
-        start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kwargs)
+        start_conf, end_conf, sample_fn, extend_fn, collision_fn, num_samples=200, **kwargs)
     if path is None:
         return path
 
