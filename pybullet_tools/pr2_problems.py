@@ -12,7 +12,8 @@ class Problem(object):
     def __init__(self, robot, arms=tuple(), movable=tuple(), grasp_types=tuple(),
                  surfaces=tuple(), sinks=tuple(), stoves=tuple(), buttons=tuple(),
                  goal_conf=None, goal_holding=tuple(), goal_on=tuple(),
-                 goal_cleaned=tuple(), goal_cooked=tuple(), body_names={}):
+                 goal_cleaned=tuple(), goal_cooked=tuple(), costs=False,
+                 body_names={}, body_types=[]):
         self.robot = robot
         self.arms = arms
         self.movable = movable
@@ -26,7 +27,9 @@ class Problem(object):
         self.goal_on = goal_on
         self.goal_cleaned = goal_cleaned
         self.goal_cooked = goal_cooked
+        self.costs = costs
         self.body_names = body_names
+        self.body_types = body_types
     @property
     def fixed(self):
         movable = [self.robot] + list(self.movable)

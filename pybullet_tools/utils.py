@@ -1956,10 +1956,12 @@ def refine_path(body, joints, waypoints, num_steps):
         refined_path += list(refine_fn(v1, v2))
     return refined_path
 
+DEFAULT_RESOLUTION = 0.05
+
 def get_extend_fn(body, joints, resolutions=None, norm=2):
     # norm = 1, 2, INF
     if resolutions is None:
-        resolutions = 0.05*np.ones(len(joints))
+        resolutions = DEFAULT_RESOLUTION*np.ones(len(joints))
     difference_fn = get_difference_fn(body, joints)
     def fn(q1, q2):
         #steps = int(np.max(np.abs(np.divide(difference_fn(q2, q1), resolutions))))
@@ -2050,8 +2052,9 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
     return collision_fn
 
 def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstacles=None, attachments=[],
-                      self_collisions=True, disabled_collisions=set(), custom_limits={}, max_distance=MAX_DISTANCE):
-    extend_fn = get_extend_fn(body, joints)
+                                self_collisions=True, disabled_collisions=set(),
+                                resolutions=None, custom_limits={}, max_distance=MAX_DISTANCE):
+    extend_fn = get_extend_fn(body, joints, resolutions=resolutions)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, max_distance=max_distance)
     if start_conf is None:
@@ -2229,20 +2232,18 @@ def sample_placement(top_body, bottom_body, top_pose=unit_pose(), bottom_link=No
 
 # Reachability
 
-def sample_reachable_base(robot, point, reachable_range=(0.25, 1.0), max_attempts=50):
-    for _ in range(max_attempts):
-        radius = np.random.uniform(*reachable_range)
-        x, y = radius*unit_from_theta(np.random.uniform(-np.pi, np.pi)) + point[:2]
-        yaw = np.random.uniform(*CIRCULAR_LIMITS)
-        base_values = (x, y, yaw)
-        #set_base_values(robot, base_values)
-        return base_values
-    return None
+def sample_reachable_base(robot, point, reachable_range=(0.25, 1.0)):
+    radius = np.random.uniform(*reachable_range)
+    x, y = radius*unit_from_theta(np.random.uniform(-np.pi, np.pi)) + point[:2]
+    yaw = np.random.uniform(*CIRCULAR_LIMITS)
+    base_values = (x, y, yaw)
+    #set_base_values(robot, base_values)
+    return base_values
 
 def uniform_pose_generator(robot, gripper_pose, **kwargs):
     point = point_from_pose(gripper_pose)
     while True:
-        base_values = sample_reachable_base(robot, point)
+        base_values = sample_reachable_base(robot, point, **kwargs)
         if base_values is None:
             break
         yield base_values
@@ -2622,7 +2623,7 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
 
     solutions = []
     for target_pose in waypoint_poses:
-        for _ in range(max_iterations):
+        for iteration in range(max_iterations):
             sub_kinematic_conf = inverse_kinematics_helper(sub_robot, selected_target_link, target_pose)
             if sub_kinematic_conf is None:
                 remove_body(sub_robot)
@@ -2634,6 +2635,7 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
                 if not all_between(lower_limits, kinematic_conf, upper_limits):
                     remove_body(sub_robot)
                     return None
+                print("IK iterations:", iteration)
                 solutions.append(kinematic_conf)
                 break
         else:

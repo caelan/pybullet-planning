@@ -1,9 +1,13 @@
 import random
 import numpy as np
 
-from ..utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, get_joint_limits, get_joint_position
+from ..utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, \
+    get_joint_limits, get_joint_position, get_joint_positions
 
 # TODO: lookup robot & tool in dictionary and use if exists
+
+USE_ALL = False
+USE_CURRENT = None
 
 
 def compute_forward_kinematics(fk_fn, conf):
@@ -25,19 +29,21 @@ def compute_inverse_kinematics(ik_fn, pose, sampled=[]):
     return solutions
 
 
-def get_ik_limits(robot, joint, limits=False):
-    if limits is False:
+def get_ik_limits(robot, joint, limits=USE_ALL):
+    if limits is USE_ALL:
         return get_joint_limits(robot, joint)
-    elif limits is None:
+    elif limits is USE_CURRENT:
         value = get_joint_position(robot, joint)
         return value, value
     return limits
 
 
-def select_solution(solutions, nearby_conf=None, **kwargs):
+def select_solution(body, joints, solutions, nearby_conf=None, **kwargs):
     if not solutions:
         return None
-    if nearby_conf is None:
+    if nearby_conf is USE_ALL:
         return random.choice(solutions)
+    if nearby_conf is None:
+        nearby_conf = get_joint_positions(body, joints)
     # TODO: search over neighborhood of sampled joints when nearby_conf != None
     return min(solutions, key=lambda conf: np.linalg.norm(np.array(conf) - np.array(nearby_conf), **kwargs))
