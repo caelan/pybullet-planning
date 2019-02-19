@@ -1560,7 +1560,7 @@ def collision_shape_from_data(data, body, link, client):
     if (data.geometry_type == p.GEOM_MESH) and (data.filename == 'unknown_file'):
         return -1
     pose = (data.local_frame_pos, data.local_frame_orn)
-    pose = multiply(invert(get_joint_inertial_pose(body, link)), pose)
+    pose = multiply(get_joint_inertial_pose(body, link), pose)
     point, quat = pose
     # TODO: the visual data seems affected by the collision data
     return p.createCollisionShape(shapeType=data.geometry_type,
@@ -2518,10 +2518,10 @@ def inverse_kinematics_helper(robot, link, target_pose):
     (target_point, target_quat) = target_pose
     assert target_point is not None
     if target_quat is None:
+        #ikSolver = p.IK_DLS or p.IK_SDLS
         kinematic_conf = p.calculateInverseKinematics(robot, link, target_point,
-                                                      #lowerLimits=ll, upperLimits=ul, jointRanges=jr, restPoses=rp,
-                                                      #jointDamping=jd, solver=ikSolver, maxNumIterations=100,
-                                                      #residualThreshold=.01,
+                                                      #lowerLimits=ll, upperLimits=ul, jointRanges=jr, restPoses=rp, jointDamping=jd,
+                                                      # solver=ikSolver, maxNumIterations=-1, residualThreshold=-1,
                                                       physicsClientId=CLIENT)
     else:
         kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, target_quat, physicsClientId=CLIENT)
@@ -2690,6 +2690,9 @@ def add_segments(points, closed=False, **kwargs):
     if closed:
         lines.append(add_line(points[-1], points[0], **kwargs))
     return lines
+
+def draw_link_name(body, link):
+    return add_text(get_link_name(body, link), position=(0, 0.2, 0), parent=body, parent_link=link)
 
 def draw_pose(pose, length=0.1, **kwargs):
     origin_world = tform_point(pose, np.zeros(3))

@@ -43,7 +43,8 @@ def select_solution(body, joints, solutions, nearby_conf=None, **kwargs):
         return None
     if nearby_conf is USE_ALL:
         return random.choice(solutions)
-    if nearby_conf is None:
+    if nearby_conf is USE_CURRENT:
         nearby_conf = get_joint_positions(body, joints)
+    # TODO: sort by distance before collision checking
     # TODO: search over neighborhood of sampled joints when nearby_conf != None
     return min(solutions, key=lambda conf: np.linalg.norm(np.array(conf) - np.array(nearby_conf), **kwargs))

@@ -17,7 +17,7 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     approximate_as_prism, unit_quat, unit_point, clip, get_joint_info, tform_point, get_yaw, \
     get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name,\
-    draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision
+    draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision, draw_point
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -55,6 +55,13 @@ PR2_TOOL_FRAMES = {
     'right': 'r_gripper_tool_frame',  # r_gripper_palm_link | r_gripper_tool_frame
     'head': HEAD_LINK_NAME,
 }
+
+PR2_GRIPPER_ROOTS = {
+    'left': 'l_gripper_palm_link',
+    'right': 'r_gripper_palm_link',
+}
+
+PR2_BASE_LINK = 'base_footprint'
 
 # Arm tool poses
 #TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678]) # l_gripper_palm_link
@@ -103,6 +110,9 @@ def is_drake_pr2(robot): # 87
 #     return [joint_from_name[name] for name in joint_names]
 
 #####################################
+
+def get_base_pose(pr2):
+    return get_link_pose(pr2, link_from_name(pr2, PR2_BASE_LINK))
 
 def rightarm_from_leftarm(config):
     right_from_left = np.array([-1, 1, -1, 1, -1, 1, -1])
@@ -417,13 +427,16 @@ def learned_forward_generator(robot, base_pose, arm, grasp_type):
 
 
 def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
+    # TODO: record collisions with the reachability database
     gripper_from_base_list = load_inverse_reachability(arm, grasp_type)
     random.shuffle(gripper_from_base_list)
+    #handles = []
     for gripper_from_base in gripper_from_base_list:
         base_point, base_quat = multiply(gripper_pose, gripper_from_base)
         x, y, _ = base_point
         _, _, theta = euler_from_quat(base_quat)
         base_values = (x, y, theta)
+        #handles.extend(draw_point(np.array([x, y, -0.1]), color=(1, 0, 0), size=0.05))
         #set_base_values(robot, base_values)
         #yield get_pose(robot)
         yield base_values

@@ -5,7 +5,7 @@ from ..utils import get_ik_limits, compute_forward_kinematics, compute_inverse_k
 from ...pr2_utils import PR2_TOOL_FRAMES, get_torso_arm_joints, get_gripper_link, get_arm_joints
 from ...utils import multiply, get_link_pose, link_from_name, get_joint_positions, \
     joint_from_name, invert, get_custom_limits, all_between, sub_inverse_kinematics, set_joint_positions, \
-    get_joint_positions, pairwise_collision
+    get_joint_positions, pairwise_collision, wait_for_user
 
 IK_FRAME = {
     'left': 'l_gripper_tool_frame',
@@ -15,7 +15,7 @@ BASE_FRAME = 'base_link'
 
 TORSO_JOINT = 'torso_lift_joint'
 UPPER_JOINT = {
-    'left': 'l_upper_arm_roll_joint',
+    'left': 'l_upper_arm_roll_joint', # Third arm joint
     'right': 'r_upper_arm_roll_joint',
 }
 
@@ -44,21 +44,21 @@ def is_ik_compiled():
     except ImportError:
         return False
 
-def get_ik_generator(robot, arm, ik_pose, torso_limits=USE_CURRENT, upper_limits=USE_CURRENT, custom_limits={}):
+def get_ik_generator(robot, arm, ik_pose, torso_limits=USE_ALL, upper_limits=USE_ALL, custom_limits={}):
     from .ikLeft import leftIK
     from .ikRight import rightIK
     arm_ik = {'left': leftIK, 'right': rightIK}
     world_from_base = get_link_pose(robot, link_from_name(robot, BASE_FRAME))
     base_from_ik = multiply(invert(world_from_base), ik_pose)
-    sampled_limits = [get_ik_limits(robot, joint_from_name(robot, name), limits) for name, limits in
-                      [(TORSO_JOINT, torso_limits), (UPPER_JOINT[arm], upper_limits)]]
+    sampled_joints = [joint_from_name(robot, name) for name in [TORSO_JOINT, UPPER_JOINT[arm]]]
+    sampled_limits = [get_ik_limits(robot, joint, limits) for joint, limits in zip(sampled_joints, [torso_limits, upper_limits])]
     arm_joints = get_torso_arm_joints(robot, arm)
 
-    lower_limits, upper_limits = get_custom_limits(robot, arm_joints, custom_limits)
+    min_limits, max_limits = get_custom_limits(robot, arm_joints, custom_limits)
     while True:
         sampled_values = [random.uniform(*limits) for limits in sampled_limits]
         confs = compute_inverse_kinematics(arm_ik[arm], base_from_ik, sampled_values)
-        solutions = [q for q in confs if all_between(lower_limits, q, upper_limits)]
+        solutions = [q for q in confs if all_between(min_limits, q, max_limits)]
         yield solutions
         if all(lower == upper for lower, upper in sampled_limits):
             break
@@ -83,13 +83,13 @@ def sample_tool_ik(robot, arm, tool_pose, nearby_conf=USE_ALL, max_attempts=25, 
             break
     return None
 
-def pr2_inverse_kinematics(robot, arm, gripper_pose, upper_limits=USE_ALL, obstacles=[], custom_limits={}, **kwargs):
+def pr2_inverse_kinematics(robot, arm, gripper_pose, obstacles=[], custom_limits={}, **kwargs):
     arm_link = get_gripper_link(robot, arm)
     arm_joints = get_arm_joints(robot, arm)
     if is_ik_compiled():
         ik_joints = get_torso_arm_joints(robot, arm)
         torso_arm_conf = sample_tool_ik(robot, arm, gripper_pose, custom_limits=custom_limits,
-                                        torso_limits=USE_CURRENT, upper_limits=upper_limits, **kwargs)
+                                        torso_limits=USE_CURRENT, **kwargs)
         if torso_arm_conf is None:
             return None
         set_joint_positions(robot, ik_joints, torso_arm_conf)
