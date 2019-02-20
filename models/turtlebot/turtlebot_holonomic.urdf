@@ -10,6 +10,26 @@
 -->
 <robot name="turtlebot" xmlns:controller="http://playerstage.sourceforge.net/gazebo/xmlschema/#controller" xmlns:interface="http://playerstage.sourceforge.net/gazebo/xmlschema/#interface" xmlns:sensor="http://playerstage.sourceforge.net/gazebo/xmlschema/#sensor" xmlns:xacro="http://ros.org/wiki/xacro">
 
+  <link name="world_link"/>
+  <link name="base_link_0"/>
+  <link name="base_link_1"/>
+  <joint name="x" type="prismatic">
+    <limit lower="-5" upper="5"/>
+    <parent link="world_link"/>
+    <child link="base_link_0"/>
+    <axis xyz="1 0 0"/>
+  </joint>
+  <joint name="y" type="prismatic">
+    <limit lower="-5" upper="5"/>
+    <parent link="base_link_0"/>
+    <child link="base_link_1"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+  <joint name="theta" type="continuous">
+    <parent link="base_link_1"/>
+    <child link="base_link"/>
+    <axis xyz="0 0 1"/>
+  </joint>
   <link name="base_link">
     <visual>
       <geometry>

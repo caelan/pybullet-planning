@@ -684,7 +684,7 @@ def get_detections(pr2, p_false_neg=0, camera_link=HEAD_LINK_NAME, **kwargs):
     for body in get_bodies():
         if np.random.random() < p_false_neg:
             continue
-        mesh, z = get_detection_cone(pr2, body, **kwargs)
+        mesh, z = get_detection_cone(pr2, body, camera_link=camera_link, **kwargs)
         if mesh is None:
             continue
         cone = create_mesh(mesh, color=None)

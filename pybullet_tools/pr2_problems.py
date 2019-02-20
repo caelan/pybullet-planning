@@ -30,10 +30,8 @@ class Problem(object):
         self.costs = costs
         self.body_names = body_names
         self.body_types = body_types
-    @property
-    def fixed(self):
-        movable = [self.robot] + list(self.movable)
-        return list(filter(lambda b: b not in movable, get_bodies()))
+        all_movable = [self.robot] + list(self.movable)
+        self.fixed = list(filter(lambda b: b not in all_movable, get_bodies()))
     def __repr__(self):
         return repr(self.__dict__)
 

@@ -59,6 +59,8 @@ def get_ik_generator(robot, arm, ik_pose, torso_limits=USE_ALL, upper_limits=USE
         sampled_values = [random.uniform(*limits) for limits in sampled_limits]
         confs = compute_inverse_kinematics(arm_ik[arm], base_from_ik, sampled_values)
         solutions = [q for q in confs if all_between(min_limits, q, max_limits)]
+        # TODO: return just the closest solution
+        #print(len(confs), len(solutions))
         yield solutions
         if all(lower == upper for lower, upper in sampled_limits):
             break

@@ -27,8 +27,8 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, \
 
 BASE_EXTENT = 3.5 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
-APPROACH_DISTANCE = 0.15
 GRASP_LENGTH = 0.03
+APPROACH_DISTANCE = 0.1 + GRASP_LENGTH
 
 def get_base_limits(robot):
     if is_drake_pr2(robot):
@@ -44,8 +44,10 @@ class Pose(object):
     #def __init__(self, position, orientation):
     #    self.position = position
     #    self.orientation = orientation
-    def __init__(self, body, value):
+    def __init__(self, body, value=None):
         self.body = body
+        if value is None:
+            value = get_pose(self.body)
         self.value = tuple(value)
     def assign(self):
         set_pose(self.body, self.value)
@@ -69,9 +71,11 @@ class Grasp(object):
         return 'g{}'.format(id(self) % 1000)
 
 class Conf(object):
-    def __init__(self, body, joints, values):
+    def __init__(self, body, joints, values=None):
         self.body = body
         self.joints = joints
+        if values is None:
+            values = get_joint_positions(self.body, self.joints)
         self.values = tuple(values)
     def assign(self):
         set_joint_positions(self.body, self.joints, self.values)
@@ -196,7 +200,7 @@ class Attach(Command):
         self.arm = arm
         self.grasp = grasp
         self.body = body
-        self.link = link_from_name(self.robot, PR2_TOOL_FRAMES[self.arm])
+        self.link = link_from_name(self.robot, PR2_TOOL_FRAMES.get(self.arm, self.arm))
         #self.attachment = None
     def assign(self):
         gripper_pose = get_link_pose(self.robot, self.link)
@@ -228,7 +232,7 @@ class Detach(Command):
         self.robot = robot
         self.arm = arm
         self.body = body
-        self.link = link_from_name(self.robot, PR2_TOOL_FRAMES[self.arm])
+        self.link = link_from_name(self.robot, PR2_TOOL_FRAMES.get(self.arm, self.arm))
         # TODO: pose argument to maintain same object
     def apply(self, state, **kwargs):
         del state.attachments[self.body]
@@ -383,7 +387,7 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
             print('Grasp IK failure', grasp_conf)
             #if grasp_conf is not None:
             #    print(grasp_conf)
-            #    wait_for_user()
+            #    #wait_for_user()
             return None
         #approach_conf = pr2_inverse_kinematics(robot, arm, approach_pose, custom_limits=custom_limits,
         #                                       upper_limits=USE_CURRENT, nearby_conf=USE_CURRENT)

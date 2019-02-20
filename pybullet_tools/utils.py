@@ -38,6 +38,7 @@ DEFAULT_TIME_STEP = 1./240. # seconds
 # Models
 
 # Robots
+TURTLEBOT_URDF = 'models/turtlebot/turtlebot_holonomic.urdf'
 DRAKE_IIWA_URDF = "models/drake/iiwa_description/urdf/iiwa14_polytope_collision.urdf"
 KUKA_IIWA_URDF = "kuka_iiwa/model.urdf"
 KUKA_IIWA_GRIPPER_SDF = "kuka_iiwa/kuka_with_gripper.sdf"
@@ -45,10 +46,11 @@ R2D2_URDF = "r2d2.urdf"
 MINITAUR_URDF = "quadruped/minitaur.urdf"
 HUMANOID_MJCF = "mjcf/humanoid.xml"
 HUSKY_URDF = "husky/husky.urdf"
+RACECAR_URDF = 'racecar/racecar.urdf' # racecar_differential.urdf
 
 # Objects
 KIVA_SHELF_SDF = "kiva_shelf/model.sdf"
-SMALL_BLOCK_URDF = "models/drake/objects/block_for_pick_and_place.urdf"
+DRAKE_IIWA_URDF = "models/drake/objects/block_for_pick_and_place.urdf"
 BLOCK_URDF = "models/drake/objects/block_for_pick_and_place_mid_size.urdf"
 SINK_URDF = 'models/sink.urdf'
 STOVE_URDF = 'models/stove.urdf'
@@ -1057,7 +1059,7 @@ def get_joint_velocities(body, joints):
     return tuple(get_joint_velocity(body, joint) for joint in joints)
 
 def set_joint_position(body, joint, value):
-    p.resetJointState(body, joint, value, physicsClientId=CLIENT)
+    p.resetJointState(body, joint, value, targetVelocity=0, physicsClientId=CLIENT)
 
 def set_joint_positions(body, joints, values):
     assert len(joints) == len(values)
@@ -1177,6 +1179,12 @@ STATIC_MASS = 0
 
 get_num_links = get_num_joints
 get_links = get_joints # Does not include BASE_LINK
+
+def child_link_from_joint(joint):
+    return joint
+
+def parent_joint_from_link(link):
+    return link
 
 def get_all_links(body):
     return [BASE_LINK] + list(get_links(body))
@@ -1469,7 +1477,7 @@ def create_shape_array(geoms, poses, colors=None):
 
 #####################################
 
-def create_body(collision_id, visual_id, mass=STATIC_MASS):
+def create_body(collision_id=-1, visual_id=-1, mass=STATIC_MASS):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
 
@@ -1525,7 +1533,8 @@ VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
                                                  'localVisualFrame_position', 'localVisualFrame_orientation',
                                                  'rgbaColor']) # 'textureUniqueId'
 
-def visual_shape_from_data(data, client):
+def visual_shape_from_data(data, client=None):
+    client = get_client(client)
     if (data.visualGeometryType == p.GEOM_MESH) and (data.meshAssetFileName == 'unknown_file'):
         return -1
     # visualFramePosition: translational offset of the visual shape with respect to the link
@@ -1556,7 +1565,8 @@ CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'link
                                                        'geometry_type', 'dimensions', 'filename',
                                                        'local_frame_pos', 'local_frame_orn'])
 
-def collision_shape_from_data(data, body, link, client):
+def collision_shape_from_data(data, body, link, client=None):
+    client = get_client(client)
     if (data.geometry_type == p.GEOM_MESH) and (data.filename == 'unknown_file'):
         return -1
     pose = (data.local_frame_pos, data.local_frame_orn)
@@ -1576,7 +1586,8 @@ def collision_shape_from_data(data, body, link, client):
                                   physicsClientId=client)
     #return p.createCollisionShapeArray()
 
-def clone_visual_shape(body, link, client):
+def clone_visual_shape(body, link, client=None):
+    client = get_client(client)
     #if not has_gui(client):
     #    return -1
     visual_data = get_visual_data(body, link)
@@ -1585,7 +1596,8 @@ def clone_visual_shape(body, link, client):
     assert (len(visual_data) == 1)
     return visual_shape_from_data(visual_data[0], client)
 
-def clone_collision_shape(body, link, client):
+def clone_collision_shape(body, link, client=None):
+    client = get_client(client)
     collision_data = get_collision_data(body, link)
     if not collision_data:
         return -1
@@ -1658,7 +1670,7 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
     #set_configuration(new_body, get_joint_positions(body, movable_joints)) # Need to use correct client
     for joint, value in zip(range(len(links)), get_joint_positions(body, links)):
         # TODO: check if movable?
-        p.resetJointState(new_body, joint, value, physicsClientId=client)
+        p.resetJointState(new_body, joint, value, targetVelocity=0, physicsClientId=client)
     return new_body
 
 def clone_world(client=None, exclude=[]):
@@ -1718,7 +1730,7 @@ def get_data_radius(data):
     dimensions = data.dimensions
     if geometry_type == p.GEOM_SPHERE:
         return dimensions[0]
-    if geometry_type in (p.GEOM_SPHERE, p.GEOM_CAPSULE):
+    if geometry_type in (p.GEOM_CYLINDER, p.GEOM_CAPSULE):
         return dimensions[1]
     return DEFAULT_RADIUS
 
@@ -1727,7 +1739,7 @@ DEFAULT_HEIGHT = 1
 def get_data_height(data):
     geometry_type = get_data_type(data)
     dimensions = data.dimensions
-    if geometry_type in (p.GEOM_SPHERE, p.GEOM_CAPSULE):
+    if geometry_type in (p.GEOM_CYLINDER, p.GEOM_CAPSULE):
         return dimensions[0]
     return DEFAULT_HEIGHT
 
@@ -2635,6 +2647,7 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
                 set_joint_positions(robot, selected_movable_joints, sub_kinematic_conf)
                 kinematic_conf = get_configuration(robot)
                 if not all_between(lower_limits, kinematic_conf, upper_limits):
+                    print("Limits violated")
                     remove_body(sub_robot)
                     return None
                 print("IK iterations:", iteration)
