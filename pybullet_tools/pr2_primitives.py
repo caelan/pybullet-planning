@@ -302,30 +302,34 @@ def get_grasp_gen(problem, collisions=False, randomize=True):
                           for g in get_side_grasps(body, grasp_length=GRASP_LENGTH))
         filtered_grasps = []
         for grasp in grasps:
-            if collisions:
-                grasp_width = compute_grasp_width(problem.robot, arm, body, grasp.value)
-            else:
-                grasp_width = 0.0
+            grasp_width = compute_grasp_width(problem.robot, arm, body, grasp.value) if collisions else 0.0
             if grasp_width is not None:
                 grasp.grasp_width = grasp_width
-                filtered_grasps.append((grasp,))
+                filtered_grasps.append(grasp)
         if randomize:
             random.shuffle(filtered_grasps)
-        return filtered_grasps
+        for g in filtered_grasps:
+            yield (g,)
     return fn
 
 def get_stable_gen(problem, collisions=True):
+    obstacles = problem.fixed if collisions else []
     def gen(body, surface):
         # TODO: surface poses are being sampled in pr2_belief
-        obstacles = set(problem.fixed) - {body, surface} if collisions else set()
+        if surface is None:
+            surfaces = problem.surfaces
+        else:
+            surfaces = [surface]
         while True:
+            surface = random.choice(surfaces)
             body_pose = sample_placement(body, surface)
             if body_pose is None:
                 break
             p = Pose(body, body_pose)
             p.assign()
-            if not any(pairwise_collision(body, obst) for obst in obstacles):
-                yield [(p,)]
+            if not any(pairwise_collision(body, obst) for obst in obstacles if obst not in {body, surface}):
+                yield (p,)
+    # TODO: apply the acceleration technique here
     return gen
 
 ##################################################
@@ -567,7 +571,7 @@ class State(object):
             #attach.attachment.assign()
             attachment.assign()
 
-def apply_commands(state, commands, time_step=None, **kwargs):
+def apply_commands(state, commands, time_step=None, pause=False, **kwargs):
     user_input('Apply?')
     for i, command in enumerate(commands):
         print(i, command)
@@ -580,6 +584,8 @@ def apply_commands(state, commands, time_step=None, **kwargs):
                 user_input('Command {}, Step {}) Next?'.format(i, j))
             else:
                 wait_for_duration(time_step)
+        if pause:
+            wait_for_user()
 
 #####################################
 
