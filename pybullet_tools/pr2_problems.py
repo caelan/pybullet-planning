@@ -13,7 +13,7 @@ class Problem(object):
                  surfaces=tuple(), sinks=tuple(), stoves=tuple(), buttons=tuple(),
                  goal_conf=None, goal_holding=tuple(), goal_on=tuple(),
                  goal_cleaned=tuple(), goal_cooked=tuple(), costs=False,
-                 body_names={}, body_types=[]):
+                 body_names={}, body_types=[], base_limits=None):
         self.robot = robot
         self.arms = arms
         self.movable = movable
@@ -30,6 +30,7 @@ class Problem(object):
         self.costs = costs
         self.body_names = body_names
         self.body_types = body_types
+        self.base_limits = base_limits
         all_movable = [self.robot] + list(self.movable)
         self.fixed = list(filter(lambda b: b not in all_movable, get_bodies()))
         self.gripper = None
