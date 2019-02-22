@@ -308,8 +308,9 @@ def get_grasp_gen(problem, collisions=False, randomize=True):
                 filtered_grasps.append(grasp)
         if randomize:
             random.shuffle(filtered_grasps)
-        for g in filtered_grasps:
-            yield (g,)
+        return [(g,) for g in filtered_grasps]
+        #for g in filtered_grasps:
+        #    yield (g,)
     return fn
 
 def get_stable_gen(problem, collisions=True):
