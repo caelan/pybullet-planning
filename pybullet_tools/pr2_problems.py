@@ -2,7 +2,7 @@ import numpy as np
 from itertools import product
 
 from .pr2_utils import set_arm_conf, REST_LEFT_ARM, open_arm, \
-    close_arm, get_carry_conf, arm_conf, get_other_arm, set_group_conf, PR2_URDF, DRAKE_PR2_URDF
+    close_arm, get_carry_conf, arm_conf, get_other_arm, set_group_conf, PR2_URDF, DRAKE_PR2_URDF, create_gripper
 from .utils import create_box, set_base_values, set_point, set_pose, get_pose, \
     get_bodies, z_rotation, load_model, load_pybullet, HideOutput, create_body, \
     get_box_geometry, get_cylinder_geometry, create_shape_array, unit_pose, Pose, Point, LockRenderer
@@ -32,6 +32,14 @@ class Problem(object):
         self.body_types = body_types
         all_movable = [self.robot] + list(self.movable)
         self.fixed = list(filter(lambda b: b not in all_movable, get_bodies()))
+        self.gripper = None
+    def get_gripper(self, arm='left'):
+        # upper = get_max_limit(problem.robot, get_gripper_joints(problem.robot, 'left')[0])
+        # set_configuration(gripper, [0]*4)
+        # dump_body(gripper)
+        if self.gripper is None:
+            self.gripper = create_gripper(self.robot, arm=arm)
+        return self.gripper
     def __repr__(self):
         return repr(self.__dict__)
 

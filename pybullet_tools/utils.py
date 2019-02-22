@@ -2528,10 +2528,17 @@ def compute_joint_weights(robot, num=100):
 
 #####################################
 
-def inverse_kinematics_helper(robot, link, target_pose):
+def inverse_kinematics_helper(robot, link, target_pose, null_space=None):
     (target_point, target_quat) = target_pose
     assert target_point is not None
-    if target_quat is None:
+    if null_space is not None:
+        assert target_quat is not None
+        lower, upper, ranges, rest = null_space
+
+        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point,
+                                                      lowerLimits=lower, upperLimits=upper, jointRanges=ranges, restPoses=rest,
+                                                      physicsClientId=CLIENT)
+    elif target_quat is None:
         #ikSolver = p.IK_DLS or p.IK_SDLS
         kinematic_conf = p.calculateInverseKinematics(robot, link, target_point,
                                                       #lowerLimits=ll, upperLimits=ul, jointRanges=jr, restPoses=rp, jointDamping=jd,
@@ -2618,6 +2625,16 @@ def interpolate_poses(pose1, pose2, pos_step_size=0.01, ori_step_size=np.pi/16):
 
 #####################################
 
+NullSpace = namedtuple('Nullspace', ['lower', 'upper', 'range', 'rest'])
+
+def get_null_space(robot, joints, custom_limits={}):
+    rest_positions = get_joint_positions(robot, joints)
+    lower, upper = get_custom_limits(robot, joints, custom_limits)
+    lower = np.maximum(lower, -10*np.ones(len(joints)))
+    upper = np.minimum(upper, +10*np.ones(len(joints)))
+    joint_ranges = 10*np.ones(len(joints))
+    return NullSpace(list(lower), list(upper), list(joint_ranges), list(rest_positions))
+
 def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
                           max_iterations=200, custom_limits={}, **kwargs):
     # TODO: fix stationary joints
@@ -2634,11 +2651,13 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
     selected_target_link = selected_links.index(target_link)
     sub_robot = clone_body(robot, links=selected_links, visual=False, collision=False) # TODO: joint limits
     sub_movable_joints = get_movable_joints(sub_robot)
+    #null_space = get_null_space(robot, selected_movable_joints, custom_limits=custom_limits)
+    null_space = None
 
     solutions = []
     for target_pose in waypoint_poses:
         for iteration in range(max_iterations):
-            sub_kinematic_conf = inverse_kinematics_helper(sub_robot, selected_target_link, target_pose)
+            sub_kinematic_conf = inverse_kinematics_helper(sub_robot, selected_target_link, target_pose, null_space=null_space)
             if sub_kinematic_conf is None:
                 remove_body(sub_robot)
                 return None
@@ -2647,7 +2666,11 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
                 set_joint_positions(robot, selected_movable_joints, sub_kinematic_conf)
                 kinematic_conf = get_configuration(robot)
                 if not all_between(lower_limits, kinematic_conf, upper_limits):
-                    print("Limits violated")
+                    #movable_joints = get_movable_joints(robot)
+                    #print([(get_joint_name(robot, j), l, v, u) for j, l, v, u in
+                    #       zip(movable_joints, lower_limits, kinematic_conf, upper_limits) if not (l <= v <= u)])
+                    #print("Limits violated")
+                    #wait_for_user()
                     remove_body(sub_robot)
                     return None
                 print("IK iterations:", iteration)

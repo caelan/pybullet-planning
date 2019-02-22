@@ -14,16 +14,16 @@ from .pr2_problems import get_fixed_bodies
 from .pr2_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, GET_GRASPS, get_gripper_joints, \
     get_carry_conf, get_top_grasps, get_side_grasps, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, PR2_TOOL_FRAMES, get_x_presses, PR2_GROUPS, joints_from_names, \
-    is_drake_pr2, get_group_joints, get_group_conf, compute_grasp_width
-from .utils import invert, multiply, get_name, set_pose, get_link_pose, \
+    is_drake_pr2, get_group_joints, get_group_conf, compute_grasp_width, PR2_GRIPPER_ROOTS
+from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_placement, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, waypoints_from_path, \
     unit_quat, plan_base_motion, plan_joint_motion, base_values_from_pose, pose_from_base_values, \
     uniform_pose_generator, sub_inverse_kinematics, add_fixed_constraint, remove_debug, remove_fixed_constraint, \
     disable_real_time, enable_gravity, joint_controller_hold, get_distance, \
     get_min_limit, user_input, step_simulation, get_body_name, get_bodies, BASE_LINK, \
-    add_segments, get_max_limit, link_from_name, BodySaver, get_aabb, Attachment, \
+    add_segments, get_max_limit, link_from_name, BodySaver, get_aabb, Attachment, interpolate_poses, \
     plan_direct_joint_motion, has_gui, create_attachment, wait_for_duration, get_extend_fn, \
-    get_custom_limits, all_between, get_unit_vector, wait_for_user, set_base_values, euler_from_quat
+    get_custom_limits, all_between, get_unit_vector, wait_for_user, set_base_values, euler_from_quat, INF, elapsed_time
 
 BASE_EXTENT = 3.5 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
@@ -44,11 +44,12 @@ class Pose(object):
     #def __init__(self, position, orientation):
     #    self.position = position
     #    self.orientation = orientation
-    def __init__(self, body, value=None):
+    def __init__(self, body, value=None, support=None):
         self.body = body
         if value is None:
             value = get_pose(self.body)
         self.value = tuple(value)
+        self.support = support
     def assign(self):
         set_pose(self.body, self.value)
     def to_base_conf(self):
@@ -313,6 +314,23 @@ def get_grasp_gen(problem, collisions=False, randomize=True):
         #    yield (g,)
     return fn
 
+##################################################
+
+def accelerate_gen_fn(gen_fn, max_attempts=1):
+    def new_gen_fn(*inputs):
+        generator = gen_fn(*inputs)
+        while True:
+            for i in range(max_attempts):
+                try:
+                    output = next(generator)
+                except StopIteration:
+                    return
+                if output is not None:
+                    print(gen_fn.__name__, i)
+                    yield output
+                    break
+    return new_gen_fn
+
 def get_stable_gen(problem, collisions=True):
     obstacles = problem.fixed if collisions else []
     def gen(body, surface):
@@ -326,7 +344,7 @@ def get_stable_gen(problem, collisions=True):
             body_pose = sample_placement(body, surface)
             if body_pose is None:
                 break
-            p = Pose(body, body_pose)
+            p = Pose(body, body_pose, surface)
             p.assign()
             if not any(pairwise_collision(body, obst) for obst in obstacles if obst not in {body, surface}):
                 yield (p,)
@@ -335,36 +353,61 @@ def get_stable_gen(problem, collisions=True):
 
 ##################################################
 
-def get_ir_sampler(problem, custom_limits={}, max_attempts=100, collisions=True, learned=True):
+def iterate_approach_path(robot, arm, gripper, pose, grasp, body=None):
+    root_link = link_from_name(robot, PR2_GRIPPER_ROOTS[arm])
+    tool_link = link_from_name(robot, PR2_TOOL_FRAMES[arm])
+    tool_from_root = multiply(invert(get_link_pose(robot, tool_link)),
+                                    get_link_pose(robot, root_link))
+    grasp_pose = multiply(pose.value, invert(grasp.value))
+    approach_pose = multiply(pose.value, invert(grasp.approach))
+    for tool_pose in interpolate_poses(grasp_pose, approach_pose):
+        set_pose(gripper, multiply(tool_pose, tool_from_root))
+        if body is not None:
+            set_pose(body, multiply(tool_pose, grasp.value))
+        yield
+
+def get_ir_sampler(problem, custom_limits={}, max_attempts=25, collisions=True, learned=True):
     robot = problem.robot
     obstacles = problem.fixed if collisions else []
-    def sampler(a, o, p, g):
-        gripper_pose = multiply(p.value, invert(g.value)) # w_f_g = w_f_o * (g_f_o)^-1
-        default_conf = arm_conf(a, g.carry)
-        arm_joints = get_arm_joints(robot, a)
+    gripper = problem.get_gripper()
+
+    def gen_fn(arm, obj, pose, grasp):
+        pose.assign()
+        approach_obstacles = {obst for obst in obstacles if not is_placement(obj, obst)}
+        for _ in iterate_approach_path(robot, arm, gripper, pose, grasp, body=obj):
+            if any(pairwise_collision(gripper, b) or pairwise_collision(obj, b) for b in approach_obstacles):
+                #wait_for_user()
+                return
+        gripper_pose = multiply(pose.value, invert(grasp.value)) # w_f_g = w_f_o * (g_f_o)^-1
+        default_conf = arm_conf(arm, grasp.carry)
+        arm_joints = get_arm_joints(robot, arm)
         base_joints = get_group_joints(robot, 'base')
         if learned:
-            base_generator = learned_pose_generator(robot, gripper_pose, arm=a, grasp_type=g.grasp_type)
+            base_generator = learned_pose_generator(robot, gripper_pose, arm=arm, grasp_type=grasp.grasp_type)
         else:
             base_generator = uniform_pose_generator(robot, gripper_pose)
         lower_limits, upper_limits = get_custom_limits(robot, base_joints, custom_limits)
         while True:
+            count = 0
             for base_conf in islice(base_generator, max_attempts):
+                count += 1
                 if not all_between(lower_limits, base_conf, upper_limits):
                     continue
                 bq = Conf(robot, base_joints, base_conf)
-                p.assign()
+                pose.assign()
                 bq.assign()
                 set_joint_positions(robot, arm_joints, default_conf)
-                if any(pairwise_collision(robot, b) for b in obstacles + [o]):
+                if any(pairwise_collision(robot, b) for b in obstacles + [obj]):
                     continue
+                #print('IR attempts:', count)
                 yield (bq,)
                 break
             else:
                 print('IR failure')
                 yield None
-    return sampler
+    return gen_fn
 
+##################################################
 
 def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
     robot = problem.robot
@@ -373,7 +416,9 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
         print('Using ikfast for inverse kinematics')
     else:
         print('Using pybullet for inverse kinematics')
+
     def fn(arm, obj, pose, grasp, base_conf):
+        approach_obstacles = {obst for obst in obstacles if not is_placement(obj, obst)}
         gripper_pose = multiply(pose.value, invert(grasp.value)) # w_f_g = w_f_o * (g_f_o)^-1
         #approach_pose = multiply(grasp.approach, gripper_pose)
         approach_pose = multiply(pose.value, invert(grasp.approach))
@@ -389,7 +434,7 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
         grasp_conf = pr2_inverse_kinematics(robot, arm, gripper_pose, custom_limits=custom_limits) #, upper_limits=USE_CURRENT)
                                             #nearby_conf=USE_CURRENT) # upper_limits=USE_CURRENT,
         if (grasp_conf is None) or any(pairwise_collision(robot, b) for b in obstacles): # [obj]
-            print('Grasp IK failure', grasp_conf)
+            #print('Grasp IK failure', grasp_conf)
             #if grasp_conf is not None:
             #    print(grasp_conf)
             #    #wait_for_user()
@@ -398,7 +443,7 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
         #                                       upper_limits=USE_CURRENT, nearby_conf=USE_CURRENT)
         approach_conf = sub_inverse_kinematics(robot, arm_joints[0], arm_link, approach_pose, custom_limits=custom_limits)
         if (approach_conf is None) or any(pairwise_collision(robot, b) for b in obstacles + [obj]):
-            print('Approach IK failure', approach_conf)
+            #print('Approach IK failure', approach_conf)
             #wait_for_user()
             return None
         approach_conf = get_joint_positions(robot, arm_joints)
@@ -409,7 +454,7 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
         else:
             resolutions = 0.05**np.ones(len(arm_joints))
             grasp_path = plan_direct_joint_motion(robot, arm_joints, grasp_conf, attachments=attachments.values(),
-                                                  obstacles=obstacles, self_collisions=False,
+                                                  obstacles=approach_obstacles, self_collisions=False,
                                                   custom_limits=custom_limits, resolutions=resolutions/2.)
             if grasp_path is None:
                 print('Grasp path failure')
@@ -430,22 +475,25 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
 
 ##################################################
 
-def get_ik_ir_gen(problem, max_attempts=250, learned=True, teleport=False, **kwargs):
+def get_ik_ir_gen(problem, max_attempts=50, learned=True, teleport=False, **kwargs):
     # TODO: compose using general fn
     ir_sampler = get_ir_sampler(problem, learned=learned, **kwargs)
     ik_fn = get_ik_fn(problem, teleport=teleport, **kwargs)
     def gen(*inputs):
         while True:
+            count = 0
             for ir_outputs in islice(ir_sampler(*inputs), max_attempts):
+                count += 1
                 if ir_outputs is None:
                     yield None
                     break
                 else:
                     ik_outputs = ik_fn(*(inputs + ir_outputs))
                     if ik_outputs is not None:
+                        print('IK attempts:', count)
                         yield ir_outputs + ik_outputs
-                        #return
-                        break
+                        return
+                        #break
             else:
                 yield None
     return gen

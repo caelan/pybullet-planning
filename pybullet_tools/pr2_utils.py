@@ -17,7 +17,8 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     approximate_as_prism, unit_quat, unit_point, clip, get_joint_info, tform_point, get_yaw, \
     get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name,\
-    draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision, draw_point
+    draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision, draw_point, get_link_subtree, \
+    clone_body, get_all_links, set_color
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -745,3 +746,15 @@ def compute_grasp_width(robot, arm, body, grasp_pose, num_steps=25):
                 return None
             return close_path[i-1][0]
     return close_path[-1][0]
+
+def create_gripper(robot, arm, visual=True):
+    link_name = PR2_GRIPPER_ROOTS[arm]
+    # gripper = load_pybullet(os.path.join(get_data_path(), 'pr2_gripper.urdf'))
+    # gripper = load_pybullet(os.path.join(get_models_path(), 'pr2_description/pr2_l_gripper.urdf'), fixed_base=False)
+    # pybullet.error: Error receiving visual shape info for the DRAKE_PR2
+    links = get_link_subtree(robot, link_from_name(robot, link_name))
+    gripper = clone_body(robot, links=links, visual=False, collision=True)  # TODO: joint limits
+    if not visual:
+        for link in get_all_links(gripper):
+            set_color(gripper, np.zeros(4), link)
+    return gripper
