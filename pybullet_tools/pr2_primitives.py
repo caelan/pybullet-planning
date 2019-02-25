@@ -492,8 +492,8 @@ def get_ik_ir_gen(problem, max_attempts=50, learned=True, teleport=False, **kwar
                     if ik_outputs is not None:
                         print('IK attempts:', count)
                         yield ir_outputs + ik_outputs
-                        return
-                        #break
+                        #return
+                        break
             else:
                 yield None
     return gen
