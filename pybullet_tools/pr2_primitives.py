@@ -484,6 +484,8 @@ def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False, **kwar
         attempts = 0
         while True:
             if max_attempts <= attempts:
+                if not p.init:
+                    return
                 attempts = 0
                 yield None
             attempts += 1
@@ -498,8 +500,9 @@ def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False, **kwar
                 continue
             print('IK attempts:', attempts)
             yield ir_outputs + ik_outputs
-            if not p.init:
-                return
+            return
+            #if not p.init:
+            #    return
     return gen
 
 ##################################################
