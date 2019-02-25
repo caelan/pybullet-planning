@@ -44,12 +44,13 @@ class Pose(object):
     #def __init__(self, position, orientation):
     #    self.position = position
     #    self.orientation = orientation
-    def __init__(self, body, value=None, support=None):
+    def __init__(self, body, value=None, support=None, init=False):
         self.body = body
         if value is None:
             value = get_pose(self.body)
         self.value = tuple(value)
         self.support = support
+        self.init = init
     def assign(self):
         set_pose(self.body, self.value)
     def to_base_conf(self):
@@ -376,7 +377,6 @@ def get_ir_sampler(problem, custom_limits={}, max_attempts=25, collisions=True, 
         approach_obstacles = {obst for obst in obstacles if not is_placement(obj, obst)}
         for _ in iterate_approach_path(robot, arm, gripper, pose, grasp, body=obj):
             if any(pairwise_collision(gripper, b) or pairwise_collision(obj, b) for b in approach_obstacles):
-                #wait_for_user()
                 return
         gripper_pose = multiply(pose.value, invert(grasp.value)) # w_f_g = w_f_o * (g_f_o)^-1
         default_conf = arm_conf(arm, grasp.carry)
@@ -403,7 +403,6 @@ def get_ir_sampler(problem, custom_limits={}, max_attempts=25, collisions=True, 
                 yield (bq,)
                 break
             else:
-                print('IR failure')
                 yield None
     return gen_fn
 
@@ -475,29 +474,32 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
 
 ##################################################
 
-def get_ik_ir_gen(problem, max_attempts=50, learned=True, teleport=False, **kwargs):
+def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False, **kwargs):
     # TODO: compose using general fn
-    ir_sampler = get_ir_sampler(problem, learned=learned, **kwargs)
+    ir_sampler = get_ir_sampler(problem, learned=learned, max_attempts=1, **kwargs)
     ik_fn = get_ik_fn(problem, teleport=teleport, **kwargs)
     def gen(*inputs):
+        b, a, p, g = inputs
+        ir_generator = ir_sampler(*inputs)
+        attempts = 0
         while True:
-            count = 0
-            for ir_outputs in islice(ir_sampler(*inputs), max_attempts):
-                count += 1
-                if ir_outputs is None:
-                    yield None
-                    break
-                else:
-                    ik_outputs = ik_fn(*(inputs + ir_outputs))
-                    if ik_outputs is not None:
-                        print('IK attempts:', count)
-                        yield ir_outputs + ik_outputs
-                        if problem.costs:
-                            break
-                        else:
-                            return
-            else:
+            if max_attempts <= attempts:
+                attempts = 0
                 yield None
+            attempts += 1
+            try:
+                ir_outputs = next(ir_generator)
+            except StopIteration:
+                return
+            if ir_outputs is None:
+                continue
+            ik_outputs = ik_fn(*(inputs + ir_outputs))
+            if ik_outputs is None:
+                continue
+            print('IK attempts:', attempts)
+            yield ir_outputs + ik_outputs
+            if not p.init:
+                return
     return gen
 
 ##################################################
