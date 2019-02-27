@@ -173,12 +173,16 @@ class ClientSaver(Saver):
     def restore(self):
         set_client(self.client)
 
-class StateSaver(Saver):
-    def __init__(self):
-        self.state = save_state()
+class VideoSaver(Saver):
+    def __init__(self, path):
+        name, ext = os.path.splitext(path)
+        assert ext == '.mp4'
+        # STATE_LOGGING_PROFILE_TIMINGS, STATE_LOGGING_ALL_COMMANDS
+        # p.submitProfileTiming("pythontest")
+        self.log_id = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, fileName=path, physicsClientId=CLIENT)
 
     def restore(self):
-        restore_state(self.state)
+        p.stopStateLogging(self.log_id)
 
 #####################################
 
@@ -531,7 +535,6 @@ def disconnect():
         return p.disconnect(physicsClientId=CLIENT)
 
 def is_connected():
-    # p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, "video.mp4")
     return p.getConnectionInfo(physicsClientId=CLIENT)['isConnected']
 
 def get_connection(client=None):
@@ -2694,6 +2697,13 @@ def get_lifetime(lifetime):
     if lifetime is None:
         return 0
     return lifetime
+
+def add_debug_parameter():
+    # TODO: make a slider that controls the step in the trajectory
+    # TODO: could store a list of savers
+    #targetVelocitySlider = p.addUserDebugParameter("wheelVelocity", -10, 10, 0)
+    #maxForce = p.readUserDebugParameter(maxForceSlider)
+    raise NotImplementedError()
 
 def add_text(text, position=(0, 0, 0), color=(0, 0, 0), lifetime=None, parent=-1, parent_link=BASE_LINK):
     return p.addUserDebugText(str(text), textPosition=position, textColorRGB=color, # textSize=1,

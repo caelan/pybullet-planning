@@ -628,7 +628,7 @@ class State(object):
             attachment.assign()
 
 def apply_commands(state, commands, time_step=None, pause=False, **kwargs):
-    user_input('Apply?')
+    #user_input('Apply?')
     for i, command in enumerate(commands):
         print(i, command)
         for j, _ in enumerate(command.apply(state, **kwargs)):
