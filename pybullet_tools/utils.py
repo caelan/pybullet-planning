@@ -924,6 +924,9 @@ def get_point(body):
 def get_quat(body):
     return get_pose(body)[1] # [x,y,z,w]
 
+def get_euler(body):
+    return euler_from_quat(get_quat(body))
+
 def get_base_values(body):
     return base_values_from_pose(get_pose(body))
 
@@ -936,6 +939,9 @@ def set_point(body, point):
 
 def set_quat(body, quat):
     set_pose(body, (get_point(body), quat))
+
+def set_euler(body, euler):
+    set_quat(body, quat_from_euler(euler))
 
 def pose_from_pose2d(pose2d):
     x, y, theta = pose2d
