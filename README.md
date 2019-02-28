@@ -28,6 +28,8 @@ Examples:
 * MOVO random configurations - ```$ python -m examples.test_movo```
 * Dropping beads - ```$ python -m examples.test_water```
 
+<img src="images/turtlebot.png" height="150">&emsp;<img src="images/movo.png" height="150">
+
 ## PDDLStream Examples
 
 See the following examples: https://github.com/caelan/pddlstream/tree/master/examples/pybullet
