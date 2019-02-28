@@ -16,13 +16,17 @@ pip install numpy pybullet
 1) Test pybullet - ```python -c 'import pybullet'```
 2) Test STRIPStream - ```python -c 'import ss'```
 
-## Manipulation Examples
+## Examples
 
 Examples:
 * Kuka IIWA pick planning - ```$ python -m examples.test_kuka_pick```
 * PR2 motion planning - ```$ python -m examples.test_pr2_motion```
+* PR2 teleoperation - ```$ python -m examples.teleop_pr2```
 * PR2 visibility - ```$ python -m examples.test_visibility```
 * PR2 copying - ```$ python -m examples.test_clone```
+* TurtleBot collisions - ```$ python -m examples.test_turtlebot```
+* MOVO random configurations - ```$ python -m examples.test_movo```
+* Dropping beads - ```$ python -m examples.test_water```
 
 ## PDDLStream Examples
 
