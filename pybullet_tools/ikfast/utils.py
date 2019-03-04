@@ -2,7 +2,7 @@ import random
 import numpy as np
 
 from ..utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, \
-    get_joint_limits, get_joint_position, get_joint_positions
+    get_joint_limits, get_joint_position, get_joint_positions, get_distance
 
 # TODO: lookup robot & tool in dictionary and use if exists
 
@@ -38,7 +38,7 @@ def get_ik_limits(robot, joint, limits=USE_ALL):
     return limits
 
 
-def select_solution(body, joints, solutions, nearby_conf=None, **kwargs):
+def select_solution(body, joints, solutions, nearby_conf=USE_ALL, **kwargs):
     if not solutions:
         return None
     if nearby_conf is USE_ALL:
@@ -47,4 +47,4 @@ def select_solution(body, joints, solutions, nearby_conf=None, **kwargs):
         nearby_conf = get_joint_positions(body, joints)
     # TODO: sort by distance before collision checking
     # TODO: search over neighborhood of sampled joints when nearby_conf != None
-    return min(solutions, key=lambda conf: np.linalg.norm(np.array(conf) - np.array(nearby_conf), **kwargs))
+    return min(solutions, key=lambda conf: get_distance(nearby_conf, conf, **kwargs))

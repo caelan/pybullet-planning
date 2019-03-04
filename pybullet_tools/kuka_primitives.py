@@ -7,7 +7,7 @@ from .utils import get_pose, set_pose, get_movable_joints, \
     enable_gravity, get_refine_fn, user_input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
     inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
-    step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions
+    step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions, dump_world
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
@@ -175,7 +175,9 @@ class Command(object):
 
 def get_grasp_gen(robot, grasp_name):
     grasp_info = GRASP_INFO[grasp_name]
-    end_effector_link = link_from_name(robot, TOOL_FRAMES[get_body_name(robot)])
+    #dump_world()
+    robot_name = 'iiwa14' # TODO: pybullet bug with get_body_name(robot)
+    end_effector_link = link_from_name(robot, TOOL_FRAMES[robot_name])
     def gen(body):
         grasp_poses = grasp_info.get_grasps(body)
         for grasp_pose in grasp_poses:
