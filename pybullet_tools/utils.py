@@ -155,6 +155,8 @@ class HideOutput(object):
 
 # Savers
 
+# TODO: contextlib
+
 class Saver(object):
     def restore(self):
         raise NotImplementedError()
