@@ -966,8 +966,10 @@ def dump_body(body):
         link, get_base_name(body), get_mass(body),
         len(get_collision_data(body, link)), -1)) # len(get_visual_data(body, link))))
     for link in get_links(body):
-        print('Link id: {} | Name: {} | Parent: {} | Mass: {} | Collision: {} | Visual: {}'.format(
-            link, get_link_name(body, link), get_link_name(body, get_link_parent(body, link)), get_mass(body, link),
+        joint = parent_joint_from_link(link)
+        print('Link id: {} | Name: {} | Joint: {} | Parent: {} | Mass: {} | Collision: {} | Visual: {}'.format(
+            link, get_link_name(body, link), get_joint_name(body, joint),
+            get_link_name(body, get_link_parent(body, link)), get_mass(body, link),
             len(get_collision_data(body, link)), -1)) # len(get_visual_data(body, link))))
         #print(get_joint_parent_frame(body, link))
         #print(map(get_data_geometry, get_visual_data(body, link)))
@@ -1581,6 +1583,7 @@ def collision_shape_from_data(data, body, link, client=None):
                                   fileName=data.filename.decode(encoding='UTF-8'),
                                   meshScale=get_data_scale(data),
                                   planeNormal=get_data_normal(data),
+                                  flags=p.GEOM_FORCE_CONCAVE_TRIMESH,
                                   collisionFramePosition=point,
                                   collisionFrameOrientation=quat,
                                   physicsClientId=client)
