@@ -50,7 +50,7 @@ RACECAR_URDF = 'racecar/racecar.urdf' # racecar_differential.urdf
 
 # Objects
 KIVA_SHELF_SDF = "kiva_shelf/model.sdf"
-DRAKE_IIWA_URDF = "models/drake/objects/block_for_pick_and_place.urdf"
+SMALL_BLOCK_URDF = "models/drake/objects/block_for_pick_and_place.urdf"
 BLOCK_URDF = "models/drake/objects/block_for_pick_and_place_mid_size.urdf"
 SINK_URDF = 'models/sink.urdf'
 STOVE_URDF = 'models/stove.urdf'

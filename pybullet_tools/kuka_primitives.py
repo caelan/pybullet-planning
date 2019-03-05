@@ -172,12 +172,11 @@ class Command(object):
     def __repr__(self):
         return 'c{}'.format(id(self) % 1000)
 
+#######################################################
 
 def get_grasp_gen(robot, grasp_name):
     grasp_info = GRASP_INFO[grasp_name]
-    #dump_world()
-    robot_name = 'iiwa14' # TODO: pybullet bug with get_body_name(robot)
-    end_effector_link = link_from_name(robot, TOOL_FRAMES[robot_name])
+    end_effector_link = link_from_name(robot, TOOL_FRAMES[get_body_name(robot)])
     def gen(body):
         grasp_poses = grasp_info.get_grasps(body)
         for grasp_pose in grasp_poses:
