@@ -16,7 +16,9 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     violates_limits, add_line, get_body_name, get_num_joints, approximate_as_cylinder, \
     approximate_as_prism, unit_quat, unit_point, clip, get_joint_info, tform_point, get_yaw, \
     get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
-    movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name
+    movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name,\
+    draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision, draw_point, get_link_subtree, \
+    clone_body, get_all_links, set_color
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -46,18 +48,26 @@ PR2_GROUPS = {
     # r_gripper_joint & l_gripper_joint are not mimicked
 }
 
-HEAD_LINK_NAME = 'high_def_optical_frame' # high_def_optical_frame | high_def_frame | wide_stereo_l_stereo_camera_frame | ...
+HEAD_LINK_NAME = 'high_def_optical_frame' # high_def_optical_frame | high_def_frame | wide_stereo_l_stereo_camera_frame
 # kinect - 'head_mount_kinect_rgb_optical_frame' | 'head_mount_kinect_rgb_link'
 
 PR2_TOOL_FRAMES = {
-    'left': 'l_gripper_palm_link',  # l_gripper_palm_link | l_gripper_tool_frame | l_gripper_tool_joint
-    'right': 'r_gripper_palm_link',  # r_gripper_palm_link | r_gripper_tool_frame
+    'left': 'l_gripper_tool_frame',  # l_gripper_palm_link | l_gripper_tool_frame
+    'right': 'r_gripper_tool_frame',  # r_gripper_palm_link | r_gripper_tool_frame
     'head': HEAD_LINK_NAME,
 }
 
+PR2_GRIPPER_ROOTS = {
+    'left': 'l_gripper_palm_link',
+    'right': 'r_gripper_palm_link',
+}
+
+PR2_BASE_LINK = 'base_footprint'
+
 # Arm tool poses
-TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678])
-TOOL_DIRECTION = [0., 0., 1.]
+#TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678]) # l_gripper_palm_link
+TOOL_POSE = Pose(euler=Euler(pitch=np.pi/2)) # l_gripper_tool_frame (+x out of gripper arm)
+#TOOL_DIRECTION = [0., 0., 1.]
 
 #####################################
 
@@ -72,14 +82,15 @@ CENTER_LEFT_ARM = [-0.07133691252641006, -0.052973836083405494, 1.57418057759190
                    1.571782540186805, -1.4891468812835686, -9.413338322697955]
 # WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296, -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
 
-PR2_LEFT_ARM_CONFS = {
+PR2_LEFT_CARRY_CONFS = {
     'top': TOP_HOLDING_LEFT_ARM,
+    'side': SIDE_HOLDING_LEFT_ARM,
 }
 
 #####################################
 
 PR2_URDF = "models/pr2_description/pr2.urdf" # 87 joints
-PR2_URDF = "models/pr2_description/pr2_hpn.urdf"
+#PR2_URDF = "models/pr2_description/pr2_hpn.urdf"
 #PR2_URDF = "models/pr2_description/pr2_kinect.urdf"
 DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf" # 82 joints
 
@@ -101,9 +112,11 @@ def is_drake_pr2(robot): # 87
 
 #####################################
 
+def get_base_pose(pr2):
+    return get_link_pose(pr2, link_from_name(pr2, PR2_BASE_LINK))
+
 def rightarm_from_leftarm(config):
-    # right_from_left = np.array([-1, 1, -1, 1, -1, 1, 1])
-    right_from_left = np.array([-1, 1, -1, 1, -1, 1, -1])  # Drake
+    right_from_left = np.array([-1, 1, -1, 1, -1, 1, -1])
     return config * right_from_left
 
 def arm_conf(arm, left_config):
@@ -111,17 +124,10 @@ def arm_conf(arm, left_config):
         return left_config
     elif arm == 'right':
         return rightarm_from_leftarm(left_config)
-    else:
-        raise ValueError(arm)
-
+    raise ValueError(arm)
 
 def get_carry_conf(arm, grasp_type):
-    if grasp_type == 'top':
-        return arm_conf(arm, TOP_HOLDING_LEFT_ARM)
-    elif grasp_type == 'side':
-        return arm_conf(arm, SIDE_HOLDING_LEFT_ARM)
-    else:
-        raise NotImplementedError(grasp_type)
+    return arm_conf(arm, PR2_LEFT_CARRY_CONFS[grasp_type])
 
 def get_other_arm(arm):
     for other_arm in ARM_NAMES:
@@ -212,6 +218,11 @@ def get_gripper_joints(robot, arm):
     return get_group_joints(robot, gripper_from_arm(arm))
 
 
+def set_gripper_position(robot, arm, position):
+    gripper_joints = get_gripper_joints(robot, arm)
+    set_joint_positions(robot, gripper_joints, [position] * len(gripper_joints))
+
+
 def open_arm(robot, arm): # These are mirrored on the pr2
     for joint in get_gripper_joints(robot, arm):
         set_joint_position(robot, joint, get_max_limit(robot, joint))
@@ -221,11 +232,14 @@ def close_arm(robot, arm):
     for joint in get_gripper_joints(robot, arm):
         set_joint_position(robot, joint, get_min_limit(robot, joint))
 
+# TODO: use these names
+open_gripper = open_arm
+close_gripper = close_arm
+
 #####################################
 
 # Box grasps
 
-# TODO: test if grasp is in collision
 #GRASP_LENGTH = 0.04
 GRASP_LENGTH = 0.
 #GRASP_LENGTH = -0.01
@@ -235,10 +249,9 @@ MAX_GRASP_WIDTH = np.inf
 
 SIDE_HEIGHT_OFFSET = 0.03 # z distance from top of object
 
-# TODO: rename the box grasps
-
 def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                    max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+    # TODO: rename the box grasps
     center, (w, l, h) = approximate_as_prism(body, body_pose=body_pose)
     reflect_z = Pose(euler=[0, math.pi, 0])
     translate_z = Pose(point=[0, 0, h / 2 - grasp_length])
@@ -255,7 +268,6 @@ def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose()
             grasps += [multiply(tool_pose, translate_z, rotate_z,
                                 reflect_z, translate_center, body_pose)]
     return grasps
-
 
 def get_side_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                     max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH, top_offset=SIDE_HEIGHT_OFFSET):
@@ -392,6 +404,7 @@ GET_GRASPS = {
 
 DATABASES_DIR = '../databases'
 IR_FILENAME = '{}_{}_ir.pickle'
+IR_CACHE = {}
 
 def get_database_file(filename):
     directory = os.path.dirname(os.path.abspath(__file__))
@@ -399,26 +412,32 @@ def get_database_file(filename):
 
 
 def load_inverse_reachability(arm, grasp_type):
-    filename = IR_FILENAME.format(grasp_type, arm)
-    path = get_database_file(filename)
-    return read_pickle(path)['gripper_from_base']
+    key =  (arm, grasp_type)
+    if key not in IR_CACHE:
+        filename = IR_FILENAME.format(grasp_type, arm)
+        path = get_database_file(filename)
+        IR_CACHE[key] = read_pickle(path)['gripper_from_base']
+    return IR_CACHE[key]
 
 
 def learned_forward_generator(robot, base_pose, arm, grasp_type):
-    gripper_from_base_list = load_inverse_reachability(arm, grasp_type)
+    gripper_from_base_list = list(load_inverse_reachability(arm, grasp_type))
     random.shuffle(gripper_from_base_list)
     for gripper_from_base in gripper_from_base_list:
         yield multiply(base_pose, invert(gripper_from_base))
 
 
 def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
+    # TODO: record collisions with the reachability database
     gripper_from_base_list = load_inverse_reachability(arm, grasp_type)
     random.shuffle(gripper_from_base_list)
+    #handles = []
     for gripper_from_base in gripper_from_base_list:
         base_point, base_quat = multiply(gripper_pose, gripper_from_base)
         x, y, _ = base_point
         _, _, theta = euler_from_quat(base_quat)
         base_values = (x, y, theta)
+        #handles.extend(draw_point(np.array([x, y, -0.1]), color=(1, 0, 0), size=0.05))
         #set_base_values(robot, base_values)
         #yield get_pose(robot)
         yield base_values
@@ -666,7 +685,7 @@ def get_detections(pr2, p_false_neg=0, camera_link=HEAD_LINK_NAME, **kwargs):
     for body in get_bodies():
         if np.random.random() < p_false_neg:
             continue
-        mesh, z = get_detection_cone(pr2, body, **kwargs)
+        mesh, z = get_detection_cone(pr2, body, camera_link=camera_link, **kwargs)
         if mesh is None:
             continue
         cone = create_mesh(mesh, color=None)
@@ -702,3 +721,40 @@ def get_base_extend_fn(robot):
     # TODO: rotate such that in field of view of the camera first
     # TODO: plan base movements while checking edge feasibility with camera
     raise NotImplementedError()
+
+#####################################
+
+def compute_grasp_width(robot, arm, body, grasp_pose, num_steps=25):
+    # TODO: merge with the LTAMP version
+    gripper_joints = get_gripper_joints(robot, arm)
+    closed_conf = [get_min_limit(robot, joint) for joint in gripper_joints]
+    open_conf = [get_max_limit(robot, joint) for joint in gripper_joints]
+    resolutions = np.abs(np.array(open_conf) - np.array(closed_conf)) / num_steps
+    extend_fn = get_extend_fn(robot, gripper_joints, resolutions=resolutions)
+    collision_links = get_moving_links(robot, gripper_joints)
+    close_path = [open_conf] + list(extend_fn(open_conf, closed_conf))
+
+    tool_link = link_from_name(robot, PR2_TOOL_FRAMES[arm])
+    tool_pose = get_link_pose(robot, tool_link)
+    body_pose = multiply(tool_pose, grasp_pose)
+    set_pose(body, body_pose)
+
+    for i, conf in enumerate(close_path):
+        set_joint_positions(robot, gripper_joints, conf)
+        if link_pairs_collision(robot, collision_links, body):
+            if i == 0:
+                return None
+            return close_path[i-1][0]
+    return close_path[-1][0]
+
+def create_gripper(robot, arm, visual=True):
+    link_name = PR2_GRIPPER_ROOTS[arm]
+    # gripper = load_pybullet(os.path.join(get_data_path(), 'pr2_gripper.urdf'))
+    # gripper = load_pybullet(os.path.join(get_models_path(), 'pr2_description/pr2_l_gripper.urdf'), fixed_base=False)
+    # pybullet.error: Error receiving visual shape info for the DRAKE_PR2
+    links = get_link_subtree(robot, link_from_name(robot, link_name))
+    gripper = clone_body(robot, links=links, visual=False, collision=True)  # TODO: joint limits
+    if not visual:
+        for link in get_all_links(gripper):
+            set_color(gripper, np.zeros(4), link)
+    return gripper

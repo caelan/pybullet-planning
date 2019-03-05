@@ -56,12 +56,8 @@ def main():
     wait_for_interrupt()
 
     #user_input('Start?')
-    #dt = 1. / 240
-    dt = 0.01
-    #dt = 0
-    print('dt:', dt)
     enable_gravity()
-    simulate_for_duration(5.0, dt=dt)
+    simulate_for_duration(5.0)
 
     # enable_real_time()
     # try:

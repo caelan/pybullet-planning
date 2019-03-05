@@ -918,6 +918,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <parent link="left_shoulder_link"/>
     <child link="left_arm_half_1_link"/>
     <origin rpy="1.570796325 0 0" xyz="0 0 -0.11875"/>
+    <!--origin rpy="1.570796325 0 0" xyz="0 0.0016 -0.11875"/-->
     <axis xyz="0 0 1"/>
     <limit effort="30000.5" lower="-2.238" upper="2.238" velocity="0.691150384"/>
     <dynamics damping="0.01" friction="0.0"/>

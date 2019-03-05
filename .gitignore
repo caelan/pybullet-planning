@@ -3,3 +3,11 @@
 **/*.bazel
 temp
 **/*.so
+
+# windows extension build
+*.pyd
+
+**/.DS_Store
+**~
+**/*.swp
+**/*.~un

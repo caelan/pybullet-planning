@@ -1,16 +1,19 @@
 import numpy as np
+from itertools import product
 
 from .pr2_utils import set_arm_conf, REST_LEFT_ARM, open_arm, \
-    close_arm, get_carry_conf, arm_conf, get_other_arm, set_group_conf
+    close_arm, get_carry_conf, arm_conf, get_other_arm, set_group_conf, PR2_URDF, DRAKE_PR2_URDF, create_gripper
 from .utils import create_box, set_base_values, set_point, set_pose, get_pose, \
-    get_bodies, z_rotation, load_model, load_pybullet, HideOutput
+    get_bodies, z_rotation, load_model, load_pybullet, HideOutput, create_body, \
+    get_box_geometry, get_cylinder_geometry, create_shape_array, unit_pose, Pose, Point, LockRenderer
 
 
 class Problem(object):
     def __init__(self, robot, arms=tuple(), movable=tuple(), grasp_types=tuple(),
                  surfaces=tuple(), sinks=tuple(), stoves=tuple(), buttons=tuple(),
                  goal_conf=None, goal_holding=tuple(), goal_on=tuple(),
-                 goal_cleaned=tuple(), goal_cooked=tuple(), body_names={}):
+                 goal_cleaned=tuple(), goal_cooked=tuple(), costs=False,
+                 body_names={}, body_types=[], base_limits=None):
         self.robot = robot
         self.arms = arms
         self.movable = movable
@@ -24,34 +27,64 @@ class Problem(object):
         self.goal_on = goal_on
         self.goal_cleaned = goal_cleaned
         self.goal_cooked = goal_cooked
+        self.costs = costs
         self.body_names = body_names
+        self.body_types = body_types
+        self.base_limits = base_limits
+        all_movable = [self.robot] + list(self.movable)
+        self.fixed = list(filter(lambda b: b not in all_movable, get_bodies()))
+        self.gripper = None
+    def get_gripper(self, arm='left'):
+        # upper = get_max_limit(problem.robot, get_gripper_joints(problem.robot, 'left')[0])
+        # set_configuration(gripper, [0]*4)
+        # dump_body(gripper)
+        if self.gripper is None:
+            self.gripper = create_gripper(self.robot, arm=arm)
+        return self.gripper
     def __repr__(self):
         return repr(self.__dict__)
 
-def get_fixed_bodies(problem): # TODO: move to problem?
-    #return []
-    movable = [problem.robot] + list(problem.movable)
-    return list(filter(lambda b: b not in movable, get_bodies()))
+#######################################################
 
-def create_pr2(use_drake=True, fixed_base=True):
-    if use_drake:
-        pr2_path = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
-    else:
-        pr2_path = "models/pr2_description/pr2.urdf"
-    with HideOutput():
-        pr2 = load_model(pr2_path, fixed_base=fixed_base)
-    set_group_conf(pr2, 'torso', [0.2])
+def get_fixed_bodies(problem): # TODO: move to problem?
+    return problem.fixed
+
+def create_pr2(use_drake=True, fixed_base=True, torso=0.2):
+    pr2_path = DRAKE_PR2_URDF if use_drake else PR2_URDF
+    with LockRenderer():
+        with HideOutput():
+            pr2 = load_model(pr2_path, fixed_base=fixed_base)
+        set_group_conf(pr2, 'torso', [torso])
     return pr2
 
 def create_floor():
     return load_pybullet("plane.urdf")
 
-def create_table():
+def create_table(width=0.6, length=1.2, height=0.73, thickness=0.03, radius=0.015,
+                 color=(0.7, 0.7, 0.7, 1.), **kwargs):
     # TODO: table URDF
-    raise NotImplementedError()
+    surface = get_box_geometry(width, length, thickness)
+    surface_pose = Pose(Point(z=height - thickness/2.))
+
+    leg_height = height-thickness
+    legs = [get_cylinder_geometry(radius, leg_height) for _ in range(4)]
+    leg_center = np.array([width, length])/2. - radius*np.ones(2)
+    leg_xys = [np.multiply(leg_center, np.array(signs))
+               for signs in product([-1, +1], repeat=len(leg_center))]
+    leg_poses = [Pose(point=[x, y, leg_height/2.]) for x, y in leg_xys]
+
+    geoms = [surface] + legs
+    poses = [surface_pose] + leg_poses
+    colors = len(geoms)*[color]
+
+    collision_id, visual_id = create_shape_array(geoms, poses, colors)
+    body = create_body(collision_id, visual_id, **kwargs)
+    return body
 
 def create_door():
     return load_pybullet("data/door.urdf")
+
+#######################################################
 
 # https://github.com/bulletphysics/bullet3/search?l=XML&q=.urdf&type=&utf8=%E2%9C%93
 
@@ -103,6 +136,8 @@ def stacking_problem(arm='left', grasp_type='top'):
                    #goal_on=[(block, table1)])
                    goal_on=[(block, table2)])
 
+#######################################################
+
 def create_kitchen(w=.5, h=.7):
     floor = create_floor()
 
@@ -123,6 +158,8 @@ def create_kitchen(w=.5, h=.7):
     set_point(stove, (0, -2, h/2))
 
     return table, cabbage, sink, stove
+
+#######################################################
 
 def cleaning_problem(arm='left', grasp_type='top'):
     other_arm = get_other_arm(arm)
@@ -206,3 +243,12 @@ def cooking_button_problem(arm='left', grasp_type='top'):
                    surfaces=[table, sink, stove], sinks=[sink], stoves=[stove],
                    buttons=[(sink_button, sink), (stove_button, stove)],
                    goal_conf=get_pose(pr2), goal_holding=[(arm, cabbage)], goal_cooked=[cabbage])
+
+PROBLEMS = [
+    holding_problem,
+    stacking_problem,
+    cleaning_problem,
+    cooking_problem,
+    cleaning_button_problem,
+    cooking_button_problem,
+]
