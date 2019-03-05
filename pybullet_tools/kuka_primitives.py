@@ -9,15 +9,16 @@ from .utils import get_pose, set_pose, get_movable_joints, get_configuration, \
     step_simulation, refine_path, plan_direct_joint_motion
 
 GRASP_INFO = {
-    'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(),
-                                                 max_width=INF,  grasp_length=0),
-                     Pose(0.1*Point(z=1))),
+    'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(), max_width=INF,  grasp_length=0),
+                     approach_pose=Pose(0.1*Point(z=1))),
 }
 TOOL_FRAMES = {
     'iiwa14': 'iiwa_link_ee_kuka', # iiwa_link_ee
 }
 
 DEBUG_FAILURE = False
+
+##################################################
 
 class BodyPose(object):
     def __init__(self, body, pose=None):
@@ -104,6 +105,8 @@ class BodyPath(object):
     def __repr__(self):
         return '{}({},{},{},{})'.format(self.__class__.__name__, self.body, len(self.joints), len(self.path), len(self.attachments))
 
+##################################################
+
 class ApplyForce(object):
     def __init__(self, body, robot, link):
         self.body = body
@@ -170,6 +173,7 @@ class Command(object):
     def __repr__(self):
         return 'c{}'.format(id(self) % 1000)
 
+##################################################
 
 def get_grasp_gen(robot, grasp_name):
     grasp_info = GRASP_INFO[grasp_name]
@@ -231,6 +235,8 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10):
         return None
     return fn
 
+##################################################
+
 def assign_fluent_state(fluents):
     obstacles = []
     for fluent in fluents:
@@ -277,6 +283,7 @@ def get_holding_motion_gen(robot, fixed=[], teleport=False):
         return (command,)
     return fn
 
+##################################################
 
 def get_movable_collision_test():
     def test(command, body, pose):
