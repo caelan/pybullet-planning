@@ -2687,7 +2687,7 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
                     #wait_for_user()
                     remove_body(sub_robot)
                     return None
-                print("IK iterations:", iteration)
+                #print("IK iterations:", iteration)
                 solutions.append(kinematic_conf)
                 break
         else:
