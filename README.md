@@ -8,7 +8,10 @@ STRIPStream + pybullet
 
 Install PyBullet on OS X or Linux using: 
 ```
-pip install numpy pybullet
+$ pip install numpy pybullet
+$ git clone https://github.com/caelan/ss-pybullet.git
+$ cd ss-pybullet
+$ git submodule update --init --recursive
 ```
 
 ## Tests
