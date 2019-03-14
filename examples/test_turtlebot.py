@@ -64,10 +64,10 @@ def main(floor_width=2.0):
 
         world_from_robot = get_link_pose(robot, base_link) # Returns the pose of base_link wrt the world frame
         position, quaternion = world_from_robot # Decomposing pose into position and orientation (quaternion)
-        x, y, z = position # Decomposition position into x, y, z
+        x, y, z = position # Decomposing position into x, y, z
         print('Base link position: [x={:.3f}, y={:.3f}, z={:.3f}]'.format(x, y, z))
         euler = euler_from_quat(quaternion) # Converting from quaternion to euler angles
-        roll, pitch, yaw = euler # Decomposition orientation into roll, pitch, yaw
+        roll, pitch, yaw = euler # Decomposing orientation into roll, pitch, yaw
         print('Base link orientation: [roll={:.3f}, pitch={:.3f}, yaw={:.3f}]'.format(roll, pitch, yaw))
         handles = draw_pose(world_from_robot, length=0.5) # # Draws the base coordinate system (x:RED, y:GREEN, z:BLUE)
         obstacle_from_robot = multiply(invert(world_from_obstacle), world_from_robot) # Relative transformation from robot to obstacle
