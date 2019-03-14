@@ -70,7 +70,7 @@ def main(floor_width=2.0):
         roll, pitch, yaw = euler # Decomposition orientation into roll, pitch, yaw
         print('Base link orientation: [roll={:.3f}, pitch={:.3f}, yaw={:.3f}]'.format(roll, pitch, yaw))
         handles = draw_pose(world_from_robot, length=0.5) # # Draws the base coordinate system (x:RED, y:GREEN, z:BLUE)
-        object_from_robot = multiply(invert(world_from_obstacle), world_from_robot) # Relative transformation from robot to obstacle
+        obstacle_from_robot = multiply(invert(world_from_obstacle), world_from_robot) # Relative transformation from robot to obstacle
 
         collision = pairwise_collision(robot, obstacle) # Checks whether robot is currently colliding with obstacle
         print('Collision: {}'.format(collision))
