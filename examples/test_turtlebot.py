@@ -7,7 +7,8 @@ import random
 import numpy as np
 from pybullet_tools.utils import connect, load_model, disconnect, wait_for_user, create_box, set_point, dump_body, \
     TURTLEBOT_URDF, HideOutput, LockRenderer, joint_from_name, set_euler, get_euler, get_point, \
-    set_joint_position, get_joint_positions, pairwise_collision, stable_z, wait_for_duration
+    set_joint_position, get_joint_positions, pairwise_collision, stable_z, wait_for_duration, get_link_pose, \
+    link_from_name, get_pose, euler_from_quat, multiply, invert, draw_pose, unit_point, unit_quat, remove_debug
 
 # RGBA colors (alpha is transparency)
 RED = (1, 0, 0, 1)
@@ -16,6 +17,8 @@ TAN = (0.824, 0.706, 0.549, 1)
 def main(floor_width=2.0):
     # Creates a pybullet world and a visualizer for it
     connect(use_gui=True)
+    identity_pose = (unit_point(), unit_quat())
+    origin_handles = draw_pose(identity_pose, length=1.0) # Draws the origin coordinate system (x:RED, y:GREEN, z:BLUE)
 
     # Bodies are described by an integer index
     floor = create_box(w=floor_width, l=floor_width, h=0.001, color=TAN) # Creates a tan box object for the floor
@@ -41,17 +44,34 @@ def main(floor_width=2.0):
     theta_joint = joint_from_name(robot, 'theta') # Looks up the robot joint named 'theta'
     joints = [x_joint, y_joint, theta_joint]
 
+    base_link = link_from_name(robot, 'base_link') # Looks up the robot link named 'base_link'
+    world_from_obstacle = get_pose(obstacle) # Returns the pose of the origin of obstacle wrt the world frame
+
     random.seed(0) # Sets the random number generator state
+    handles = []
     for i in range(10):
+        for handle in handles:
+            remove_debug(handle)
+        print('\nIteration: {}'.format(i))
         x = random.uniform(-floor_width/2., floor_width/2.)
         set_joint_position(robot, x_joint, x) # Sets the current value of the x joint
         y = random.uniform(-floor_width/2., floor_width/2.)
         set_joint_position(robot, y_joint, y) # Sets the current value of the y joint
-        theta = random.uniform(-np.pi, np.pi)
-        set_joint_position(robot, theta_joint, theta) # Sets the current value of the theta joint
-
+        yaw = random.uniform(-np.pi, np.pi)
+        set_joint_position(robot, theta_joint, yaw) # Sets the current value of the theta joint
         values = get_joint_positions(robot, joints) # Obtains the current values for the specified joints
-        print('Iteration {}) Joint values: {}'.format(i, values))
+        print('Joint values: [x={:.3f}, y={:.3f}, yaw={:.3f}]'.format(*values))
+
+        world_from_robot = get_link_pose(robot, base_link) # Returns the pose of base_link wrt the world frame
+        position, quaternion = world_from_robot # Decomposing pose into position and orientation (quaternion)
+        x, y, z = position # Decomposition position into x, y, z
+        print('Base link position: [x={:.3f}, y={:.3f}, z={:.3f}]'.format(x, y, z))
+        euler = euler_from_quat(quaternion) # Converting from quaternion to euler angles
+        roll, pitch, yaw = euler # Decomposition orientation into roll, pitch, yaw
+        print('Base link orientation: [roll={:.3f}, pitch={:.3f}, yaw={:.3f}]'.format(roll, pitch, yaw))
+        handles = draw_pose(world_from_robot, length=0.5) # # Draws the base coordinate system (x:RED, y:GREEN, z:BLUE)
+        object_from_robot = multiply(invert(world_from_obstacle), world_from_robot) # Relative transformation from robot to obstacle
+
         collision = pairwise_collision(robot, obstacle) # Checks whether robot is currently colliding with obstacle
         print('Collision: {}'.format(collision))
         wait_for_duration(1.0) # Like sleep() but also updates the viewer
