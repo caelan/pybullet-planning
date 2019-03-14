@@ -17,7 +17,6 @@ $ git submodule update --init --recursive
 ## Tests
 
 1) Test pybullet - ```python -c 'import pybullet'```
-2) Test STRIPStream - ```python -c 'import ss'```
 
 ## Examples
 
