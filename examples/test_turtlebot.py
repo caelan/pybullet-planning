@@ -8,7 +8,8 @@ import numpy as np
 from pybullet_tools.utils import connect, load_model, disconnect, wait_for_user, create_box, set_point, dump_body, \
     TURTLEBOT_URDF, HideOutput, LockRenderer, joint_from_name, set_euler, get_euler, get_point, \
     set_joint_position, get_joint_positions, pairwise_collision, stable_z, wait_for_duration, get_link_pose, \
-    link_from_name, get_pose, euler_from_quat, multiply, invert, draw_pose, unit_point, unit_quat, remove_debug
+    link_from_name, get_pose, euler_from_quat, multiply, invert, draw_pose, unit_point, unit_quat, \
+    remove_debug, get_aabb, draw_aabb, get_subtree_aabb
 
 # RGBA colors (alpha is transparency)
 RED = (1, 0, 0, 1)
@@ -46,6 +47,8 @@ def main(floor_width=2.0):
 
     base_link = link_from_name(robot, 'base_link') # Looks up the robot link named 'base_link'
     world_from_obstacle = get_pose(obstacle) # Returns the pose of the origin of obstacle wrt the world frame
+    obstacle_aabb = get_subtree_aabb(obstacle)
+    draw_aabb(obstacle_aabb)
 
     random.seed(0) # Sets the random number generator state
     handles = []
@@ -69,8 +72,14 @@ def main(floor_width=2.0):
         euler = euler_from_quat(quaternion) # Converting from quaternion to euler angles
         roll, pitch, yaw = euler # Decomposing orientation into roll, pitch, yaw
         print('Base link orientation: [roll={:.3f}, pitch={:.3f}, yaw={:.3f}]'.format(roll, pitch, yaw))
-        handles = draw_pose(world_from_robot, length=0.5) # # Draws the base coordinate system (x:RED, y:GREEN, z:BLUE)
+        handles.extend(draw_pose(world_from_robot, length=0.5)) # # Draws the base coordinate system (x:RED, y:GREEN, z:BLUE)
         obstacle_from_robot = multiply(invert(world_from_obstacle), world_from_robot) # Relative transformation from robot to obstacle
+
+        robot_aabb = get_subtree_aabb(robot, base_link) # Computes the robot's axis-aligned bounding box (AABB)
+        lower, upper = robot_aabb # Decomposing the AABB into the lower and upper extrema
+        center = (lower + upper)/2. # Computing the center of the AABB
+        extent = upper - lower # Computing the dimensions of the AABB
+        handles.extend(draw_aabb(robot_aabb))
 
         collision = pairwise_collision(robot, obstacle) # Checks whether robot is currently colliding with obstacle
         print('Collision: {}'.format(collision))
