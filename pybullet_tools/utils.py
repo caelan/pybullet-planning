@@ -97,22 +97,6 @@ def clip(value, min_value=-INF, max_value=+INF):
 
 #####################################
 
-class Verbose(object):
-    def __init__(self, verbose):
-        self.verbose = verbose
-
-    def __enter__(self):
-        if not self.verbose:
-            self.stdout = sys.stdout
-            self.devnull = open(os.devnull, 'w')
-            sys.stdout = self.devnull
-        return self
-
-    def __exit__(self, type, value, traceback):
-        if not self.verbose:
-            sys.stdout = self.stdout
-            self.devnull.close()
-
 # https://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python/14797594#14797594
 # https://stackoverflow.com/questions/4178614/suppressing-output-of-module-calling-outside-library
 # https://stackoverflow.com/questions/4675728/redirect-stdout-to-a-file-in-python/22434262#22434262
@@ -175,6 +159,9 @@ class ClientSaver(Saver):
     def restore(self):
         set_client(self.client)
 
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.client)
+
 class VideoSaver(Saver):
     def __init__(self, path):
         name, ext = os.path.splitext(path)
@@ -193,16 +180,28 @@ class PoseSaver(Saver):
         self.body = body
         self.pose = get_pose(self.body)
 
+    def apply_mapping(self, mapping):
+        self.body = mapping.get(self.body, self.body)
+
     def restore(self):
         set_pose(self.body, self.pose)
+
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.body)
 
 class ConfSaver(Saver):
     def __init__(self, body): #, joints):
         self.body = body
         self.conf = get_configuration(body)
 
+    def apply_mapping(self, mapping):
+        self.body = mapping.get(self.body, self.body)
+
     def restore(self):
         set_configuration(self.body, self.conf)
+
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.body)
 
 #####################################
 
@@ -213,11 +212,19 @@ class BodySaver(Saver):
         self.body = body
         self.pose_saver = PoseSaver(body)
         self.conf_saver = ConfSaver(body)
+        self.savers = [self.pose_saver, self.conf_saver]
         # TODO: store velocities
 
+    def apply_mapping(self, mapping):
+        for saver in self.savers:
+            saver.apply_mapping(mapping)
+
     def restore(self):
-        self.pose_saver.restore()
-        self.conf_saver.restore()
+        for saver in self.savers:
+            saver.restore()
+
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.body)
 
 class WorldSaver(Saver):
     def __init__(self):
@@ -2364,6 +2371,9 @@ class Attachment(object):
         child_pose = body_from_end_effector(parent_link_pose, self.grasp_pose)
         set_pose(self.child, child_pose)
         return child_pose
+    def apply_mapping(self, mapping):
+        self.parent = mapping.get(self.parent, self.parent)
+        self.child = mapping.get(self.child, self.child)
     def __repr__(self):
         return '{}({},{})'.format(self.__class__.__name__, self.parent, self.child)
 
