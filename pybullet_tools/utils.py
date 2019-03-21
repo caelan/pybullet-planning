@@ -1826,6 +1826,9 @@ def aabb_from_points(points):
 def aabb_union(aabbs):
     return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
 
+def get_subtree_aabb(body, root_link=BASE_LINK):
+    return aabb_union(get_aabb(body, link) for link in get_link_subtree(body, root_link))
+
 def get_aabbs(body):
     return [get_aabb(body, link=link) for link in get_all_links(body)]
 
