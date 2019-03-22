@@ -59,6 +59,9 @@ STOVE_URDF = 'models/stove.urdf'
 
 # I/O
 
+def is_remote():
+    return 'SSH_CONNECTION' in os.environ
+
 def is_darwin(): # TODO: change loading accordingly
     return platform.system() == 'Darwin' # platform.release()
     #return sys.platform == 'darwin'
@@ -258,15 +261,28 @@ INFO_FROM_BODY = {}
 def get_model_info(body):
     return INFO_FROM_BODY.get((CLIENT, body), None)
 
-def load_pybullet(filename, fixed_base=False, scale=1.):
+def get_urdf_flags(cache=False):
+    # by default, Bullet disables self-collision
+    # URDF_USE_IMPLICIT_CYLINDER
+    # URDF_INITIALIZE_SAT_FEATURES
+    # URDF_ENABLE_CACHED_GRAPHICS_SHAPES seems to help
+    # but URDF_INITIALIZE_SAT_FEATURES does not (might need to be provided a mesh)
+    # flags = p.URDF_INITIALIZE_SAT_FEATURES | p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
+    flags = 0
+    if cache:
+        flags |= p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
+    return flags
+
+def load_pybullet(filename, fixed_base=False, scale=1., **kwargs):
     # fixed_base=False implies infinite base mass
+    flags = get_urdf_flags(**kwargs)
     with LockRenderer():
-        # URDF_USE_IMPLICIT_CYLINDER
-        # URDF_INITIALIZE_SAT_FEATURES
-        # URDF_ENABLE_CACHED_GRAPHICS_SHAPES
-        body = p.loadURDF(filename, useFixedBase=fixed_base, globalScaling=scale, physicsClientId=CLIENT)
+        body = p.loadURDF(filename, useFixedBase=fixed_base, globalScaling=scale, flags=flags, physicsClientId=CLIENT)
     INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, filename, fixed_base, scale)
     return body
+
+def set_caching(cache):
+    p.setPhysicsEngineParameter(enableFileCaching=int(cache), physicsClientId=CLIENT)
 
 def load_model_info(info):
     # TODO: disable file caching to reuse old filenames
@@ -288,16 +304,13 @@ def get_model_path(rel_path): # TODO: add to search path
     directory = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(directory, '..', rel_path)
 
-def load_model(rel_path, pose=None, fixed_base=True, scale=1.):
+def load_model(rel_path, pose=None, fixed_base=True, scale=1., **kwargs):
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
     abs_path = get_model_path(rel_path)
-    flags = 0 # by default, Bullet disables self-collision
+    flags = get_urdf_flags(**kwargs)
     add_data_path()
     #with LockRenderer():
     if abs_path.endswith('.urdf'):
-        # URDF_ENABLE_CACHED_GRAPHICS_SHAPES seems to help
-        # but URDF_INITIALIZE_SAT_FEATURES does not (might need to be provided a mesh)
-        #flags = p.URDF_INITIALIZE_SAT_FEATURES | p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
         body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags,
                           globalScaling=scale, physicsClientId=CLIENT)
     elif abs_path.endswith('.sdf'):
@@ -572,11 +585,14 @@ def disable_gravity():
 def step_simulation():
     p.stepSimulation(physicsClientId=CLIENT)
 
+def set_real_time(real_time):
+    p.setRealTimeSimulation(int(real_time), physicsClientId=CLIENT)
+
 def enable_real_time():
-    p.setRealTimeSimulation(1, physicsClientId=CLIENT)
+    set_real_time(True)
 
 def disable_real_time():
-    p.setRealTimeSimulation(0, physicsClientId=CLIENT)
+    set_real_time(False)
 
 def update_state():
     # TODO: this doesn't seem to automatically update still
