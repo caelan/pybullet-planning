@@ -60,6 +60,9 @@ STOVE_URDF = 'models/stove.urdf'
 
 # I/O
 
+def is_remote():
+    return 'SSH_CONNECTION' in os.environ
+
 def is_darwin(): # TODO: change loading accordingly
     return platform.system() == 'Darwin' # platform.release()
     #return sys.platform == 'darwin'
@@ -97,22 +100,6 @@ def clip(value, min_value=-INF, max_value=+INF):
     return min(max(min_value, value), max_value)
 
 #####################################
-
-class Verbose(object):
-    def __init__(self, verbose):
-        self.verbose = verbose
-
-    def __enter__(self):
-        if not self.verbose:
-            self.stdout = sys.stdout
-            self.devnull = open(os.devnull, 'w')
-            sys.stdout = self.devnull
-        return self
-
-    def __exit__(self, type, value, traceback):
-        if not self.verbose:
-            sys.stdout = self.stdout
-            self.devnull.close()
 
 # https://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python/14797594#14797594
 # https://stackoverflow.com/questions/4178614/suppressing-output-of-module-calling-outside-library
@@ -176,6 +163,9 @@ class ClientSaver(Saver):
     def restore(self):
         set_client(self.client)
 
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.client)
+
 class VideoSaver(Saver):
     def __init__(self, path):
         name, ext = os.path.splitext(path)
@@ -194,16 +184,28 @@ class PoseSaver(Saver):
         self.body = body
         self.pose = get_pose(self.body)
 
+    def apply_mapping(self, mapping):
+        self.body = mapping.get(self.body, self.body)
+
     def restore(self):
         set_pose(self.body, self.pose)
+
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.body)
 
 class ConfSaver(Saver):
     def __init__(self, body): #, joints):
         self.body = body
         self.conf = get_configuration(body)
 
+    def apply_mapping(self, mapping):
+        self.body = mapping.get(self.body, self.body)
+
     def restore(self):
         set_configuration(self.body, self.conf)
+
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.body)
 
 #####################################
 
@@ -214,11 +216,19 @@ class BodySaver(Saver):
         self.body = body
         self.pose_saver = PoseSaver(body)
         self.conf_saver = ConfSaver(body)
+        self.savers = [self.pose_saver, self.conf_saver]
         # TODO: store velocities
 
+    def apply_mapping(self, mapping):
+        for saver in self.savers:
+            saver.apply_mapping(mapping)
+
     def restore(self):
-        self.pose_saver.restore()
-        self.conf_saver.restore()
+        for saver in self.savers:
+            saver.restore()
+
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.body)
 
 class WorldSaver(Saver):
     def __init__(self):
@@ -252,15 +262,28 @@ INFO_FROM_BODY = {}
 def get_model_info(body):
     return INFO_FROM_BODY.get((CLIENT, body), None)
 
-def load_pybullet(filename, fixed_base=False, scale=1.):
+def get_urdf_flags(cache=False):
+    # by default, Bullet disables self-collision
+    # URDF_USE_IMPLICIT_CYLINDER
+    # URDF_INITIALIZE_SAT_FEATURES
+    # URDF_ENABLE_CACHED_GRAPHICS_SHAPES seems to help
+    # but URDF_INITIALIZE_SAT_FEATURES does not (might need to be provided a mesh)
+    # flags = p.URDF_INITIALIZE_SAT_FEATURES | p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
+    flags = 0
+    if cache:
+        flags |= p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
+    return flags
+
+def load_pybullet(filename, fixed_base=False, scale=1., **kwargs):
     # fixed_base=False implies infinite base mass
+    flags = get_urdf_flags(**kwargs)
     with LockRenderer():
-        # URDF_USE_IMPLICIT_CYLINDER
-        # URDF_INITIALIZE_SAT_FEATURES
-        # URDF_ENABLE_CACHED_GRAPHICS_SHAPES
-        body = p.loadURDF(filename, useFixedBase=fixed_base, globalScaling=scale, physicsClientId=CLIENT)
+        body = p.loadURDF(filename, useFixedBase=fixed_base, globalScaling=scale, flags=flags, physicsClientId=CLIENT)
     INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, filename, fixed_base, scale)
     return body
+
+def set_caching(cache):
+    p.setPhysicsEngineParameter(enableFileCaching=int(cache), physicsClientId=CLIENT)
 
 def load_model_info(info):
     # TODO: disable file caching to reuse old filenames
@@ -282,16 +305,13 @@ def get_model_path(rel_path): # TODO: add to search path
     directory = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(directory, '..', rel_path)
 
-def load_model(rel_path, pose=None, fixed_base=True, scale=1.):
+def load_model(rel_path, pose=None, fixed_base=True, scale=1., **kwargs):
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
     abs_path = get_model_path(rel_path)
-    flags = 0 # by default, Bullet disables self-collision
+    flags = get_urdf_flags(**kwargs)
     add_data_path()
     #with LockRenderer():
     if abs_path.endswith('.urdf'):
-        # URDF_ENABLE_CACHED_GRAPHICS_SHAPES seems to help
-        # but URDF_INITIALIZE_SAT_FEATURES does not (might need to be provided a mesh)
-        #flags = p.URDF_INITIALIZE_SAT_FEATURES | p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
         body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags,
                           globalScaling=scale, physicsClientId=CLIENT)
     elif abs_path.endswith('.sdf'):
@@ -566,11 +586,14 @@ def disable_gravity():
 def step_simulation():
     p.stepSimulation(physicsClientId=CLIENT)
 
+def set_real_time(real_time):
+    p.setRealTimeSimulation(int(real_time), physicsClientId=CLIENT)
+
 def enable_real_time():
-    p.setRealTimeSimulation(1, physicsClientId=CLIENT)
+    set_real_time(True)
 
 def disable_real_time():
-    p.setRealTimeSimulation(0, physicsClientId=CLIENT)
+    set_real_time(False)
 
 def update_state():
     # TODO: this doesn't seem to automatically update still
@@ -1829,6 +1852,9 @@ def aabb_from_points(points):
 def aabb_union(aabbs):
     return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
 
+def get_subtree_aabb(body, root_link=BASE_LINK):
+    return aabb_union(get_aabb(body, link) for link in get_link_subtree(body, root_link))
+
 def get_aabbs(body):
     return [get_aabb(body, link=link) for link in get_all_links(body)]
 
@@ -2385,6 +2411,9 @@ class Attachment(object):
         child_pose = body_from_end_effector(parent_link_pose, self.grasp_pose)
         set_pose(self.child, child_pose)
         return child_pose
+    def apply_mapping(self, mapping):
+        self.parent = mapping.get(self.parent, self.parent)
+        self.child = mapping.get(self.child, self.child)
     def __repr__(self):
         return '{}({},{})'.format(self.__class__.__name__, self.parent, self.child)
 
