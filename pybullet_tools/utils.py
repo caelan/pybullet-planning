@@ -8,6 +8,7 @@ import platform
 import pybullet as p
 import sys
 import time
+import random
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
 
@@ -670,6 +671,15 @@ def get_projection_matrix(width, height, vertical_fov, near, far):
     # projection_matrix = p.computeProjectionMatrix(0, width, height, 0, near, far, physicsClientId=CLIENT)
     return projection_matrix
     #return np.reshape(projection_matrix, [4, 4])
+
+RED = (1, 0, 0, 1)
+GREEN = (0, 1, 0, 1)
+BLUE = (0, 0, 1, 1)
+BLACK = (0, 0, 0, 1)
+WHITE = (1, 1, 1, 1)
+BROWN = (0.396, 0.263, 0.129, 1)
+TAN = (0.824, 0.706, 0.549, 1)
+GREY = (0.5, 0.5, 0.5, 1)
 
 def spaced_colors(n, s=1, v=1):
     return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]
@@ -1943,6 +1953,17 @@ def get_sample_fn(body, joints, custom_limits={}):
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits, circular_limits=CIRCULAR_LIMITS)
     def fn():
         return tuple(np.random.uniform(lower_limits, upper_limits))
+    return fn
+
+def get_halton_sample_fn(body, joints, custom_limits={}):
+    import ghalton
+    # sequencer = ghalton.Halton(len(joints))
+    sequencer = ghalton.GeneralizedHalton(len(joints), random.randint(0, 1000))
+    lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits, circular_limits=CIRCULAR_LIMITS)
+    def fn():
+        while True:
+            scale = sequencer.get(1)[0]
+            return scale * (np.array(upper_limits) - np.array(lower_limits)) + np.array(lower_limits)
     return fn
 
 def get_difference_fn(body, joints):
