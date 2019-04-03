@@ -1981,15 +1981,22 @@ def get_sample_fn(body, joints, custom_limits={}):
         return tuple(np.random.uniform(lower_limits, upper_limits))
     return fn
 
-def get_halton_sample_fn(body, joints, custom_limits={}):
+def halton_generator(d):
     import ghalton
-    # sequencer = ghalton.Halton(len(joints))
-    sequencer = ghalton.GeneralizedHalton(len(joints), random.randint(0, 1000))
+    # sequencer = ghalton.Halton(d)
+    sequencer = ghalton.GeneralizedHalton(d, random.randint(0, 1000))
+    while True:
+        yield sequencer.get(1)[0]
+
+def uniform_generator(d):
+    while True:
+        yield np.random.uniform(size=d)
+
+def get_halton_sample_fn(body, joints, custom_limits={}):
+    generator = halton_generator(len(joints))
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits, circular_limits=CIRCULAR_LIMITS)
     def fn():
-        while True:
-            scale = sequencer.get(1)[0]
-            return scale * (np.array(upper_limits) - np.array(lower_limits)) + np.array(lower_limits)
+        return next(generator) * (np.array(upper_limits) - np.array(lower_limits)) + np.array(lower_limits)
     return fn
 
 def get_difference_fn(body, joints):
