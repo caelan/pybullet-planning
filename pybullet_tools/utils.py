@@ -9,6 +9,7 @@ import pybullet as p
 import sys
 import time
 import random
+import json
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
 
@@ -75,13 +76,22 @@ def write(filename, string):
     with open(filename, 'w') as f:
         f.write(string)
 
+def read_pickle(filename):
+    # Can sometimes read pickle3 from python2 by calling twice
+    # Can possibly read pickle2 from python3 by using encoding='latin1'
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
+
 def write_pickle(filename, data):  # NOTE - cannot pickle lambda or nested functions
     with open(filename, 'wb') as f:
         pickle.dump(data, f)
 
-def read_pickle(filename):
-    with open(filename, 'rb') as f:
-        return pickle.load(f)
+def read_json(path):
+    return json.loads(read(path))
+
+def write_json(path, data):
+    with open(path, 'w') as f:
+        json.dump(data, f, indent=2, sort_keys=True)
 
 def safe_remove(p):
     if os.path.exists(p):
