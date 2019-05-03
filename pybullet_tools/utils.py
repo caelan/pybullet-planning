@@ -9,6 +9,7 @@ import pybullet as p
 import sys
 import time
 import random
+import json
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
 
@@ -76,13 +77,22 @@ def write(filename, string):
     with open(filename, 'w') as f:
         f.write(string)
 
+def read_pickle(filename):
+    # Can sometimes read pickle3 from python2 by calling twice
+    # Can possibly read pickle2 from python3 by using encoding='latin1'
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
+
 def write_pickle(filename, data):  # NOTE - cannot pickle lambda or nested functions
     with open(filename, 'wb') as f:
         pickle.dump(data, f)
 
-def read_pickle(filename):
-    with open(filename, 'rb') as f:
-        return pickle.load(f)
+def read_json(path):
+    return json.loads(read(path))
+
+def write_json(path, data):
+    with open(path, 'w') as f:
+        json.dump(data, f, indent=2, sort_keys=True)
 
 def safe_remove(p):
     if os.path.exists(p):
@@ -1875,8 +1885,8 @@ def get_aabb(body, link=None):
 
 get_lower_upper = get_aabb
 
-def get_center_extent(body):
-    lower, upper = get_aabb(body)
+def get_center_extent(body, **kwargs):
+    lower, upper = get_aabb(body, **kwargs)
     center = (np.array(lower) + np.array(upper)) / 2
     extents = (np.array(upper) - np.array(lower))
     return center, extents
@@ -1900,16 +1910,16 @@ def get_bodies_in_region(aabb):
     (lower, upper) = aabb
     return p.getOverlappingObjects(lower, upper, physicsClientId=CLIENT)
 
-def approximate_as_prism(body, body_pose=unit_pose()):
+def approximate_as_prism(body, body_pose=unit_pose(), **kwargs):
     # TODO: make it just orientation
     with PoseSaver(body):
         set_pose(body, body_pose)
-        return get_center_extent(body)
+        return get_center_extent(body, **kwargs)
 
-def approximate_as_cylinder(body, body_pose=unit_pose()):
+def approximate_as_cylinder(body, body_pose=unit_pose(), **kwargs):
     with PoseSaver(body):
         set_pose(body, body_pose)
-        center, (width, length, height) = get_center_extent(body)
+        center, (width, length, height) = get_center_extent(body, **kwargs)
         diameter = (width + length) / 2 # TODO: check that these are close
         return center, (diameter, height)
 
@@ -1976,11 +1986,9 @@ def batch_ray_collision(rays):
 
 # Joint motion planning
 
-def get_sample_fn(body, joints, custom_limits={}):
-    lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits, circular_limits=CIRCULAR_LIMITS)
-    def fn():
-        return tuple(np.random.uniform(lower_limits, upper_limits))
-    return fn
+def uniform_generator(d):
+    while True:
+        yield np.random.uniform(size=d)
 
 def halton_generator(d):
     import ghalton
@@ -1989,16 +1997,19 @@ def halton_generator(d):
     while True:
         yield sequencer.get(1)[0]
 
-def uniform_generator(d):
-    while True:
-        yield np.random.uniform(size=d)
+def unit_generator(d, use_halton=False):
+    return halton_generator(d) if use_halton else uniform_generator(d)
 
-def get_halton_sample_fn(body, joints, custom_limits={}):
-    generator = halton_generator(len(joints))
+def get_sample_fn(body, joints, custom_limits={}, **kwargs):
+    generator = unit_generator(len(joints), **kwargs)
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits, circular_limits=CIRCULAR_LIMITS)
+    limits_extents = np.array(upper_limits) - np.array(lower_limits)
     def fn():
-        return next(generator) * (np.array(upper_limits) - np.array(lower_limits)) + np.array(lower_limits)
+        return tuple(next(generator) * limits_extents + np.array(lower_limits))
     return fn
+
+def get_halton_sample_fn(body, joints, **kwargs):
+    return get_sample_fn(body, joints, use_halton=True, **kwargs)
 
 def get_difference_fn(body, joints):
     circular_joints = [is_circular(body, joint) for joint in joints]
@@ -2293,7 +2304,7 @@ def sample_placement(top_body, bottom_body, top_pose=unit_pose(), bottom_link=No
                      percent=1.0, max_attempts=50, epsilon=1e-3):
     # TODO: transform into the coordinate system of the bottom
     # TODO: maybe I should instead just require that already in correct frame
-    bottom_aabb = get_lower_upper(bottom_body, link=bottom_link)
+    bottom_aabb = get_aabb(bottom_body, link=bottom_link)
     for _ in range(max_attempts):
         theta = np.random.uniform(*CIRCULAR_LIMITS)
         rotation = Euler(yaw=theta)
@@ -2865,7 +2876,7 @@ def draw_mesh(mesh, **kwargs):
     lines = []
     for indices in faces:
         #for i1, i2 in combinations(indices, 2):
-        for i1, i2 in zip(indices[-1] +  indices[-1:], indices):
+        for i1, i2 in zip(indices, indices[1:] + indices[:1]):
             lines.append(add_line(verts[i1], verts[i2], **kwargs))
     return lines
 
@@ -3007,6 +3018,14 @@ def mesh_from_points(points):
         new_indices.append(tuple(triplet))
     return Mesh(vertices.tolist(), new_indices)
 
+def rectangular_mesh(width, length):
+    # TODO: 2.5d polygon
+    extents = np.array([width, length, 0])/2.
+    unit_corners = [(-1, -1), (+1, -1), (+1, +1), (-1, +1)]
+    vertices = [np.append(c, [0])*extents for c in unit_corners]
+    faces = [(0, 1, 2), (2, 3, 0)]
+    return Mesh(vertices, faces)
+
 def mesh_from_body(body, link=BASE_LINK):
     # TODO: read obj files so I can always obtain the pointcloud
     # TODO: approximate cylindrical/spherical using convex hull
@@ -3038,6 +3057,21 @@ def obj_file_from_mesh(mesh, under=True):
         if under:
             s += '\nf {}'.format(' '.join(map(str, reversed(f))))
     return s
+
+
+def read_obj(path):
+    vertices = []
+    faces = []
+    for line in read(path).split('\n'):
+        tokens = line.split()
+        if not tokens:
+            continue
+        if tokens[0] == 'v':
+            vertices.append(tuple(map(float, tokens[1:])))
+        elif tokens[0] == 'f':
+            faces.append(tuple(int(token.split('/')[0]) - 1 for token in tokens[1:]))
+    return Mesh(vertices, faces)
+
 
 def read_mesh_off(path, scale=1.0):
     """
