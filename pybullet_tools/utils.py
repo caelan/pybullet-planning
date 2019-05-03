@@ -39,6 +39,7 @@ DEFAULT_TIME_STEP = 1./240. # seconds
 # Models
 
 # Robots
+ROOMBA_URDF = 'models/turtlebot/roomba.urdf'
 TURTLEBOT_URDF = 'models/turtlebot/turtlebot_holonomic.urdf'
 DRAKE_IIWA_URDF = "models/drake/iiwa_description/urdf/iiwa14_polytope_collision.urdf"
 KUKA_IIWA_URDF = "kuka_iiwa/model.urdf"
