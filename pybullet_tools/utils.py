@@ -2234,6 +2234,20 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
 
 # SE(2) pose motion planning
 
+def get_base_difference_fn():
+    def fn(q2, q1):
+        dx, dy = np.array(q2[:2]) - np.array(q1[:2])
+        dtheta = circular_difference(q2[2], q1[2])
+        return (dx, dy, dtheta)
+    return fn
+
+def get_base_distance_fn(weights=1*np.ones(3)):
+    difference_fn = get_base_difference_fn()
+    def fn(q1, q2):
+        difference = np.array(difference_fn(q2, q1))
+        return np.sqrt(np.dot(weights, difference * difference))
+    return fn
+
 def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
                      weights=1*np.ones(3), resolutions=0.05*np.ones(3),
                      max_distance=MAX_DISTANCE, **kwargs):
@@ -2242,14 +2256,9 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
         theta = np.random.uniform(*CIRCULAR_LIMITS)
         return (x, y, theta)
 
-    def difference_fn(q2, q1):
-        dx, dy = np.array(q2[:2]) - np.array(q1[:2])
-        dtheta = circular_difference(q2[2], q1[2])
-        return (dx, dy, dtheta)
 
-    def distance_fn(q1, q2):
-        difference = np.array(difference_fn(q2, q1))
-        return np.sqrt(np.dot(weights, difference * difference))
+    difference_fn = get_base_difference_fn()
+    distance_fn = get_base_distance_fn(weights=weights)
 
     def extend_fn(q1, q2):
         steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
