@@ -53,6 +53,8 @@ class Pose(object):
         self.init = init
     def assign(self):
         set_pose(self.body, self.value)
+    def iterate(self):
+        yield self
     def to_base_conf(self):
         values = base_values_from_pose(self.value)
         return Conf(self.body, range(len(values)), values)
@@ -81,6 +83,8 @@ class Conf(object):
         self.values = tuple(values)
     def assign(self):
         set_joint_positions(self.body, self.joints, self.values)
+    def iterate(self):
+        yield self
     def __repr__(self):
         return 'q{}'.format(id(self) % 1000)
 
@@ -90,6 +94,8 @@ class Command(object):
     def control(self, dt=0):
         raise NotImplementedError()
     def apply(self, state, **kwargs):
+        raise NotImplementedError()
+    def iterate(self):
         raise NotImplementedError()
 
 class Commands(object):
@@ -152,6 +158,9 @@ class Trajectory(Command):
         for q1, q2 in zip(self.path, self.path[1:]):
             total += distance_fn(q1.values, q2.values)
         return total
+    def iterate(self):
+        for conf in self.path:
+            yield conf
     def reverse(self):
         return Trajectory(reversed(self.path))
     #def __repr__(self):

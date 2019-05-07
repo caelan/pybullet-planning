@@ -1863,6 +1863,12 @@ def aabb_from_points(points):
 def aabb_union(aabbs):
     return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
 
+def aabb_overlap(aabb1, aabb2):
+    lower1, upper1 = aabb1
+    lower2, upper2 = aabb2
+    return np.less_equal(lower1, upper2).all() and \
+           np.less_equal(lower2, upper1).all()
+
 def get_subtree_aabb(body, root_link=BASE_LINK):
     return aabb_union(get_aabb(body, link) for link in get_link_subtree(body, root_link))
 
@@ -1898,12 +1904,14 @@ def aabb2d_from_aabb(aabb):
 def aabb_contains_aabb(contained, container):
     lower1, upper1 = contained
     lower2, upper2 = container
-    return np.greater_equal(lower1, lower2).all() and np.greater_equal(upper2, upper1).all()
+    return np.less_equal(lower2, lower1).all() and \
+           np.less_equal(upper1, upper2).all()
     #return np.all(lower2 <= lower1) and np.all(upper1 <= upper2)
 
 def aabb_contains_point(point, container):
     lower, upper = container
-    return np.greater_equal(point, lower).all() and np.greater_equal(upper, point).all()
+    return np.less_equal(lower, point).all() and \
+           np.less_equal(point, upper).all()
     #return np.all(lower <= point) and np.all(point <= upper)
 
 def get_bodies_in_region(aabb):
@@ -2312,7 +2320,7 @@ def sample_placement(top_body, bottom_body, top_pose=unit_pose(), bottom_link=No
         center, extent = get_center_extent(top_body)
         lower = (np.array(bottom_aabb[0]) + percent*extent/2)[:2]
         upper = (np.array(bottom_aabb[1]) - percent*extent/2)[:2]
-        if np.greater(lower, upper).any():
+        if np.less(upper, lower).any():
             continue
         x, y = np.random.uniform(lower, upper)
         z = (bottom_aabb[1] + extent/2.)[2] + epsilon
