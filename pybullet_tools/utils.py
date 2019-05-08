@@ -714,6 +714,16 @@ WHITE = (1, 1, 1, 1)
 BROWN = (0.396, 0.263, 0.129, 1)
 TAN = (0.824, 0.706, 0.549, 1)
 GREY = (0.5, 0.5, 0.5, 1)
+YELLOW = (1, 1, 0, 1)
+
+COLOR_FROM_NAME = {
+    'red': RED,
+    'green': GREEN,
+    'blue': BLUE,
+    'white': WHITE,
+    'grey': GREY,
+    'black': BLACK,
+}
 
 def spaced_colors(n, s=1, v=1):
     return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]
