@@ -40,6 +40,7 @@ DEFAULT_TIME_STEP = 1./240. # seconds
 # Models
 
 # Robots
+ROOMBA_URDF = 'models/turtlebot/roomba.urdf'
 TURTLEBOT_URDF = 'models/turtlebot/turtlebot_holonomic.urdf'
 DRAKE_IIWA_URDF = "models/drake/iiwa_description/urdf/iiwa14_polytope_collision.urdf"
 KUKA_IIWA_URDF = "kuka_iiwa/model.urdf"
@@ -715,6 +716,16 @@ WHITE = (1, 1, 1, 1)
 BROWN = (0.396, 0.263, 0.129, 1)
 TAN = (0.824, 0.706, 0.549, 1)
 GREY = (0.5, 0.5, 0.5, 1)
+YELLOW = (1, 1, 0, 1)
+
+COLOR_FROM_NAME = {
+    'red': RED,
+    'green': GREEN,
+    'blue': BLUE,
+    'white': WHITE,
+    'grey': GREY,
+    'black': BLACK,
+}
 
 def spaced_colors(n, s=1, v=1):
     return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]
@@ -1874,6 +1885,12 @@ def aabb_from_points(points):
 def aabb_union(aabbs):
     return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
 
+def aabb_overlap(aabb1, aabb2):
+    lower1, upper1 = aabb1
+    lower2, upper2 = aabb2
+    return np.less_equal(lower1, upper2).all() and \
+           np.less_equal(lower2, upper1).all()
+
 def get_subtree_aabb(body, root_link=BASE_LINK):
     return aabb_union(get_aabb(body, link) for link in get_link_subtree(body, root_link))
 
@@ -1909,12 +1926,14 @@ def aabb2d_from_aabb(aabb):
 def aabb_contains_aabb(contained, container):
     lower1, upper1 = contained
     lower2, upper2 = container
-    return np.greater_equal(lower1, lower2).all() and np.greater_equal(upper2, upper1).all()
+    return np.less_equal(lower2, lower1).all() and \
+           np.less_equal(upper1, upper2).all()
     #return np.all(lower2 <= lower1) and np.all(upper1 <= upper2)
 
 def aabb_contains_point(point, container):
     lower, upper = container
-    return np.greater_equal(point, lower).all() and np.greater_equal(upper, point).all()
+    return np.less_equal(lower, point).all() and \
+           np.less_equal(point, upper).all()
     #return np.all(lower <= point) and np.all(point <= upper)
 
 def get_bodies_in_region(aabb):
@@ -2238,6 +2257,20 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
 
 # SE(2) pose motion planning
 
+def get_base_difference_fn():
+    def fn(q2, q1):
+        dx, dy = np.array(q2[:2]) - np.array(q1[:2])
+        dtheta = circular_difference(q2[2], q1[2])
+        return (dx, dy, dtheta)
+    return fn
+
+def get_base_distance_fn(weights=1*np.ones(3)):
+    difference_fn = get_base_difference_fn()
+    def fn(q1, q2):
+        difference = np.array(difference_fn(q2, q1))
+        return np.sqrt(np.dot(weights, difference * difference))
+    return fn
+
 def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
                      weights=1*np.ones(3), resolutions=0.05*np.ones(3),
                      max_distance=MAX_DISTANCE, **kwargs):
@@ -2246,14 +2279,9 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
         theta = np.random.uniform(*CIRCULAR_LIMITS)
         return (x, y, theta)
 
-    def difference_fn(q2, q1):
-        dx, dy = np.array(q2[:2]) - np.array(q1[:2])
-        dtheta = circular_difference(q2[2], q1[2])
-        return (dx, dy, dtheta)
 
-    def distance_fn(q1, q2):
-        difference = np.array(difference_fn(q2, q1))
-        return np.sqrt(np.dot(weights, difference * difference))
+    difference_fn = get_base_difference_fn()
+    distance_fn = get_base_distance_fn(weights=weights)
 
     def extend_fn(q1, q2):
         steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
@@ -2324,7 +2352,7 @@ def sample_placement(top_body, bottom_body, top_pose=unit_pose(), bottom_link=No
         center, extent = get_center_extent(top_body)
         lower = (np.array(bottom_aabb[0]) + percent*extent/2)[:2]
         upper = (np.array(bottom_aabb[1]) - percent*extent/2)[:2]
-        if np.greater(lower, upper).any():
+        if np.less(upper, lower).any():
             continue
         x, y = np.random.uniform(lower, upper)
         z = (bottom_aabb[1] + extent/2.)[2] + epsilon
