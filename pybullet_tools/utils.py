@@ -193,12 +193,14 @@ class PoseSaver(Saver):
     def __init__(self, body):
         self.body = body
         self.pose = get_pose(self.body)
+        self.velocity = get_velocity(self.body)
 
     def apply_mapping(self, mapping):
         self.body = mapping.get(self.body, self.body)
 
     def restore(self):
         set_pose(self.body, self.pose)
+        set_velocity(self.body, *self.velocity)
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.body)
@@ -997,6 +999,16 @@ def set_base_values(body, values):
     x, y, theta = values
     set_point(body, (x, y, z))
     set_quat(body, z_rotation(theta))
+
+def get_velocity(body):
+    linear, angular = p.getBaseVelocity(body, physicsClientId=CLIENT)
+    return linear, angular # [x,y,z], [wx,wy,wz]
+
+def set_velocity(body, linear=None, angular=None):
+    if linear is not None:
+        p.resetBaseVelocity(body, linearVelocity=linear, physicsClientId=CLIENT)
+    if angular is not None:
+        p.resetBaseVelocity(body, angularVelocity=angular, physicsClientId=CLIENT)
 
 def is_rigid_body(body):
     for joint in get_joints(body):
@@ -1913,6 +1925,7 @@ def approximate_as_prism(body, body_pose=unit_pose(), **kwargs):
     # TODO: make it just orientation
     with PoseSaver(body):
         set_pose(body, body_pose)
+        set_velocity(body, linear=np.zeros(3), angular=np.zeros(3))
         return get_center_extent(body, **kwargs)
 
 def approximate_as_cylinder(body, body_pose=unit_pose(), **kwargs):
@@ -2884,6 +2897,7 @@ def draw_mesh(mesh, **kwargs):
 # Polygonal surfaces
 
 def create_rectangular_surface(width, length):
+    # TODO: unify with rectangular_mesh
     extents = np.array([width, length, 0]) / 2.
     unit_corners = [(-1, -1), (+1, -1), (+1, +1), (-1, +1)]
     return [np.append(c, 0) * extents for c in unit_corners]
