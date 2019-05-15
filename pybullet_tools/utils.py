@@ -1947,12 +1947,10 @@ def approximate_as_prism(body, body_pose=unit_pose(), **kwargs):
         set_velocity(body, linear=np.zeros(3), angular=np.zeros(3))
         return get_center_extent(body, **kwargs)
 
-def approximate_as_cylinder(body, body_pose=unit_pose(), **kwargs):
-    with PoseSaver(body):
-        set_pose(body, body_pose)
-        center, (width, length, height) = get_center_extent(body, **kwargs)
-        diameter = (width + length) / 2 # TODO: check that these are close
-        return center, (diameter, height)
+def approximate_as_cylinder(body, **kwargs):
+    center, (width, length, height) = approximate_as_prism(body, **kwargs)
+    diameter = (width + length) / 2  # TODO: check that these are close
+    return center, (diameter, height)
 
 #####################################
 
