@@ -1,15 +1,15 @@
 from __future__ import print_function
 
 import colorsys
+import json
 import math
 import os
 import pickle
 import platform
 import pybullet as p
+import random
 import sys
 import time
-import random
-import json
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
 
@@ -273,7 +273,8 @@ ModelInfo = namedtuple('URDFInfo', ['name', 'path', 'fixed_base', 'scale'])
 INFO_FROM_BODY = {}
 
 def get_model_info(body):
-    return INFO_FROM_BODY.get((CLIENT, body), None)
+    key = (CLIENT, body)
+    return INFO_FROM_BODY.get(key, None)
 
 def get_urdf_flags(cache=False):
     # by default, Bullet disables self-collision
@@ -1612,9 +1613,11 @@ VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
                                                  'localVisualFrame_position', 'localVisualFrame_orientation',
                                                  'rgbaColor']) # 'textureUniqueId'
 
+UNKNOWN_FILE = 'unknown_file'
+
 def visual_shape_from_data(data, client=None):
     client = get_client(client)
-    if (data.visualGeometryType == p.GEOM_MESH) and (data.meshAssetFileName == 'unknown_file'):
+    if (data.visualGeometryType == p.GEOM_MESH) and (data.meshAssetFileName == UNKNOWN_FILE):
         return -1
     # visualFramePosition: translational offset of the visual shape with respect to the link
     # visualFrameOrientation: rotational offset (quaternion x,y,z,w) of the visual shape with respect to the link frame
@@ -1646,7 +1649,7 @@ CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'link
 
 def collision_shape_from_data(data, body, link, client=None):
     client = get_client(client)
-    if (data.geometry_type == p.GEOM_MESH) and (data.filename == 'unknown_file'):
+    if (data.geometry_type == p.GEOM_MESH) and (data.filename == UNKNOWN_FILE):
         return -1
     pose = (data.local_frame_pos, data.local_frame_orn)
     pose = multiply(get_joint_inertial_pose(body, link), pose)
@@ -1772,7 +1775,13 @@ def get_data_type(data):
     return data.geometry_type if isinstance(data, CollisionShapeData) else data.visualGeometryType
 
 def get_data_filename(data):
-    return data.filename if isinstance(data, CollisionShapeData) else data.meshAssetFileName
+    return (data.filename if isinstance(data, CollisionShapeData)
+            else data.meshAssetFileName).decode(encoding='UTF-8')
+
+def get_data_pose(data):
+    if isinstance(data, CollisionShapeData):
+        return (data.local_frame_pos, data.local_frame_orn)
+    return (data.localVisualFrame_position, data.localVisualFrame_orientation)
 
 def get_default_geometry():
     return {
@@ -1940,12 +1949,73 @@ def get_bodies_in_region(aabb):
     (lower, upper) = aabb
     return p.getOverlappingObjects(lower, upper, physicsClientId=CLIENT)
 
-def approximate_as_prism(body, body_pose=unit_pose(), **kwargs):
+#####################################
+
+# AABB approximation
+
+def vertices_from_data(data):
+    geometry_type = get_data_type(data)
+    #if geometry_type == p.GEOM_SPHERE:
+    #    parameters = [get_data_radius(data)]
+    if geometry_type == p.GEOM_BOX:
+        extents = get_data_extents(data)
+        aabb = AABB(-extents/2., +extents/2.)
+        vertices = get_aabb_vertices(aabb)
+    elif geometry_type in (p.GEOM_CYLINDER, p.GEOM_CAPSULE):
+        radius, height = get_data_radius(data), get_data_height(data)
+        extents = np.array([2*radius, 2*radius, height])
+        aabb = AABB(-extents/2., +extents/2.)
+        vertices = get_aabb_vertices(aabb)
+    elif geometry_type == p.GEOM_MESH:
+        filename, scale = get_data_filename(data), get_data_scale(data)
+        if filename == UNKNOWN_FILE:
+            raise RuntimeError(filename)
+        mesh = read_obj(filename)
+        vertices = [scale*np.array(vertex) for vertex in mesh.vertices]
+        # TODO: could compute AABB here for improved speed at the cost of being conservative
+    #elif geometry_type == p.GEOM_PLANE:
+    #   parameters = [get_data_extents(data)]
+    else:
+        raise NotImplementedError(geometry_type)
+    return apply_affine(get_data_pose(data), vertices)
+
+def vertices_from_link(body, link):
+    # In local frame
+    vertices = []
+    # TODO: requires the viewer to be active
+    #for data in get_visual_data(body, link):
+    #    vertices.extend(vertices_from_data(data))
+    # Pybullet creates multiple collision elements (with unknown_file) when noncovex
+    for data in get_collision_data(body, link):
+        vertices.extend(vertices_from_data(data))
+    return vertices
+
+def aabb_from_rigid(body, pose=unit_pose()):
+    assert get_num_links(body) == 0
+    try:
+        vertices_local = vertices_from_link(body, BASE_LINK)
+    except RuntimeError:
+        info = get_model_info(body)
+        assert info is not None
+        _, ext = os.path.splitext(info.path)
+        if ext == '.obj':
+            mesh = read_obj(info.path)
+            vertices_local = mesh.vertices
+        else:
+            raise NotImplementedError(ext)
+    vertices_world = apply_affine(pose, vertices_local)
+    return aabb_from_points(vertices_world)
+
+def approximate_as_prism(body, body_pose=unit_pose()): #, **kwargs):
     # TODO: make it just orientation
-    with PoseSaver(body):
-        set_pose(body, body_pose)
-        set_velocity(body, linear=np.zeros(3), angular=np.zeros(3))
-        return get_center_extent(body, **kwargs)
+    lower, upper = aabb_from_rigid(body, pose=body_pose)
+    center = (np.array(lower) + np.array(upper)) / 2
+    extents = (np.array(upper) - np.array(lower))
+    return center, extents
+    #with PoseSaver(body):
+    #    set_pose(body, body_pose)
+    #    set_velocity(body, linear=np.zeros(3), angular=np.zeros(3))
+    #    return get_center_extent(body, **kwargs)
 
 def approximate_as_cylinder(body, **kwargs):
     center, (width, length, height) = approximate_as_prism(body, **kwargs)
@@ -2884,9 +2954,13 @@ def draw_circle(center, radius, n=24, **kwargs):
       vertices.append(center+radius*unit)
   return add_segments(vertices, closed=True, **kwargs)
 
+def get_aabb_vertices(aabb):
+    d = len(aabb[0])
+    return [tuple(aabb[i[k]][k] for k in range(d))
+            for i in product(range(len(aabb)), repeat=d)]
+
 def draw_aabb(aabb, **kwargs):
-    lower, upper = aabb
-    d = len(lower)
+    d = len(aabb[0])
     vertices = list(product(range(len(aabb)), repeat=d))
     lines = []
     for i1, i2 in combinations(vertices, 2):
@@ -3110,6 +3184,19 @@ def read_obj(path):
         elif tokens[0] == 'f':
             faces.append(tuple(int(token.split('/')[0]) - 1 for token in tokens[1:]))
     return Mesh(vertices, faces)
+
+
+def transform_obj_file(obj_string, transformation):
+    new_lines = []
+    for line in obj_string.split('\n'):
+        tokens = line.split()
+        if not tokens or (tokens[0] != 'v'):
+            new_lines.append(line)
+            continue
+        vertex = list(map(float, tokens[1:]))
+        transformed_vertex = transformation.dot(vertex)
+        new_lines.append('v {}'.format(' '.join(map(str, transformed_vertex))))
+    return '\n'.join(new_lines)
 
 
 def read_mesh_off(path, scale=1.0):
