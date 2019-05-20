@@ -728,6 +728,9 @@ COLOR_FROM_NAME = {
     'black': BLACK,
 }
 
+def apply_alpha(color, alpha=1.0):
+    return tuple(color) + (alpha,)
+
 def spaced_colors(n, s=1, v=1):
     return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]
 
