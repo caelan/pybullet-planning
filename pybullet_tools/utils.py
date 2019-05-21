@@ -1413,6 +1413,9 @@ def get_mass(body, link=BASE_LINK):
     # TOOD: get full mass
     return get_dynamics_info(body, link).mass
 
+def set_mass(body, mass, link=BASE_LINK):
+    p.changeDynamics(body, link, mass=mass, physicsClientId=CLIENT)
+
 def get_joint_inertial_pose(body, joint):
     dynamics_info = get_dynamics_info(body, joint)
     return dynamics_info.local_inertial_pos, dynamics_info.local_inertial_orn
@@ -1925,11 +1928,17 @@ def get_aabb(body, link=None):
 
 get_lower_upper = get_aabb
 
+def get_aabb_center(aabb):
+    lower, upper = aabb
+    return (np.array(lower) + np.array(upper)) / 2.
+
+def get_aabb_extent(aabb):
+    lower, upper = aabb
+    return np.array(upper) - np.array(lower)
+
 def get_center_extent(body, **kwargs):
-    lower, upper = get_aabb(body, **kwargs)
-    center = (np.array(lower) + np.array(upper)) / 2
-    extents = (np.array(upper) - np.array(lower))
-    return center, extents
+    aabb = get_aabb(body, **kwargs)
+    return get_aabb_center(aabb), get_aabb_extent(aabb)
 
 def aabb2d_from_aabb(aabb):
     (lower, upper) = aabb
@@ -1993,28 +2002,26 @@ def vertices_from_link(body, link):
         vertices.extend(vertices_from_data(data))
     return vertices
 
-def aabb_from_rigid(body, pose=unit_pose()):
+def vertices_from_rigid(body):
     assert get_num_links(body) == 0
     try:
-        vertices_local = vertices_from_link(body, BASE_LINK)
+        vertices = vertices_from_link(body, BASE_LINK)
     except RuntimeError:
         info = get_model_info(body)
         assert info is not None
         _, ext = os.path.splitext(info.path)
         if ext == '.obj':
             mesh = read_obj(info.path)
-            vertices_local = mesh.vertices
+            vertices = mesh.vertices
         else:
             raise NotImplementedError(ext)
-    vertices_world = apply_affine(pose, vertices_local)
-    return aabb_from_points(vertices_world)
+    return vertices
 
 def approximate_as_prism(body, body_pose=unit_pose()): #, **kwargs):
     # TODO: make it just orientation
-    lower, upper = aabb_from_rigid(body, pose=body_pose)
-    center = (np.array(lower) + np.array(upper)) / 2
-    extents = (np.array(upper) - np.array(lower))
-    return center, extents
+    vertices = apply_affine(body_pose, vertices_from_rigid(body))
+    aabb = aabb_from_points(vertices)
+    return get_aabb_center(aabb), get_aabb_extent(aabb)
     #with PoseSaver(body):
     #    set_pose(body, body_pose)
     #    set_velocity(body, linear=np.zeros(3), angular=np.zeros(3))
