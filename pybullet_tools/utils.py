@@ -1,14 +1,15 @@
 from __future__ import print_function
 
 import colorsys
+import json
 import math
 import os
 import pickle
 import platform
 import pybullet as p
+import random
 import sys
 import time
-import random
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
 
@@ -39,6 +40,7 @@ DEFAULT_TIME_STEP = 1./240. # seconds
 # Models
 
 # Robots
+ROOMBA_URDF = 'models/turtlebot/roomba.urdf'
 TURTLEBOT_URDF = 'models/turtlebot/turtlebot_holonomic.urdf'
 DRAKE_IIWA_URDF = "models/drake/iiwa_description/urdf/iiwa14_polytope_collision.urdf"
 KUKA_IIWA_URDF = "kuka_iiwa/model.urdf"
@@ -75,13 +77,22 @@ def write(filename, string):
     with open(filename, 'w') as f:
         f.write(string)
 
+def read_pickle(filename):
+    # Can sometimes read pickle3 from python2 by calling twice
+    # Can possibly read pickle2 from python3 by using encoding='latin1'
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
+
 def write_pickle(filename, data):  # NOTE - cannot pickle lambda or nested functions
     with open(filename, 'wb') as f:
         pickle.dump(data, f)
 
-def read_pickle(filename):
-    with open(filename, 'rb') as f:
-        return pickle.load(f)
+def read_json(path):
+    return json.loads(read(path))
+
+def write_json(path, data):
+    with open(path, 'w') as f:
+        json.dump(data, f, indent=2, sort_keys=True)
 
 def safe_remove(p):
     if os.path.exists(p):
@@ -183,12 +194,14 @@ class PoseSaver(Saver):
     def __init__(self, body):
         self.body = body
         self.pose = get_pose(self.body)
+        self.velocity = get_velocity(self.body)
 
     def apply_mapping(self, mapping):
         self.body = mapping.get(self.body, self.body)
 
     def restore(self):
         set_pose(self.body, self.pose)
+        set_velocity(self.body, *self.velocity)
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.body)
@@ -260,7 +273,8 @@ ModelInfo = namedtuple('URDFInfo', ['name', 'path', 'fixed_base', 'scale'])
 INFO_FROM_BODY = {}
 
 def get_model_info(body):
-    return INFO_FROM_BODY.get((CLIENT, body), None)
+    key = (CLIENT, body)
+    return INFO_FROM_BODY.get(key, None)
 
 def get_urdf_flags(cache=False):
     # by default, Bullet disables self-collision
@@ -703,6 +717,19 @@ WHITE = (1, 1, 1, 1)
 BROWN = (0.396, 0.263, 0.129, 1)
 TAN = (0.824, 0.706, 0.549, 1)
 GREY = (0.5, 0.5, 0.5, 1)
+YELLOW = (1, 1, 0, 1)
+
+COLOR_FROM_NAME = {
+    'red': RED,
+    'green': GREEN,
+    'blue': BLUE,
+    'white': WHITE,
+    'grey': GREY,
+    'black': BLACK,
+}
+
+def apply_alpha(color, alpha=1.0):
+    return tuple(color) + (alpha,)
 
 def spaced_colors(n, s=1, v=1):
     return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]
@@ -987,6 +1014,16 @@ def set_base_values(body, values):
     x, y, theta = values
     set_point(body, (x, y, z))
     set_quat(body, z_rotation(theta))
+
+def get_velocity(body):
+    linear, angular = p.getBaseVelocity(body, physicsClientId=CLIENT)
+    return linear, angular # [x,y,z], [wx,wy,wz]
+
+def set_velocity(body, linear=None, angular=None):
+    if linear is not None:
+        p.resetBaseVelocity(body, linearVelocity=linear, physicsClientId=CLIENT)
+    if angular is not None:
+        p.resetBaseVelocity(body, angularVelocity=angular, physicsClientId=CLIENT)
 
 def is_rigid_body(body):
     for joint in get_joints(body):
@@ -1376,6 +1413,9 @@ def get_mass(body, link=BASE_LINK):
     # TOOD: get full mass
     return get_dynamics_info(body, link).mass
 
+def set_mass(body, mass, link=BASE_LINK):
+    p.changeDynamics(body, link, mass=mass, physicsClientId=CLIENT)
+
 def get_joint_inertial_pose(body, joint):
     dynamics_info = get_dynamics_info(body, joint)
     return dynamics_info.local_inertial_pos, dynamics_info.local_inertial_orn
@@ -1579,9 +1619,11 @@ VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
                                                  'localVisualFrame_position', 'localVisualFrame_orientation',
                                                  'rgbaColor']) # 'textureUniqueId'
 
+UNKNOWN_FILE = 'unknown_file'
+
 def visual_shape_from_data(data, client=None):
     client = get_client(client)
-    if (data.visualGeometryType == p.GEOM_MESH) and (data.meshAssetFileName == 'unknown_file'):
+    if (data.visualGeometryType == p.GEOM_MESH) and (data.meshAssetFileName == UNKNOWN_FILE):
         return -1
     # visualFramePosition: translational offset of the visual shape with respect to the link
     # visualFrameOrientation: rotational offset (quaternion x,y,z,w) of the visual shape with respect to the link frame
@@ -1613,7 +1655,7 @@ CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'link
 
 def collision_shape_from_data(data, body, link, client=None):
     client = get_client(client)
-    if (data.geometry_type == p.GEOM_MESH) and (data.filename == 'unknown_file'):
+    if (data.geometry_type == p.GEOM_MESH) and (data.filename == UNKNOWN_FILE):
         return -1
     pose = (data.local_frame_pos, data.local_frame_orn)
     pose = multiply(get_joint_inertial_pose(body, link), pose)
@@ -1739,7 +1781,13 @@ def get_data_type(data):
     return data.geometry_type if isinstance(data, CollisionShapeData) else data.visualGeometryType
 
 def get_data_filename(data):
-    return data.filename if isinstance(data, CollisionShapeData) else data.meshAssetFileName
+    return (data.filename if isinstance(data, CollisionShapeData)
+            else data.meshAssetFileName).decode(encoding='UTF-8')
+
+def get_data_pose(data):
+    if isinstance(data, CollisionShapeData):
+        return (data.local_frame_pos, data.local_frame_orn)
+    return (data.localVisualFrame_position, data.localVisualFrame_orientation)
 
 def get_default_geometry():
     return {
@@ -1852,6 +1900,12 @@ def aabb_from_points(points):
 def aabb_union(aabbs):
     return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
 
+def aabb_overlap(aabb1, aabb2):
+    lower1, upper1 = aabb1
+    lower2, upper2 = aabb2
+    return np.less_equal(lower1, upper2).all() and \
+           np.less_equal(lower2, upper1).all()
+
 def get_subtree_aabb(body, root_link=BASE_LINK):
     return aabb_union(get_aabb(body, link) for link in get_link_subtree(body, root_link))
 
@@ -1874,11 +1928,17 @@ def get_aabb(body, link=None):
 
 get_lower_upper = get_aabb
 
-def get_center_extent(body):
-    lower, upper = get_aabb(body)
-    center = (np.array(lower) + np.array(upper)) / 2
-    extents = (np.array(upper) - np.array(lower))
-    return center, extents
+def get_aabb_center(aabb):
+    lower, upper = aabb
+    return (np.array(lower) + np.array(upper)) / 2.
+
+def get_aabb_extent(aabb):
+    lower, upper = aabb
+    return np.array(upper) - np.array(lower)
+
+def get_center_extent(body, **kwargs):
+    aabb = get_aabb(body, **kwargs)
+    return get_aabb_center(aabb), get_aabb_extent(aabb)
 
 def aabb2d_from_aabb(aabb):
     (lower, upper) = aabb
@@ -1887,30 +1947,90 @@ def aabb2d_from_aabb(aabb):
 def aabb_contains_aabb(contained, container):
     lower1, upper1 = contained
     lower2, upper2 = container
-    return np.greater_equal(lower1, lower2).all() and np.greater_equal(upper2, upper1).all()
+    return np.less_equal(lower2, lower1).all() and \
+           np.less_equal(upper1, upper2).all()
     #return np.all(lower2 <= lower1) and np.all(upper1 <= upper2)
 
 def aabb_contains_point(point, container):
     lower, upper = container
-    return np.greater_equal(point, lower).all() and np.greater_equal(upper, point).all()
+    return np.less_equal(lower, point).all() and \
+           np.less_equal(point, upper).all()
     #return np.all(lower <= point) and np.all(point <= upper)
 
 def get_bodies_in_region(aabb):
     (lower, upper) = aabb
     return p.getOverlappingObjects(lower, upper, physicsClientId=CLIENT)
 
-def approximate_as_prism(body, body_pose=unit_pose()):
-    # TODO: make it just orientation
-    with PoseSaver(body):
-        set_pose(body, body_pose)
-        return get_center_extent(body)
+#####################################
 
-def approximate_as_cylinder(body, body_pose=unit_pose()):
-    with PoseSaver(body):
-        set_pose(body, body_pose)
-        center, (width, length, height) = get_center_extent(body)
-        diameter = (width + length) / 2 # TODO: check that these are close
-        return center, (diameter, height)
+# AABB approximation
+
+def vertices_from_data(data):
+    geometry_type = get_data_type(data)
+    #if geometry_type == p.GEOM_SPHERE:
+    #    parameters = [get_data_radius(data)]
+    if geometry_type == p.GEOM_BOX:
+        extents = get_data_extents(data)
+        aabb = AABB(-extents/2., +extents/2.)
+        vertices = get_aabb_vertices(aabb)
+    elif geometry_type in (p.GEOM_CYLINDER, p.GEOM_CAPSULE):
+        radius, height = get_data_radius(data), get_data_height(data)
+        extents = np.array([2*radius, 2*radius, height])
+        aabb = AABB(-extents/2., +extents/2.)
+        vertices = get_aabb_vertices(aabb)
+    elif geometry_type == p.GEOM_MESH:
+        filename, scale = get_data_filename(data), get_data_scale(data)
+        if filename == UNKNOWN_FILE:
+            raise RuntimeError(filename)
+        mesh = read_obj(filename)
+        vertices = [scale*np.array(vertex) for vertex in mesh.vertices]
+        # TODO: could compute AABB here for improved speed at the cost of being conservative
+    #elif geometry_type == p.GEOM_PLANE:
+    #   parameters = [get_data_extents(data)]
+    else:
+        raise NotImplementedError(geometry_type)
+    return apply_affine(get_data_pose(data), vertices)
+
+def vertices_from_link(body, link):
+    # In local frame
+    vertices = []
+    # TODO: requires the viewer to be active
+    #for data in get_visual_data(body, link):
+    #    vertices.extend(vertices_from_data(data))
+    # Pybullet creates multiple collision elements (with unknown_file) when noncovex
+    for data in get_collision_data(body, link):
+        vertices.extend(vertices_from_data(data))
+    return vertices
+
+def vertices_from_rigid(body):
+    assert get_num_links(body) == 0
+    try:
+        vertices = vertices_from_link(body, BASE_LINK)
+    except RuntimeError:
+        info = get_model_info(body)
+        assert info is not None
+        _, ext = os.path.splitext(info.path)
+        if ext == '.obj':
+            mesh = read_obj(info.path)
+            vertices = mesh.vertices
+        else:
+            raise NotImplementedError(ext)
+    return vertices
+
+def approximate_as_prism(body, body_pose=unit_pose()): #, **kwargs):
+    # TODO: make it just orientation
+    vertices = apply_affine(body_pose, vertices_from_rigid(body))
+    aabb = aabb_from_points(vertices)
+    return get_aabb_center(aabb), get_aabb_extent(aabb)
+    #with PoseSaver(body):
+    #    set_pose(body, body_pose)
+    #    set_velocity(body, linear=np.zeros(3), angular=np.zeros(3))
+    #    return get_center_extent(body, **kwargs)
+
+def approximate_as_cylinder(body, **kwargs):
+    center, (width, length, height) = approximate_as_prism(body, **kwargs)
+    diameter = (width + length) / 2  # TODO: check that these are close
+    return center, (diameter, height)
 
 #####################################
 
@@ -1975,11 +2095,9 @@ def batch_ray_collision(rays):
 
 # Joint motion planning
 
-def get_sample_fn(body, joints, custom_limits={}):
-    lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits, circular_limits=CIRCULAR_LIMITS)
-    def fn():
-        return tuple(np.random.uniform(lower_limits, upper_limits))
-    return fn
+def uniform_generator(d):
+    while True:
+        yield np.random.uniform(size=d)
 
 def halton_generator(d):
     import ghalton
@@ -1988,16 +2106,19 @@ def halton_generator(d):
     while True:
         yield sequencer.get(1)[0]
 
-def uniform_generator(d):
-    while True:
-        yield np.random.uniform(size=d)
+def unit_generator(d, use_halton=False):
+    return halton_generator(d) if use_halton else uniform_generator(d)
 
-def get_halton_sample_fn(body, joints, custom_limits={}):
-    generator = halton_generator(len(joints))
+def get_sample_fn(body, joints, custom_limits={}, **kwargs):
+    generator = unit_generator(len(joints), **kwargs)
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits, circular_limits=CIRCULAR_LIMITS)
+    limits_extents = np.array(upper_limits) - np.array(lower_limits)
     def fn():
-        return next(generator) * (np.array(upper_limits) - np.array(lower_limits)) + np.array(lower_limits)
+        return tuple(next(generator) * limits_extents + np.array(lower_limits))
     return fn
+
+def get_halton_sample_fn(body, joints, **kwargs):
+    return get_sample_fn(body, joints, use_halton=True, **kwargs)
 
 def get_difference_fn(body, joints):
     circular_joints = [is_circular(body, joint) for joint in joints]
@@ -2214,6 +2335,20 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
 
 # SE(2) pose motion planning
 
+def get_base_difference_fn():
+    def fn(q2, q1):
+        dx, dy = np.array(q2[:2]) - np.array(q1[:2])
+        dtheta = circular_difference(q2[2], q1[2])
+        return (dx, dy, dtheta)
+    return fn
+
+def get_base_distance_fn(weights=1*np.ones(3)):
+    difference_fn = get_base_difference_fn()
+    def fn(q1, q2):
+        difference = np.array(difference_fn(q2, q1))
+        return np.sqrt(np.dot(weights, difference * difference))
+    return fn
+
 def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
                      weights=1*np.ones(3), resolutions=0.05*np.ones(3),
                      max_distance=MAX_DISTANCE, **kwargs):
@@ -2222,14 +2357,9 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
         theta = np.random.uniform(*CIRCULAR_LIMITS)
         return (x, y, theta)
 
-    def difference_fn(q2, q1):
-        dx, dy = np.array(q2[:2]) - np.array(q1[:2])
-        dtheta = circular_difference(q2[2], q1[2])
-        return (dx, dy, dtheta)
 
-    def distance_fn(q1, q2):
-        difference = np.array(difference_fn(q2, q1))
-        return np.sqrt(np.dot(weights, difference * difference))
+    difference_fn = get_base_difference_fn()
+    distance_fn = get_base_distance_fn(weights=weights)
 
     def extend_fn(q1, q2):
         steps = np.abs(np.divide(difference_fn(q2, q1), resolutions))
@@ -2292,7 +2422,7 @@ def sample_placement(top_body, bottom_body, top_pose=unit_pose(), bottom_link=No
                      percent=1.0, max_attempts=50, epsilon=1e-3):
     # TODO: transform into the coordinate system of the bottom
     # TODO: maybe I should instead just require that already in correct frame
-    bottom_aabb = get_lower_upper(bottom_body, link=bottom_link)
+    bottom_aabb = get_aabb(bottom_body, link=bottom_link)
     for _ in range(max_attempts):
         theta = np.random.uniform(*CIRCULAR_LIMITS)
         rotation = Euler(yaw=theta)
@@ -2300,7 +2430,7 @@ def sample_placement(top_body, bottom_body, top_pose=unit_pose(), bottom_link=No
         center, extent = get_center_extent(top_body)
         lower = (np.array(bottom_aabb[0]) + percent*extent/2)[:2]
         upper = (np.array(bottom_aabb[1]) - percent*extent/2)[:2]
-        if np.greater(lower, upper).any():
+        if np.less(upper, lower).any():
             continue
         x, y = np.random.uniform(lower, upper)
         z = (bottom_aabb[1] + extent/2.)[2] + epsilon
@@ -2834,9 +2964,13 @@ def draw_circle(center, radius, n=24, **kwargs):
       vertices.append(center+radius*unit)
   return add_segments(vertices, closed=True, **kwargs)
 
+def get_aabb_vertices(aabb):
+    d = len(aabb[0])
+    return [tuple(aabb[i[k]][k] for k in range(d))
+            for i in product(range(len(aabb)), repeat=d)]
+
 def draw_aabb(aabb, **kwargs):
-    lower, upper = aabb
-    d = len(lower)
+    d = len(aabb[0])
     vertices = list(product(range(len(aabb)), repeat=d))
     lines = []
     for i1, i2 in combinations(vertices, 2):
@@ -2864,7 +2998,7 @@ def draw_mesh(mesh, **kwargs):
     lines = []
     for indices in faces:
         #for i1, i2 in combinations(indices, 2):
-        for i1, i2 in zip(indices[-1] +  indices[-1:], indices):
+        for i1, i2 in zip(indices, indices[1:] + indices[:1]):
             lines.append(add_line(verts[i1], verts[i2], **kwargs))
     return lines
 
@@ -2873,6 +3007,7 @@ def draw_mesh(mesh, **kwargs):
 # Polygonal surfaces
 
 def create_rectangular_surface(width, length):
+    # TODO: unify with rectangular_mesh
     extents = np.array([width, length, 0]) / 2.
     unit_corners = [(-1, -1), (+1, -1), (+1, +1), (-1, +1)]
     return [np.append(c, 0) * extents for c in unit_corners]
@@ -3006,6 +3141,14 @@ def mesh_from_points(points):
         new_indices.append(tuple(triplet))
     return Mesh(vertices.tolist(), new_indices)
 
+def rectangular_mesh(width, length):
+    # TODO: 2.5d polygon
+    extents = np.array([width, length, 0])/2.
+    unit_corners = [(-1, -1), (+1, -1), (+1, +1), (-1, +1)]
+    vertices = [np.append(c, [0])*extents for c in unit_corners]
+    faces = [(0, 1, 2), (2, 3, 0)]
+    return Mesh(vertices, faces)
+
 def mesh_from_body(body, link=BASE_LINK):
     # TODO: read obj files so I can always obtain the pointcloud
     # TODO: approximate cylindrical/spherical using convex hull
@@ -3037,6 +3180,34 @@ def obj_file_from_mesh(mesh, under=True):
         if under:
             s += '\nf {}'.format(' '.join(map(str, reversed(f))))
     return s
+
+
+def read_obj(path):
+    vertices = []
+    faces = []
+    for line in read(path).split('\n'):
+        tokens = line.split()
+        if not tokens:
+            continue
+        if tokens[0] == 'v':
+            vertices.append(tuple(map(float, tokens[1:])))
+        elif tokens[0] == 'f':
+            faces.append(tuple(int(token.split('/')[0]) - 1 for token in tokens[1:]))
+    return Mesh(vertices, faces)
+
+
+def transform_obj_file(obj_string, transformation):
+    new_lines = []
+    for line in obj_string.split('\n'):
+        tokens = line.split()
+        if not tokens or (tokens[0] != 'v'):
+            new_lines.append(line)
+            continue
+        vertex = list(map(float, tokens[1:]))
+        transformed_vertex = transformation.dot(vertex)
+        new_lines.append('v {}'.format(' '.join(map(str, transformed_vertex))))
+    return '\n'.join(new_lines)
+
 
 def read_mesh_off(path, scale=1.0):
     """

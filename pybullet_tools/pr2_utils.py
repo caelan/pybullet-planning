@@ -313,7 +313,8 @@ def get_top_cylinder_grasps(body, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                        reflect_z, translate_center, body_pose)
 
 def get_side_cylinder_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
-                             max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH, top_offset=SIDE_HEIGHT_OFFSET):
+                             max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH,
+                             top_offset=SIDE_HEIGHT_OFFSET):
     center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
     translate_center = Pose(point_from_pose(body_pose)-center)
     #x_offset = 0
