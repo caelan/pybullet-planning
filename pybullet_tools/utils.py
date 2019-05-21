@@ -2774,12 +2774,12 @@ def add_debug_parameter():
     raise NotImplementedError()
 
 def add_text(text, position=(0, 0, 0), color=(0, 0, 0), lifetime=None, parent=-1, parent_link=BASE_LINK):
-    return p.addUserDebugText(str(text), textPosition=position, textColorRGB=color, # textSize=1,
+    return p.addUserDebugText(str(text), textPosition=position, textColorRGB=color[:3], # textSize=1,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
 
 def add_line(start, end, color=(0, 0, 0), width=1, lifetime=None, parent=-1, parent_link=BASE_LINK):
-    return p.addUserDebugLine(start, end, lineColorRGB=color, lineWidth=width,
+    return p.addUserDebugLine(start, end, lineColorRGB=color[:3], lineWidth=width,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
 
