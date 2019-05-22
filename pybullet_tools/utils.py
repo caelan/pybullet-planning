@@ -116,7 +116,6 @@ def clip(value, min_value=-INF, max_value=+INF):
 # https://stackoverflow.com/questions/4178614/suppressing-output-of-module-calling-outside-library
 # https://stackoverflow.com/questions/4675728/redirect-stdout-to-a-file-in-python/22434262#22434262
 
-DEFAULT_OUTPUT = True
 
 class HideOutput(object):
     '''
@@ -125,7 +124,10 @@ class HideOutput(object):
     with HideOutput():
         os.system('ls -l')
     '''
-    def __init__(self, enable=DEFAULT_OUTPUT):
+    DEFAULT_ENABLE = True
+    def __init__(self, enable=None):
+        if enable is None:
+            enable = self.DEFAULT_ENABLE
         self.enable = enable
         if not self.enable:
             return

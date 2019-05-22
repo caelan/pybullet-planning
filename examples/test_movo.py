@@ -26,7 +26,7 @@ def main():
     add_data_path()
 
     plane = p.loadURDF("plane.urdf")
-    #with HideOutput(False):
+    #with HideOutput():
     with LockRenderer():
         robot = load_model(MOVO_URDF, fixed_base=True)
     dump_body(robot)

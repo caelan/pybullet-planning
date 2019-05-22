@@ -84,7 +84,7 @@ def parse_robot(robot):
     right_arm = parse_array(robot.find('right_arm'))
     assert (name == 'pr2')
 
-    with HideOutput(True):
+    with HideOutput():
         robot_id = load_model(DRAKE_PR2_URDF, fixed_base=True)
     set_group_conf(robot_id, 'base', base_values_from_pose(pose))
     set_group_conf(robot_id, 'torso', torso)

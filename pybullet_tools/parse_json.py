@@ -25,7 +25,7 @@ def parse_color(color_json):
 def parse_robot(robot_json):
     pose = parse_pose(robot_json)
     if robot_json['name'] == 'pr2':
-        with HideOutput(True):
+        with HideOutput():
             robot_id = load_model(DRAKE_PR2_URDF, fixed_base=True)
         set_group_conf(robot_id, 'base',  base_values_from_pose(pose))
     else:
