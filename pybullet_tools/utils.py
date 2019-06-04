@@ -486,6 +486,9 @@ def connect(use_gui=True, shadows=True):
     # http://openrave.org/docs/0.8.2/_modules/openravepy/misc/#SetViewerUserThread
     # https://github.com/bulletphysics/bullet3/blob/6b2cae1b1d63056ef48c64b39c8db6027e897663/examples/pybullet/examples/vrminitaur.py#L7
     # make sure to compile pybullet with PYBULLET_USE_NUMPY enabled
+    if use_gui and ('DISPLAY' not in os.environ):
+        use_gui = False
+        print('No display detected!')
     method = p.GUI if use_gui else p.DIRECT
     with HideOutput():
         # options="--width=1024 --height=768"
