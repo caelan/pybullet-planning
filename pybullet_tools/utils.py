@@ -1981,6 +1981,11 @@ def vertices_from_data(data):
         extents = np.array([2*radius, 2*radius, height])
         aabb = AABB(-extents/2., +extents/2.)
         vertices = get_aabb_vertices(aabb)
+    elif geometry_type == p.GEOM_SPHERE:
+        radius = get_data_radius(data)
+        half_extents = radius*np.ones(3)
+        aabb = AABB(-half_extents, +half_extents)
+        vertices = get_aabb_vertices(aabb)
     elif geometry_type == p.GEOM_MESH:
         filename, scale = get_data_filename(data), get_data_scale(data)
         if filename == UNKNOWN_FILE:
