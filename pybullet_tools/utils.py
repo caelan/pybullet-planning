@@ -1424,8 +1424,12 @@ def get_mass(body, link=BASE_LINK):
     # TOOD: get full mass
     return get_dynamics_info(body, link).mass
 
+def set_dynamics(body, link=BASE_LINK, **kwargs):
+    # TODO: iterate over all links
+    p.changeDynamics(body, link, physicsClientId=CLIENT, **kwargs)
+
 def set_mass(body, mass, link=BASE_LINK):
-    p.changeDynamics(body, link, mass=mass, physicsClientId=CLIENT)
+    set_dynamics(body, link=link, mass=mass)
 
 def get_joint_inertial_pose(body, joint):
     dynamics_info = get_dynamics_info(body, joint)
@@ -1924,17 +1928,16 @@ def get_aabbs(body):
     return [get_aabb(body, link=link) for link in get_all_links(body)]
 
 def get_aabb(body, link=None):
-    # getOverlappingObjects
     # Note that the query is conservative and may return additional objects that don't have actual AABB overlap.
     # This happens because the acceleration structures have some heuristic that enlarges the AABBs a bit
     # (extra margin and extruded along the velocity vector).
+    # Contact points with distance exceeding this threshold are not processed by the LCP solver.
     # AABBs are extended by this number. Defaults to 0.02 in Bullet 2.x
     #p.setPhysicsEngineParameter(contactBreakingThreshold=0.0, physicsClientId=CLIENT)
     if link is None:
         aabb = aabb_union(get_aabbs(body))
     else:
         aabb = p.getAABB(body, linkIndex=link, physicsClientId=CLIENT)
-    #p.setPhysicsEngineParameter(contactBreakingThreshold=0.02, physicsClientId=CLIENT)
     return aabb
 
 get_lower_upper = get_aabb
