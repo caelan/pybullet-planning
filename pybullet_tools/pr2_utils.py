@@ -7,6 +7,8 @@ from itertools import combinations
 
 import numpy as np
 
+from pybullet_tools.utils import get_min_limit, get_max_limit, get_extend_fn, get_moving_links, set_joint_positions, \
+    any_link_pair_collision
 from .pr2_never_collisions import NEVER_COLLISIONS
 from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, joints_from_names, \
     set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
@@ -725,9 +727,7 @@ def get_base_extend_fn(robot):
 
 #####################################
 
-def compute_grasp_width(robot, arm, body, grasp_pose, num_steps=25):
-    # TODO: merge with the LTAMP version
-    gripper_joints = get_gripper_joints(robot, arm)
+def close_until_collision(robot, gripper_joints, bodies=[], num_steps=25, **kwargs):
     closed_conf = [get_min_limit(robot, joint) for joint in gripper_joints]
     open_conf = [get_max_limit(robot, joint) for joint in gripper_joints]
     resolutions = np.abs(np.array(open_conf) - np.array(closed_conf)) / num_steps
@@ -735,18 +735,23 @@ def compute_grasp_width(robot, arm, body, grasp_pose, num_steps=25):
     collision_links = get_moving_links(robot, gripper_joints)
     close_path = [open_conf] + list(extend_fn(open_conf, closed_conf))
 
-    tool_link = link_from_name(robot, PR2_TOOL_FRAMES[arm])
-    tool_pose = get_link_pose(robot, tool_link)
-    body_pose = multiply(tool_pose, grasp_pose)
-    set_pose(body, body_pose)
-
     for i, conf in enumerate(close_path):
         set_joint_positions(robot, gripper_joints, conf)
-        if link_pairs_collision(robot, collision_links, body):
+        if any(any_link_pair_collision(robot, collision_links, body, **kwargs) for body in bodies):
             if i == 0:
                 return None
             return close_path[i-1][0]
     return close_path[-1][0]
+
+
+def compute_grasp_width(robot, arm, body, grasp_pose, **kwargs):
+    gripper_joints = get_gripper_joints(robot, arm)
+    tool_link = link_from_name(robot, PR2_TOOL_FRAMES[arm])
+    tool_pose = get_link_pose(robot, tool_link)
+    body_pose = multiply(tool_pose, grasp_pose)
+    set_pose(body, body_pose)
+    return close_until_collision(robot, gripper_joints, bodies=[body], **kwargs)
+
 
 def create_gripper(robot, arm, visual=True):
     link_name = PR2_GRIPPER_ROOTS[arm]
