@@ -110,6 +110,12 @@ def safe_zip(sequence1, sequence2):
 def clip(value, min_value=-INF, max_value=+INF):
     return min(max(min_value, value), max_value)
 
+def randomize(sequence): # TODO: bisect
+    indices = range(len(sequence))
+    random.shuffle(indices)
+    for i in indices:
+        yield sequence[i]
+
 #####################################
 
 # https://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python/14797594#14797594
@@ -295,7 +301,17 @@ def load_pybullet(filename, fixed_base=False, scale=1., **kwargs):
     # fixed_base=False implies infinite base mass
     flags = get_urdf_flags(**kwargs)
     with LockRenderer():
-        body = p.loadURDF(filename, useFixedBase=fixed_base, globalScaling=scale, flags=flags, physicsClientId=CLIENT)
+        if filename.endswith('.urdf'):
+            body = p.loadURDF(filename, useFixedBase=fixed_base, flags=flags,
+                              globalScaling=scale, physicsClientId=CLIENT)
+        elif filename.endswith('.sdf'):
+            body = p.loadSDF(filename, physicsClientId=CLIENT)
+        elif filename.endswith('.xml'):
+            body = p.loadMJCF(filename, physicsClientId=CLIENT)
+        elif filename.endswith('.bullet'):
+            body = p.loadBullet(filename, physicsClientId=CLIENT)
+        else:
+            raise ValueError(filename)
     INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, filename, fixed_base, scale)
     return body
 
@@ -322,26 +338,14 @@ def get_model_path(rel_path): # TODO: add to search path
     directory = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(directory, '..', rel_path)
 
-def load_model(rel_path, pose=None, fixed_base=True, scale=1., **kwargs):
+def load_model(rel_path, pose=None, **kwargs):
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
     abs_path = get_model_path(rel_path)
-    flags = get_urdf_flags(**kwargs)
     add_data_path()
     #with LockRenderer():
-    if abs_path.endswith('.urdf'):
-        body = p.loadURDF(abs_path, useFixedBase=fixed_base, flags=flags,
-                          globalScaling=scale, physicsClientId=CLIENT)
-    elif abs_path.endswith('.sdf'):
-        body = p.loadSDF(abs_path, physicsClientId=CLIENT)
-    elif abs_path.endswith('.xml'):
-        body = p.loadMJCF(abs_path, physicsClientId=CLIENT)
-    elif abs_path.endswith('.bullet'):
-        body = p.loadBullet(abs_path, physicsClientId=CLIENT)
-    else:
-        raise ValueError(abs_path)
+    body = load_pybullet(abs_path, **kwargs)
     if pose is not None:
         set_pose(body, pose)
-    INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, abs_path, fixed_base, scale)
     return body
 
 #####################################
@@ -590,8 +594,9 @@ def get_data_path():
     import pybullet_data
     return pybullet_data.getDataPath()
 
-def add_data_path():
-    data_path = get_data_path()
+def add_data_path(data_path=None):
+    if data_path is None:
+        data_path = get_data_path()
     p.setAdditionalSearchPath(data_path)
     return data_path
 
@@ -1976,7 +1981,7 @@ def vertices_from_data(data):
     #if geometry_type == p.GEOM_SPHERE:
     #    parameters = [get_data_radius(data)]
     if geometry_type == p.GEOM_BOX:
-        extents = get_data_extents(data)
+        extents = np.array(get_data_extents(data))
         aabb = AABB(-extents/2., +extents/2.)
         vertices = get_aabb_vertices(aabb)
     elif geometry_type in (p.GEOM_CYLINDER, p.GEOM_CAPSULE):
@@ -2064,10 +2069,20 @@ def pairwise_collision(body1, body2, max_distance=MAX_DISTANCE): # 10000
                                   physicsClientId=CLIENT)) != 0 # getContactPoints
 
 
-def pairwise_link_collision(body1, link1, body2, link2, max_distance=MAX_DISTANCE): # 10000
+def pairwise_link_collision(body1, link1, body2, link2=BASE_LINK, max_distance=MAX_DISTANCE): # 10000
     return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
                                   linkIndexA=link1, linkIndexB=link2,
                                   physicsClientId=CLIENT)) != 0 # getContactPoints
+
+def any_link_pair_collision(body1, links1, body2, links2=None, **kwargs):
+    if links2 is None:
+        links2 = get_all_links(body2)
+    for link1, link2 in product(links1, links2):
+        if (body1 == body2) and (link1 == link2):
+            continue
+        if pairwise_link_collision(body1, link1, body2, link2, **kwargs):
+            return True
+    return False
 
 #def single_collision(body, max_distance=1e-3):
 #    return len(p.getClosestPoints(body, max_distance=max_distance)) != 0
