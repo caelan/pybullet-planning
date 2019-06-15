@@ -870,6 +870,10 @@ def get_distance(p1, p2, **kwargs):
 def angle_between(vec1, vec2):
     return np.math.acos(np.dot(vec1, vec2) / (get_length(vec1) *  get_length(vec2)))
 
+def get_angle(q1, q2):
+    dx, dy = np.array(q2[:2]) - np.array(q1[:2])
+    return np.math.atan2(dy, dx)
+
 def get_unit_vector(vec):
     norm = get_length(vec)
     if norm == 0:
@@ -2359,6 +2363,54 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
         handles.append(add_line(draw_fn(samples[i1]), draw_fn(samples[i2]), color=color))
     wait_for_interrupt()
     return path
+
+#####################################
+
+def get_nonholonomic_distance_fn(body, joints, weights=None):
+    assert weights is None
+    assert len(joints) == 3
+    linear_extend_fn = get_distance_fn(body, joints[:2])
+    angular_extend_fn = get_distance_fn(body, joints[2:])
+
+    def distance_fn(q1, q2):
+        theta = get_angle(q1, q2)
+        return angular_extend_fn(q1[2:], [theta]) + \
+               linear_extend_fn(q1[:2], q2[:2]) + \
+               angular_extend_fn([theta], q2[2:])
+    return distance_fn
+
+def get_nonholonomic_extend_fn(body, joints, resolutions=None):
+    assert resolutions is None
+    assert len(joints) == 3
+    linear_extend_fn = get_extend_fn(body, joints[:2])
+    angular_extend_fn = get_extend_fn(body, joints[2:])
+
+    def extend_fn(q1, q2):
+        theta = get_angle(q1, q2)
+        for aq in angular_extend_fn(q1[2:], [theta]):
+            yield np.append(q1[:2], aq)
+        for lq in linear_extend_fn(q1[:2], q2[:2]):
+            yield np.append(lq, [theta])
+        for aq in angular_extend_fn([theta], q2[2:]):
+            yield np.append(q2[:2], aq)
+    return extend_fn
+
+def plan_nonholonomic_motion(body, joints, end_conf, obstacles=None, attachments=[],
+                             self_collisions=True, disabled_collisions=set(),
+                             weights=None, resolutions=None,
+                             max_distance=MAX_DISTANCE, custom_limits={}, **kwargs):
+
+    assert len(joints) == len(end_conf)
+    sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
+    distance_fn = get_nonholonomic_distance_fn(body, joints, weights=weights)
+    extend_fn = get_nonholonomic_extend_fn(body, joints, resolutions=resolutions)
+    collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
+                                    custom_limits=custom_limits, max_distance=max_distance)
+
+    start_conf = get_joint_positions(body, joints)
+    if not check_initial_end(start_conf, end_conf, collision_fn):
+        return None
+    return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
 
 #####################################
 
