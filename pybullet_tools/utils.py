@@ -2070,18 +2070,21 @@ ContactResult = namedtuple('ContactResult', ['contactFlag', 'bodyUniqueIdA', 'bo
                                          'linkIndexA', 'linkIndexB', 'positionOnA', 'positionOnB',
                                          'contactNormalOnB', 'contactDistance', 'normalForce'])
 
-def pairwise_collision(body1, body2, max_distance=MAX_DISTANCE): # 10000
-    # TODO: confirm that this doesn't just check the base link
-    return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
-                                  physicsClientId=CLIENT)) != 0 # getContactPoints
-
-
 def pairwise_link_collision(body1, link1, body2, link2=BASE_LINK, max_distance=MAX_DISTANCE): # 10000
     return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
                                   linkIndexA=link1, linkIndexB=link2,
                                   physicsClientId=CLIENT)) != 0 # getContactPoints
 
+def expand_links(body):
+    body, links = body if isinstance(body, tuple) else (body, None)
+    if links is None:
+        links = get_all_links(body)
+    return body, links
+
 def any_link_pair_collision(body1, links1, body2, links2=None, **kwargs):
+    # TODO: this likely isn't needed anymore
+    if links1 is None:
+        links1 = get_all_links(body1)
     if links2 is None:
         links2 = get_all_links(body2)
     for link1, link2 in product(links1, links2):
@@ -2090,6 +2093,18 @@ def any_link_pair_collision(body1, links1, body2, links2=None, **kwargs):
         if pairwise_link_collision(body1, link1, body2, link2, **kwargs):
             return True
     return False
+
+def body_collision(body1, body2, max_distance=MAX_DISTANCE): # 10000
+    # TODO: confirm that this doesn't just check the base link
+    return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
+                                  physicsClientId=CLIENT)) != 0 # getContactPoints`
+
+def pairwise_collision(body1, body2, **kwargs):
+    if isinstance(body1, tuple) or isinstance(body2, tuple):
+        body1, links1 = expand_links(body1)
+        body2, links2 = expand_links(body2)
+        return any_link_pair_collision(body1, links1, body2, links2, **kwargs)
+    return body_collision(body1, body2, **kwargs)
 
 #def single_collision(body, max_distance=1e-3):
 #    return len(p.getClosestPoints(body, max_distance=max_distance)) != 0
