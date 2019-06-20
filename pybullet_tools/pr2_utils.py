@@ -728,6 +728,8 @@ def get_base_extend_fn(robot):
 #####################################
 
 def close_until_collision(robot, gripper_joints, bodies=[], num_steps=25, **kwargs):
+    if not gripper_joints:
+        return None
     closed_conf = [get_min_limit(robot, joint) for joint in gripper_joints]
     open_conf = [get_max_limit(robot, joint) for joint in gripper_joints]
     resolutions = np.abs(np.array(open_conf) - np.array(closed_conf)) / num_steps

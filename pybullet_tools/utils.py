@@ -263,6 +263,29 @@ class WorldSaver(Saver):
 
 #####################################
 
+def get_connected_components(vertices, edges):
+    undirected_edges = defaultdict(set)
+    for v1, v2 in edges:
+        undirected_edges[v1].add(v2)
+        undirected_edges[v2].add(v1)
+    clusters = []
+    processed = set()
+    for v0 in vertices:
+        if v0 in processed:
+            continue
+        cluster = {v0}
+        queue = deque([v0])
+        while queue:
+            v1 = queue.popleft()
+            for v2 in (edges[v1] - processed):
+                cluster.add(v2)
+                queue.append(v2)
+        if cluster: # preserves order
+            clusters.append([v for v in vertices if v in cluster])
+    return clusters
+
+#####################################
+
 # Simulation
 
 CLIENT = 0
@@ -1063,8 +1086,9 @@ def dump_body(body):
         len(get_collision_data(body, link)), -1)) # len(get_visual_data(body, link))))
     for link in get_links(body):
         joint = parent_joint_from_link(link)
+        joint_name = JOINT_TYPES[get_joint_type(body, joint)] if is_fixed(body, joint) else get_joint_name(body, joint)
         print('Link id: {} | Name: {} | Joint: {} | Parent: {} | Mass: {} | Collision: {} | Visual: {}'.format(
-            link, get_link_name(body, link), get_joint_name(body, joint),
+            link, get_link_name(body, link), joint_name,
             get_link_name(body, get_link_parent(body, link)), get_mass(body, link),
             len(get_collision_data(body, link)), -1)) # len(get_visual_data(body, link))))
         #print(get_joint_parent_frame(body, link))
@@ -1182,8 +1206,11 @@ def get_labeled_configuration(body):
 def get_joint_type(body, joint):
     return get_joint_info(body, joint).jointType
 
+def is_fixed(body, joint):
+    return get_joint_type(body, joint) == p.JOINT_FIXED
+
 def is_movable(body, joint):
-    return get_joint_type(body, joint) != p.JOINT_FIXED
+    return not is_fixed(body, joint)
 
 def prune_fixed_joints(body, joints):
     return [joint for joint in joints if is_movable(body, joint)]
@@ -1296,6 +1323,8 @@ def get_link_parent(body, link):
     if link == BASE_LINK:
         return None
     return get_joint_info(body, link).parentIndex
+
+parent_link_from_joint = get_link_parent
 
 def link_from_name(body, name):
     if name == get_base_name(body):
@@ -1440,7 +1469,7 @@ def get_joint_inertial_pose(body, joint):
     return dynamics_info.local_inertial_pos, dynamics_info.local_inertial_orn
 
 def get_local_link_pose(body, joint):
-    parent_joint = get_link_parent(body, joint)
+    parent_joint = parent_link_from_joint(body, joint)
 
     #world_child = get_link_pose(body, joint)
     #world_parent = get_link_pose(body, parent_joint)
@@ -2489,18 +2518,22 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
 
 # Placements
 
-def stable_z(body, surface, surface_link=None):
-    point = get_point(body)
+def stable_z_on_aabb(body, aabb):
     center, extent = get_center_extent(body)
-    _, upper = get_lower_upper(surface, link=surface_link)
-    return (upper + extent/2 + (point - center))[2]
+    _, upper = aabb
+    return (upper + extent/2 + (get_point(body) - center))[2]
 
-def is_placement(body, surface, epsilon=1e-2): # TODO: above / below
+def stable_z(body, surface, surface_link=None):
+    return stable_z_on_aabb(body, get_lower_upper(surface, link=surface_link))
+
+def is_placed_on_aabb(body, bottom_aabb, epsilon=1e-2): # TODO: above / below
     top_aabb = get_lower_upper(body)
-    bottom_aabb = get_lower_upper(surface)
     bottom_z_max = bottom_aabb[1][2]
     return (bottom_z_max <= top_aabb[0][2] <= (bottom_z_max + epsilon)) and \
            (aabb_contains_aabb(aabb2d_from_aabb(top_aabb), aabb2d_from_aabb(bottom_aabb)))
+
+def is_placement(body, surface, **kwargs):
+    return is_placed_on_aabb(body, get_lower_upper(surface), **kwargs)
 
 def is_center_stable(body, surface, epsilon=1e-2):
     # TODO: compute AABB in origin
@@ -2513,12 +2546,10 @@ def is_center_stable(body, surface, epsilon=1e-2):
     return (abs(base_center[2] - bottom_z_max) < epsilon) and \
            (aabb_contains_point(base_center[:2], aabb2d_from_aabb(bottom_aabb)))
 
-
-def sample_placement(top_body, bottom_body, top_pose=unit_pose(), bottom_link=None,
-                     percent=1.0, max_attempts=50, epsilon=1e-3):
+def sample_placement_on_aabb(top_body, bottom_aabb, top_pose=unit_pose(),
+                             percent=1.0, max_attempts=50, epsilon=1e-3):
     # TODO: transform into the coordinate system of the bottom
     # TODO: maybe I should instead just require that already in correct frame
-    bottom_aabb = get_aabb(bottom_body, link=bottom_link)
     for _ in range(max_attempts):
         theta = np.random.uniform(*CIRCULAR_LIMITS)
         rotation = Euler(yaw=theta)
@@ -2535,6 +2566,10 @@ def sample_placement(top_body, bottom_body, top_pose=unit_pose(), bottom_link=No
         set_pose(top_body, pose)
         return pose
     return None
+
+def sample_placement(top_body, bottom_body, bottom_link=None, **kwargs):
+    bottom_aabb = get_aabb(bottom_body, link=bottom_link)
+    return sample_placement_on_aabb(top_body, bottom_aabb, **kwargs)
 
 #####################################
 
@@ -3089,12 +3124,15 @@ def draw_point(point, size=0.01, **kwargs):
     #aabb = np.array(point) - extent, np.array(point) + extent
     #return draw_aabb(aabb, **kwargs)
 
+def get_face_edges(face):
+    #return list(combinations(face, 2))
+    return list(zip(face, face[1:] + face[:1]))
+
 def draw_mesh(mesh, **kwargs):
     verts, faces = mesh
     lines = []
-    for indices in faces:
-        #for i1, i2 in combinations(indices, 2):
-        for i1, i2 in zip(indices, indices[1:] + indices[:1]):
+    for face in faces:
+        for i1, i2 in get_face_edges(face):
             lines.append(add_line(verts[i1], verts[i2], **kwargs))
     return lines
 
@@ -3254,6 +3292,9 @@ def mesh_from_body(body, link=BASE_LINK):
     # TODO: these aren't working...
     raise NotImplementedError()
 
+def tform_mesh(affine, mesh):
+    return Mesh(apply_affine(affine, mesh.vertices), mesh.faces)
+
 #####################################
 
 # Mesh & Pointcloud Files
@@ -3279,17 +3320,32 @@ def obj_file_from_mesh(mesh, under=True):
 
 
 def read_obj(path):
+    mesh = Mesh([], [])
+    meshes = {}
     vertices = []
-    faces = []
     for line in read(path).split('\n'):
         tokens = line.split()
         if not tokens:
             continue
-        if tokens[0] == 'v':
+        if tokens[0] == 'o':
+            name = tokens[1]
+            mesh = Mesh([], [])
+            meshes[name] = mesh
+        elif tokens[0] == 'v':
             vertices.append(tuple(map(float, tokens[1:])))
+        elif tokens[0] in ('vn', 's'):
+            pass
         elif tokens[0] == 'f':
-            faces.append(tuple(int(token.split('/')[0]) - 1 for token in tokens[1:]))
-    return Mesh(vertices, faces)
+            mesh.faces.append(tuple(int(token.split('/')[0]) - 1 for token in tokens[1:]))
+    if not meshes:
+        # TODO: ensure this still works if no objects
+        meshes[None] = mesh
+    for name, mesh in meshes.items():
+        indices = sorted({i for face in mesh.faces for i in face})
+        mesh.vertices[:] = [vertices[i] for i in indices]
+        new_index_from_old = {i2: i1 for i1, i2 in enumerate(indices)}
+        mesh.faces[:] = [tuple(new_index_from_old[i1] for i1 in face) for face in mesh.faces]
+    return meshes
 
 
 def transform_obj_file(obj_string, transformation):
