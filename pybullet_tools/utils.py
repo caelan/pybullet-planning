@@ -263,29 +263,6 @@ class WorldSaver(Saver):
 
 #####################################
 
-def get_connected_components(vertices, edges):
-    undirected_edges = defaultdict(set)
-    for v1, v2 in edges:
-        undirected_edges[v1].add(v2)
-        undirected_edges[v2].add(v1)
-    clusters = []
-    processed = set()
-    for v0 in vertices:
-        if v0 in processed:
-            continue
-        cluster = {v0}
-        queue = deque([v0])
-        while queue:
-            v1 = queue.popleft()
-            for v2 in (edges[v1] - processed):
-                cluster.add(v2)
-                queue.append(v2)
-        if cluster: # preserves order
-            clusters.append([v for v in vertices if v in cluster])
-    return clusters
-
-#####################################
-
 # Simulation
 
 CLIENT = 0
@@ -3318,6 +3295,28 @@ def obj_file_from_mesh(mesh, under=True):
             s += '\nf {}'.format(' '.join(map(str, reversed(f))))
     return s
 
+def get_connected_components(vertices, edges):
+    undirected_edges = defaultdict(set)
+    for v1, v2 in edges:
+        undirected_edges[v1].add(v2)
+        undirected_edges[v2].add(v1)
+    clusters = []
+    processed = set()
+    for v0 in vertices:
+        if v0 in processed:
+            continue
+        processed.add(v0)
+        cluster = {v0}
+        queue = deque([v0])
+        while queue:
+            v1 = queue.popleft()
+            for v2 in (undirected_edges[v1] - processed):
+                processed.add(v2)
+                cluster.add(v2)
+                queue.append(v2)
+        if cluster: # preserves order
+            clusters.append(frozenset(cluster))
+    return clusters
 
 def read_obj(path):
     mesh = Mesh([], [])
@@ -3337,14 +3336,25 @@ def read_obj(path):
             pass
         elif tokens[0] == 'f':
             mesh.faces.append(tuple(int(token.split('/')[0]) - 1 for token in tokens[1:]))
-    if not meshes:
-        # TODO: ensure this still works if no objects
-        meshes[None] = mesh
+    #if not meshes:
+    #    # TODO: ensure this still works if no objects
+    #    meshes[None] = mesh
+    #new_meshes = {}
+    # TODO: make each triangle a separate object
     for name, mesh in meshes.items():
         indices = sorted({i for face in mesh.faces for i in face})
         mesh.vertices[:] = [vertices[i] for i in indices]
         new_index_from_old = {i2: i1 for i1, i2 in enumerate(indices)}
         mesh.faces[:] = [tuple(new_index_from_old[i1] for i1 in face) for face in mesh.faces]
+        #edges = {edge for face in mesh.faces for edge in get_face_edges(face)}
+        #for k, cluster in enumerate(get_connected_components(indices, edges)):
+        #    new_name = '{}#{}'.format(name, k)
+        #    new_indices = sorted(cluster)
+        #    new_vertices = [vertices[i] for i in new_indices]
+        #    new_index_from_old = {i2: i1 for i1, i2 in enumerate(new_indices)}
+        #    new_faces = [tuple(new_index_from_old[i1] for i1 in face)
+        #                 for face in mesh.faces if set(face) <= cluster]
+        #    new_meshes[new_name] = Mesh(new_vertices, new_faces)
     return meshes
 
 
