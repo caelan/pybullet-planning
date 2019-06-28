@@ -2171,6 +2171,8 @@ def ray_collision(ray):
 
 def batch_ray_collision(rays, threads=1):
     assert 1 <= threads <= p.MAX_RAY_INTERSECTION_BATCH_SIZE
+    if not rays:
+        return []
     step_simulation() # Needed for some reason
     ray_starts = [start for start, _ in rays]
     ray_ends = [end for _, end in rays]
@@ -2541,10 +2543,10 @@ def stable_z_on_aabb(body, aabb):
     return (upper + extent/2 + (get_point(body) - center))[2]
 
 def stable_z(body, surface, surface_link=None):
-    return stable_z_on_aabb(body, get_lower_upper(surface, link=surface_link))
+    return stable_z_on_aabb(body, get_aabb(surface, link=surface_link))
 
 def is_placed_on_aabb(body, bottom_aabb, above_epsilon=1e-2, below_epsilon=0.0):
-    top_aabb = get_lower_upper(body) # TODO: approximate_as_prism
+    top_aabb = get_aabb(body) # TODO: approximate_as_prism
     bottom_z_max = bottom_aabb[1][2]
     top_z_min = top_aabb[0][2]
     return ((bottom_z_max - below_epsilon) <= top_z_min) and \
@@ -2552,7 +2554,7 @@ def is_placed_on_aabb(body, bottom_aabb, above_epsilon=1e-2, below_epsilon=0.0):
            (aabb_contains_aabb(aabb2d_from_aabb(top_aabb), aabb2d_from_aabb(bottom_aabb)))
 
 def is_placement(body, surface, **kwargs):
-    return is_placed_on_aabb(body, get_lower_upper(surface), **kwargs)
+    return is_placed_on_aabb(body, get_aabb(surface), **kwargs)
 
 def is_center_stable(body, surface, epsilon=1e-2):
     # TODO: compute AABB in origin
@@ -3154,6 +3156,16 @@ def draw_mesh(mesh, **kwargs):
         for i1, i2 in get_face_edges(face):
             lines.append(add_line(verts[i1], verts[i2], **kwargs))
     return lines
+
+def draw_ray(ray, ray_result, visible_color=GREEN, occluded_color=RED, **kwargs):
+    if ray_result.objectUniqueId == -1:
+        hit_position = ray.end
+    else:
+        hit_position = ray_result.hit_position
+    return [
+        add_line(ray.start, hit_position, color=visible_color, **kwargs),
+        add_line(hit_position, ray.end, color=occluded_color, **kwargs),
+    ]
 
 #####################################
 

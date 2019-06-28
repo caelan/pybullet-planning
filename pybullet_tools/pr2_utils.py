@@ -20,7 +20,7 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name,\
     draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision, draw_point, get_link_subtree, \
-    clone_body, get_all_links, set_color, pairwise_collision
+    clone_body, get_all_links, set_color, pairwise_collision, tform_point
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -468,7 +468,7 @@ def ray_from_pixel(camera_matrix, pixel):
     return np.linalg.inv(camera_matrix).dot(np.append(pixel, 1))
 
 def pixel_from_ray(camera_matrix, ray):
-    return camera_matrix.dot(ray / ray[2])[:2]
+    return camera_matrix.dot(np.array(ray) / ray[2])[:2]
 
 PR2_CAMERA_MATRIX = get_camera_matrix(
     width=640, height=480, fx=772.55, fy=772.5)
@@ -493,10 +493,11 @@ def get_pr2_field_of_view(**kwargs):
                              [0, view_upper[1], z]) # 0.6024511557247721
     return horizontal, vertical
 
-def is_visible_point(camera_matrix, depth, point):
-    if not (0 <= point[2] < depth):
+def is_visible_point(camera_matrix, depth, point_world, camera_pose=unit_pose()):
+    point_camera = tform_point(invert(camera_pose), point_world)
+    if not (0 <= point_camera[2] < depth):
         return False
-    px, py = pixel_from_ray(camera_matrix, point)
+    px, py = pixel_from_ray(camera_matrix, point_camera)
     width, height = dimensions_from_camera_matrix(camera_matrix)
     return (0 <= px < width) and (0 <= py < height)
 
@@ -596,28 +597,6 @@ def draw_viewcone(pose, depth=MAX_VISUAL_DISTANCE,
 
 def is_optical(link_name):
     return 'optical' in link_name
-
-def inverse_visibility_old(pr2, point, head_name=HEAD_LINK_NAME):
-    # TODO: test visibility by getting box
-    #head_joints = [joint_from_name(pr2, name) for name in PR2_GROUPS['head']]
-    #head_link = head_joints[-1]
-    head_link = link_from_name(pr2, head_name)
-    head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
-    with ConfSaver(pr2):
-        set_joint_positions(pr2, head_joints, np.zeros(len(head_joints)))
-        head_pose = get_link_pose(pr2, head_link)
-    point_head = point_from_pose(multiply(invert(head_pose), Pose(point)))
-    if is_optical(head_name):
-        dy, dz, dx =  np.array([-1, -1, 1])*np.array(point_head)
-    else:
-        dx, dy, dz = np.array(point_head)
-    theta = np.math.atan2(dy, dx)  # TODO: might need to negate the minus for the default one
-    phi = np.math.atan2(-dz, np.sqrt(dx ** 2 + dy ** 2))
-    conf = [theta, phi]
-    #pose = Pose(point_from_pose(head_pose), Euler(pitch=phi, yaw=theta)) # TODO: initial roll?
-    if violates_limits(pr2, head_joints, conf):
-        return None
-    return conf
 
 def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME,
                        max_iterations=100, step_size=0.5, tolerance=np.pi*1e-2):
