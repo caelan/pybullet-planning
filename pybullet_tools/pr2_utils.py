@@ -20,7 +20,7 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name,\
     draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision, draw_point, get_link_subtree, \
-    clone_body, get_all_links, set_color
+    clone_body, get_all_links, set_color, pairwise_collision
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -450,8 +450,6 @@ def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
 # Camera
 
 # TODO: this is only for high_def_optical_frame
-WIDTH, HEIGHT = 640, 480
-FX, FY = 772.55, 772.5
 MAX_VISUAL_DISTANCE = 5.0
 MAX_KINECT_DISTANCE = 2.5
 
@@ -472,13 +470,18 @@ def ray_from_pixel(camera_matrix, pixel):
 def pixel_from_ray(camera_matrix, ray):
     return camera_matrix.dot(ray / ray[2])[:2]
 
-def get_pr2_camera_matrix():
-    return get_camera_matrix(WIDTH, HEIGHT, FX, FY)
+PR2_CAMERA_MATRIX = get_camera_matrix(
+    width=640, height=480, fx=772.55, fy=772.5)
+
+def dimensions_from_camera_matrix(camera_matrix):
+    width, height = 2 * np.array(camera_matrix)[:2, 2]
+    return width, height
 
 def get_pr2_view_section(z, camera_matrix=None):
     if camera_matrix is None:
-        camera_matrix = get_pr2_camera_matrix()
-    pixels = [(0, 0), (WIDTH, HEIGHT)]
+        camera_matrix = PR2_CAMERA_MATRIX
+    width, height = dimensions_from_camera_matrix(camera_matrix)
+    pixels = [(0, 0), (width, height)]
     return [z*ray_from_pixel(camera_matrix, p) for p in pixels]
 
 def get_pr2_field_of_view(**kwargs):
@@ -494,7 +497,8 @@ def is_visible_point(camera_matrix, depth, point):
     if not (0 <= point[2] < depth):
         return False
     px, py = pixel_from_ray(camera_matrix, point)
-    return (0 <= px < WIDTH) and (0 <= py < HEIGHT)
+    width, height = dimensions_from_camera_matrix(camera_matrix)
+    return (0 <= px < width) and (0 <= py < height)
 
 def is_visible_aabb(aabb, **kwargs):
     # TODO: do intersect as well for identifying new obstacles
@@ -547,18 +551,18 @@ def cone_mesh_from_support(support):
     return vertices, faces
 
 def get_viewcone_base(depth=MAX_VISUAL_DISTANCE, camera_matrix=None):
-    cone = [(0, 0), (WIDTH, 0), (WIDTH, HEIGHT), (0, HEIGHT)]
     if camera_matrix is None:
-        camera_matrix = get_pr2_camera_matrix()
+        camera_matrix = PR2_CAMERA_MATRIX
+    width, height = dimensions_from_camera_matrix(camera_matrix)
     vertices = []
-    for pixel in cone:
+    for pixel in [(0, 0), (width, 0), (width, height), (0, height)]:
         ray = depth * ray_from_pixel(camera_matrix, pixel)
         vertices.append(ray[:3])
     return vertices
 
-def get_viewcone(depth=MAX_VISUAL_DISTANCE, **kwargs):
-    # TODO: attach to the pr2?
-    mesh = cone_mesh_from_support(get_viewcone_base(depth=depth))
+def get_viewcone(depth=MAX_VISUAL_DISTANCE, camera_matrix=None, **kwargs):
+    mesh = cone_mesh_from_support(get_viewcone_base(
+        depth=depth, camera_matrix=camera_matrix))
     assert (mesh is not None)
     return create_mesh(mesh, **kwargs)
 
@@ -567,7 +571,8 @@ def attach_viewcone(robot, head_name=HEAD_LINK_NAME, depth=MAX_VISUAL_DISTANCE,
     # TODO: head_name likely needs to have a visual geometry to attach
     head_link = link_from_name(robot, head_name)
     lines = []
-    for v1, v2 in cone_wires_from_support(get_viewcone_base(depth=depth, camera_matrix=camera_matrix)):
+    for v1, v2 in cone_wires_from_support(get_viewcone_base(
+            depth=depth, camera_matrix=camera_matrix)):
         if is_optical(head_name):
             rotation = Pose()
         else:
@@ -575,6 +580,16 @@ def attach_viewcone(robot, head_name=HEAD_LINK_NAME, depth=MAX_VISUAL_DISTANCE,
         p1 = tform_point(rotation, v1)
         p2 = tform_point(rotation, v2)
         lines.append(add_line(p1, p2, color=color, parent=robot, parent_link=head_link, **kwargs))
+    return lines
+
+def draw_viewcone(pose, depth=MAX_VISUAL_DISTANCE,
+                  camera_matrix=None, color=(1, 0, 0), **kwargs):
+    lines = []
+    for v1, v2 in cone_wires_from_support(get_viewcone_base(
+            depth=depth, camera_matrix=camera_matrix)):
+        p1 = tform_point(pose, v1)
+        p2 = tform_point(pose, v2)
+        lines.append(add_line(p1, p2, color=color, **kwargs))
     return lines
 
 #####################################
@@ -734,12 +749,12 @@ def close_until_collision(robot, gripper_joints, bodies=[], num_steps=25, **kwar
     open_conf = [get_max_limit(robot, joint) for joint in gripper_joints]
     resolutions = np.abs(np.array(open_conf) - np.array(closed_conf)) / num_steps
     extend_fn = get_extend_fn(robot, gripper_joints, resolutions=resolutions)
-    collision_links = get_moving_links(robot, gripper_joints)
     close_path = [open_conf] + list(extend_fn(open_conf, closed_conf))
+    collision_links = frozenset(get_moving_links(robot, gripper_joints))
 
     for i, conf in enumerate(close_path):
         set_joint_positions(robot, gripper_joints, conf)
-        if any(any_link_pair_collision(robot, collision_links, body, **kwargs) for body in bodies):
+        if any(pairwise_collision((robot, collision_links), body, **kwargs) for body in bodies):
             if i == 0:
                 return None
             return close_path[i-1][0]

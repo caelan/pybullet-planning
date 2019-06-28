@@ -299,9 +299,9 @@ def get_urdf_flags(cache=False):
 
 def load_pybullet(filename, fixed_base=False, scale=1., **kwargs):
     # fixed_base=False implies infinite base mass
-    flags = get_urdf_flags(**kwargs)
     with LockRenderer():
         if filename.endswith('.urdf'):
+            flags = get_urdf_flags(**kwargs)
             body = p.loadURDF(filename, useFixedBase=fixed_base, flags=flags,
                               globalScaling=scale, physicsClientId=CLIENT)
         elif filename.endswith('.sdf'):
@@ -310,6 +310,9 @@ def load_pybullet(filename, fixed_base=False, scale=1., **kwargs):
             body = p.loadMJCF(filename, physicsClientId=CLIENT)
         elif filename.endswith('.bullet'):
             body = p.loadBullet(filename, physicsClientId=CLIENT)
+        elif filename.endswith('.obj'):
+            # TODO: fixed_base => mass = 0?
+            body = create_obj(filename, scale=scale, **kwargs)
         else:
             raise ValueError(filename)
     INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, filename, fixed_base, scale)
@@ -740,7 +743,7 @@ COLOR_FROM_NAME = {
 }
 
 def apply_alpha(color, alpha=1.0):
-    return tuple(color) + (alpha,)
+    return tuple(color[:3]) + (alpha,)
 
 def spaced_colors(n, s=1, v=1):
     return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]
@@ -1283,10 +1286,10 @@ get_num_links = get_num_joints
 get_links = get_joints # Does not include BASE_LINK
 
 def child_link_from_joint(joint):
-    return joint
+    return joint # link
 
 def parent_joint_from_link(link):
-    return link
+    return link # joint
 
 def get_all_links(body):
     return [BASE_LINK] + list(get_links(body))
@@ -1343,6 +1346,12 @@ def get_link_pose(body, link):
     # if set to 1 (or True), the Cartesian world position/orientation will be recomputed using forward kinematics.
     link_state = get_link_state(body, link) #, kinematics=True, velocity=False)
     return link_state.worldLinkFramePosition, link_state.worldLinkFrameOrientation
+
+def get_relative_pose(body, link1, link2):
+    world_from_link1 = get_link_pose(body, link1)
+    world_from_link2 = get_link_pose(body, link2)
+    link2_from_link1 = multiply(invert(world_from_link2), world_from_link1)
+    return link2_from_link1
 
 def get_all_link_parents(body):
     return {link: get_link_parent(body, link) for link in get_links(body)}
@@ -1440,6 +1449,16 @@ def set_dynamics(body, link=BASE_LINK, **kwargs):
 
 def set_mass(body, mass, link=BASE_LINK):
     set_dynamics(body, link=link, mass=mass)
+
+def set_static(body):
+    for link in get_all_links(body):
+        set_mass(body, mass=STATIC_MASS, link=link)
+
+def set_all_static():
+    # TODO: mass saver
+    disable_gravity()
+    for body in get_bodies():
+        set_static(body)
 
 def get_joint_inertial_pose(body, joint):
     dynamics_info = get_dynamics_info(body, joint)
@@ -2011,7 +2030,7 @@ def vertices_from_data(data):
         filename, scale = get_data_filename(data), get_data_scale(data)
         if filename == UNKNOWN_FILE:
             raise RuntimeError(filename)
-        mesh = read_obj(filename)
+        mesh = read_obj(filename, decompose=False)
         vertices = [scale*np.array(vertex) for vertex in mesh.vertices]
         # TODO: could compute AABB here for improved speed at the cost of being conservative
     #elif geometry_type == p.GEOM_PLANE:
@@ -2040,7 +2059,7 @@ def vertices_from_rigid(body):
         assert info is not None
         _, ext = os.path.splitext(info.path)
         if ext == '.obj':
-            mesh = read_obj(info.path)
+            mesh = read_obj(info.path, decompose=False)
             vertices = mesh.vertices
         else:
             raise NotImplementedError(ext)
@@ -2133,17 +2152,34 @@ def link_pairs_collision(body1, links1, body2, links2=None, **kwargs):
 
 #####################################
 
+Ray = namedtuple('Ray', ['start', 'end'])
+
+def get_ray(ray):
+    start, end = ray
+    return np.array(end) - np.array(start)
+
 RayResult = namedtuple('RayResult', ['objectUniqueId', 'linkIndex',
                                      'hit_fraction', 'hit_position', 'hit_normal'])
 
-def ray_collision(start, end):
+def ray_collision(ray):
+    # TODO: be careful to disable gravity and set static masses for everything
+    step_simulation() # Needed for some reason
+    start, end = ray
     result, = p.rayTest(start, end, physicsClientId=CLIENT)
+    # TODO: assign hit_position to be the end?
     return RayResult(*result)
 
-def batch_ray_collision(rays):
+def batch_ray_collision(rays, threads=1):
+    assert 1 <= threads <= p.MAX_RAY_INTERSECTION_BATCH_SIZE
+    step_simulation() # Needed for some reason
     ray_starts = [start for start, _ in rays]
     ray_ends = [end for _, end in rays]
-    return [RayResult(*tup) for tup in p.rayTestBatch(ray_starts, ray_ends, physicsClientId=CLIENT)]
+    return [RayResult(*tup) for tup in p.rayTestBatch(
+        ray_starts, ray_ends,
+        #numThreads=1,
+        #parentObjectUniqueId=
+        #parentLinkIndex=
+        physicsClientId=CLIENT)]
 
 #####################################
 
@@ -2248,7 +2284,8 @@ def waypoints_from_path(path, tolerance=1e-3):
 
 def get_moving_links(body, moving_joints):
     moving_links = set()
-    for link in moving_joints:
+    for joint in moving_joints:
+        link = child_link_from_joint(joint)
         if link not in moving_links:
             moving_links.update(get_link_subtree(body, link))
     return list(moving_links)
@@ -2284,8 +2321,11 @@ def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=Tru
 def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
                      custom_limits={}, **kwargs):
     # TODO: convert most of these to keyword arguments
-    check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
-    moving_bodies = [body] + [attachment.child for attachment in attachments]
+    check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) \
+        if self_collisions else []
+    moving_links = frozenset(get_moving_links(body, joints))
+    moving_bodies = [(body, moving_links)] + [attachment.child for attachment in attachments]
+    #moving_bodies = [body] + [attachment.child for attachment in attachments]
     if obstacles is None:
         obstacles = list(set(get_bodies()) - set(moving_bodies))
     check_body_pairs = list(product(moving_bodies, obstacles))  # + list(combinations(moving_bodies, 2))
@@ -2503,10 +2543,12 @@ def stable_z_on_aabb(body, aabb):
 def stable_z(body, surface, surface_link=None):
     return stable_z_on_aabb(body, get_lower_upper(surface, link=surface_link))
 
-def is_placed_on_aabb(body, bottom_aabb, epsilon=1e-2): # TODO: above / below
-    top_aabb = get_lower_upper(body)
+def is_placed_on_aabb(body, bottom_aabb, above_epsilon=1e-2, below_epsilon=0.0):
+    top_aabb = get_lower_upper(body) # TODO: approximate_as_prism
     bottom_z_max = bottom_aabb[1][2]
-    return (bottom_z_max <= top_aabb[0][2] <= (bottom_z_max + epsilon)) and \
+    top_z_min = top_aabb[0][2]
+    return ((bottom_z_max - below_epsilon) <= top_z_min) and \
+           (top_z_min <= (bottom_z_max + above_epsilon)) and \
            (aabb_contains_aabb(aabb2d_from_aabb(top_aabb), aabb2d_from_aabb(bottom_aabb)))
 
 def is_placement(body, surface, **kwargs):
@@ -2954,7 +2996,7 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
     # TODO: plan a path without needing to following intermediate waypoints
 
     lower_limits, upper_limits = get_custom_limits(robot, get_movable_joints(robot), custom_limits)
-    selected_links = get_link_subtree(robot, first_joint)
+    selected_links = get_link_subtree(robot, first_joint) # TODO: child_link_from_joint?
     selected_movable_joints = prune_fixed_joints(robot, selected_links)
     assert(target_link in selected_links)
     selected_target_link = selected_links.index(target_link)
@@ -3318,10 +3360,11 @@ def get_connected_components(vertices, edges):
             clusters.append(frozenset(cluster))
     return clusters
 
-def read_obj(path):
+def read_obj(path, decompose=True):
     mesh = Mesh([], [])
     meshes = {}
     vertices = []
+    faces = []
     for line in read(path).split('\n'):
         tokens = line.split()
         if not tokens:
@@ -3331,11 +3374,16 @@ def read_obj(path):
             mesh = Mesh([], [])
             meshes[name] = mesh
         elif tokens[0] == 'v':
-            vertices.append(tuple(map(float, tokens[1:])))
+            vertex = tuple(map(float, tokens[1:4]))
+            vertices.append(vertex)
         elif tokens[0] in ('vn', 's'):
             pass
         elif tokens[0] == 'f':
-            mesh.faces.append(tuple(int(token.split('/')[0]) - 1 for token in tokens[1:]))
+            face = tuple(int(token.split('/')[0]) - 1 for token in tokens[1:])
+            faces.append(face)
+            mesh.faces.append(face)
+    if not decompose:
+        return Mesh(vertices, faces)
     #if not meshes:
     #    # TODO: ensure this still works if no objects
     #    meshes[None] = mesh
