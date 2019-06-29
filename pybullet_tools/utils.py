@@ -385,17 +385,21 @@ MouseEvent = namedtuple('MouseEvent', ['eventType', 'mousePosX', 'mousePosY', 'b
 def get_mouse_events():
     return list(MouseEvent(*event) for event in p.getMouseEvents(physicsClientId=CLIENT))
 
+def update_viewer():
+    # https://docs.python.org/2/library/select.html
+    # events = p.getKeyboardEvents() # TODO: only works when the viewer is in focus
+    get_mouse_events()
+    # for k, v in keys.items():
+    #    #p.KEY_IS_DOWN, p.KEY_WAS_RELEASED, p.KEY_WAS_TRIGGERED
+    #    if (k == p.B3G_RETURN) and (v & p.KEY_WAS_TRIGGERED):
+    #        return
+    # time.sleep(1e-3) # Doesn't work
+    # disable_gravity()
+
 def wait_for_duration(duration): #, dt=0):
     t0 = time.time()
     while elapsed_time(t0) <= duration:
-        #keys = p.getKeyboardEvents()
-        get_mouse_events()
-        #for k, v in keys.items():
-        #    #p.KEY_IS_DOWN, p.KEY_WAS_RELEASED, p.KEY_WAS_TRIGGERED
-        #    if (k == p.B3G_RETURN) and (v & p.KEY_WAS_TRIGGERED):
-        #        return
-        #time.sleep(1e-3) # Doesn't work
-        #disable_gravity()
+        update_viewer()
 
 def simulate_for_duration(duration):
     dt = get_time_step()
@@ -429,12 +433,12 @@ def simulate_for_sim_duration(sim_duration, real_dt=0, frequency=INF):
         sim_time += sim_dt
         time.sleep(real_dt)
 
-def wait_for_user():
+def wait_for_user(message='Press enter to continue'):
     if is_darwin():
         # OS X doesn't multi-thread the OpenGL visualizer
-        wait_for_interrupt()
-    else:
-        user_input('Press enter to continue')
+        #wait_for_interrupt()
+        return threaded_input(message)
+    return user_input(message)
 
 def wait_for_interrupt(max_time=np.inf):
     """
@@ -447,19 +451,6 @@ def wait_for_interrupt(max_time=np.inf):
         pass
     finally:
         print()
-
-# def wait_for_input(s=''):
-#     print(s)
-#     while True:
-#         step_simulation()
-#         line = sys.stdin.readline()
-#         if line:
-#             pass
-#         #events = p.getKeyboardEvents() # TODO: only works when the viewer is in focus
-#         #if events:
-#         #    print(events)
-#         # https://docs.python.org/2/library/select.html
-
 
 def disable_viewer():
     p.configureDebugVisualizer(p.COV_ENABLE_GUI, False, physicsClientId=CLIENT)
@@ -490,10 +481,9 @@ CLIENTS = set()
 
 def connect(use_gui=True, shadows=True):
     # Shared Memory: execute the physics simulation and rendering in a separate process
-    # http://openrave.org/docs/0.8.2/_modules/openravepy/misc/#SetViewerUserThread
-    # https://github.com/bulletphysics/bullet3/blob/6b2cae1b1d63056ef48c64b39c8db6027e897663/examples/pybullet/examples/vrminitaur.py#L7
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/vrminitaur.py#L7
     # make sure to compile pybullet with PYBULLET_USE_NUMPY enabled
-    if use_gui and ('DISPLAY' not in os.environ):
+    if use_gui and not is_darwin() and ('DISPLAY' not in os.environ):
         use_gui = False
         print('No display detected!')
     method = p.GUI if use_gui else p.DIRECT
@@ -533,49 +523,36 @@ def connect(use_gui=True, shadows=True):
     #    p.configureDebugVisualizer(*pair)
     return sim_id
 
-
-def SetViewerUserThread():
-    # https://github.com/bulletphysics/bullet3/blob/cb55094a118b7afd6c6af6daa648fac1152450ec/examples/pybullet/examples/userData.py
-    # https://github.com/bulletphysics/bullet3/tree/554208c98de4c87b4f5b97e912fcc52699006c05/examples/ExampleBrowser
+def threaded_input(*args, **kwargs):
+    # OS X doesn't multi-thread the OpenGL visualizer
+    # http://openrave.org/docs/0.8.2/_modules/openravepy/misc/#SetViewerUserThread
+    # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/userData.py
+    # https://github.com/bulletphysics/bullet3/tree/master/examples/ExampleBrowser
     #from pybullet_utils import bullet_client
     #from pybullet_utils.bullet_client import BulletClient
     #server = bullet_client.BulletClient(connection_mode=p.SHARED_MEMORY_SERVER) # GUI_SERVER
     #sim_id = p.connect(p.GUI)
     #print(dir(server))
     #client = bullet_client.BulletClient(connection_mode=p.SHARED_MEMORY)
-    #print('Client: ', client)
-    #return
-
-
-    sim_id_1 = p.connect(p.GUI)
-    print('Main:', sim_id_1)
-    wait_for_interrupt()
+    #sim_id = p.connect(p.SHARED_MEMORY)
 
     #threading = __import__('threading')
     import threading
-    Thread = threading.Thread
-    def localuserfn():
-        try:
-            sim_id = p.connect(p.SHARED_MEMORY)
-            print('Thread:', sim_id)
-        finally:
-            pass
-    userthread = Thread(target=localuserfn, args=[])
-    userthread.start()
-    sig_thread_id = 0
-    for tid, tobj in threading._active.items():
-        if tobj is userthread:
-            sig_thread_id = tid
-            break
-    print(sig_thread_id)
+    data = []
+    thread = threading.Thread(target=lambda: data.append(user_input(*args, **kwargs)), args=[])
+    thread.start()
+    #threading.enumerate()
+    #thread_id = 0
+    #for tid, tobj in threading._active.items():
+    #    if tobj is thread:
+    #        thread_id = tid
+    #        break
     try:
-        #viewer.main(True,sig_thread_id)
-        #sim_id_1 = p.connect(p.GUI)
-        #print('Main:', sim_id_1)
-        pass
-
+        while thread.is_alive():
+            update_viewer()
     finally:
-        userthread.join()
+        thread.join()
+    return data[-1]
 
 def disconnect():
     # TODO: change CLIENT?

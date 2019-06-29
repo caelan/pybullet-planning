@@ -9,7 +9,7 @@ from pybullet_tools.utils import connect, load_model, disconnect, wait_for_user,
     TURTLEBOT_URDF, HideOutput, LockRenderer, joint_from_name, set_euler, get_euler, get_point, \
     set_joint_position, get_joint_positions, pairwise_collision, stable_z, wait_for_duration, get_link_pose, \
     link_from_name, get_pose, euler_from_quat, multiply, invert, draw_pose, unit_point, unit_quat, \
-    remove_debug, get_aabb, draw_aabb, get_subtree_aabb, ROOMBA_URDF
+    remove_debug, get_aabb, draw_aabb, get_subtree_aabb, ROOMBA_URDF, set_all_static, user_input, threaded_input
 
 # RGBA colors (alpha is transparency)
 RED = (1, 0, 0, 1)
@@ -37,6 +37,7 @@ def main(floor_width=2.0):
             robot_z = stable_z(robot, floor) # Returns the z offset required for robot to be placed on floor
             set_point(robot, [0, 0, robot_z]) # Sets the z position of the robot
     dump_body(robot) # Prints joint and link information about robot
+    set_all_static()
 
     # Joints are also described by an integer index
     # The turtlebot has explicit joints representing x, y, theta
