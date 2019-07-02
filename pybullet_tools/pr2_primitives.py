@@ -75,12 +75,13 @@ class Grasp(object):
         return 'g{}'.format(id(self) % 1000)
 
 class Conf(object):
-    def __init__(self, body, joints, values=None):
+    def __init__(self, body, joints, values=None, init=False):
         self.body = body
         self.joints = joints
         if values is None:
             values = get_joint_positions(self.body, self.joints)
         self.values = tuple(values)
+        self.init = init
     def assign(self):
         set_joint_positions(self.body, self.joints, self.values)
     def iterate(self):
