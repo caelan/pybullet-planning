@@ -1330,6 +1330,8 @@ def get_relative_pose(body, link1, link2):
     link2_from_link1 = multiply(invert(world_from_link2), world_from_link1)
     return link2_from_link1
 
+#####################################
+
 def get_all_link_parents(body):
     return {link: get_link_parent(body, link) for link in get_links(body)}
 
@@ -1357,15 +1359,16 @@ def get_joint_ancestors(body, link):
 def get_movable_joint_ancestors(body, link):
     return prune_fixed_joints(body, get_joint_ancestors(body, link))
 
-def get_link_descendants(body, link):
+def get_link_descendants(body, link, test=lambda l: True):
     descendants = []
     for child in get_link_children(body, link):
-        descendants.append(child)
-        descendants.extend(get_link_descendants(body, child))
+        if test(child):
+            descendants.append(child)
+            descendants.extend(get_link_descendants(body, child, test=test))
     return descendants
 
-def get_link_subtree(body, link):
-    return [link] + get_link_descendants(body, link)
+def get_link_subtree(body, link, **kwargs):
+    return [link] + get_link_descendants(body, link, **kwargs)
 
 def are_links_adjacent(body, link1, link2):
     return (get_link_parent(body, link1) == link2) or \
@@ -1405,6 +1408,8 @@ def get_fixed_links(body):
                     visited.add(next_link)
         fixed.update(product(cluster, cluster))
     return fixed
+
+#####################################
 
 DynamicsInfo = namedtuple('DynamicsInfo', ['mass', 'lateral_friction',
                                            'local_inertia_diagonal', 'local_inertial_pos',  'local_inertial_orn',
