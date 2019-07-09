@@ -2309,9 +2309,6 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
     attached_bodies = [attachment.child for attachment in attachments]
     moving_bodies = [(body, moving_links)] + attached_bodies
     #moving_bodies = [body] + [attachment.child for attachment in attachments]
-    if obstacles is None:
-        # TODO: deprecate this functionality
-        obstacles = list(set(get_bodies()) - {body} - set(moving_bodies))
     check_body_pairs = list(product(moving_bodies, obstacles))  # + list(combinations(moving_bodies, 2))
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits)
 
@@ -2335,7 +2332,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         return False
     return collision_fn
 
-def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstacles=None, attachments=[],
+def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstacles=[], attachments=[],
                                 self_collisions=True, disabled_collisions=set(),
                                 resolutions=None, custom_limits={}, max_distance=MAX_DISTANCE):
     extend_fn = get_extend_fn(body, joints, resolutions=resolutions)
@@ -2371,7 +2368,7 @@ def check_initial_end(start_conf, end_conf, collision_fn):
         return False
     return True
 
-def plan_joint_motion(body, joints, end_conf, obstacles=None, attachments=[],
+def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
                       self_collisions=True, disabled_collisions=set(),
                       weights=None, resolutions=None, max_distance=MAX_DISTANCE, custom_limits={}, **kwargs):
 
@@ -2445,7 +2442,7 @@ def get_nonholonomic_extend_fn(body, joints, resolutions=None):
             yield np.append(q2[:2], aq)
     return extend_fn
 
-def plan_nonholonomic_motion(body, joints, end_conf, obstacles=None, attachments=[],
+def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[],
                              self_collisions=True, disabled_collisions=set(),
                              weights=None, resolutions=None,
                              max_distance=MAX_DISTANCE, custom_limits={}, **kwargs):
@@ -2480,7 +2477,7 @@ def get_base_distance_fn(weights=1*np.ones(3)):
         return np.sqrt(np.dot(weights, difference * difference))
     return fn
 
-def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
+def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
                      weights=1*np.ones(3), resolutions=0.05*np.ones(3),
                      max_distance=MAX_DISTANCE, **kwargs):
     def sample_fn():
@@ -2504,8 +2501,6 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=None, direct=False,
     def collision_fn(q):
         # TODO: update this function
         set_base_values(body, q)
-        if obstacles is None:
-            return single_collision(body)
         return any(pairwise_collision(body, obs, max_distance=max_distance) for obs in obstacles)
 
     start_conf = get_base_values(body)

@@ -22,7 +22,7 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_place
     disable_real_time, enable_gravity, joint_controller_hold, get_distance, \
     get_min_limit, user_input, step_simulation, get_body_name, get_bodies, BASE_LINK, \
     add_segments, get_max_limit, link_from_name, BodySaver, get_aabb, Attachment, interpolate_poses, \
-    plan_direct_joint_motion, has_gui, create_attachment, wait_for_duration, get_extend_fn, \
+    plan_direct_joint_motion, has_gui, create_attachment, wait_for_duration, get_extend_fn, set_renderer, \
     get_custom_limits, all_between, get_unit_vector, wait_for_user, set_base_values, euler_from_quat, INF, elapsed_time
 
 BASE_EXTENT = 3.5 # 2.5
@@ -537,7 +537,9 @@ def get_motion_gen(problem, custom_limits={}, collisions=True, teleport=False):
             if raw_path is None:
                 print('Failed motion plan!')
                 #set_renderer(True)
-                #wait_for_user()
+                #for bq in [bq1, bq2]:
+                #    bq.assign()
+                #    wait_for_user()
                 return None
             path = [Conf(robot, bq2.joints, q) for q in raw_path]
         else:
