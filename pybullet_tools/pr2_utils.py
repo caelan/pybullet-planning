@@ -674,19 +674,24 @@ def get_detection_cone(pr2, body, camera_link=HEAD_LINK_NAME, depth=MAX_VISUAL_D
         return None, lower_z
     return cone_mesh_from_support(support_from_aabb(body_aabb)), lower_z
 
-def get_detections(pr2, p_false_neg=0, camera_link=HEAD_LINK_NAME, **kwargs):
+def get_detections(pr2, p_false_neg=0, camera_link=HEAD_LINK_NAME,
+                   exclude_links=set(), color=None, **kwargs):
     camera_pose = get_link_pose(pr2, link_from_name(pr2, camera_link))
     detections = []
     for body in get_bodies():
-        if np.random.random() < p_false_neg:
+        if (pr2 == body) or (np.random.random() < p_false_neg):
             continue
         mesh, z = get_detection_cone(pr2, body, camera_link=camera_link, **kwargs)
         if mesh is None:
             continue
-        cone = create_mesh(mesh, color=None)
-        set_pose(cone, camera_pose) # TODO: this previously wasn't here...
-        if not single_collision(cone):
+        cone = create_mesh(mesh, color=color)
+        set_pose(cone, camera_pose)
+        if not any(pairwise_collision(cone, obst)
+                   for obst in set(get_bodies()) - {pr2, body, cone}) \
+                and not any(link_pairs_collision(pr2, [link], cone)
+                            for link in set(get_all_links(pr2)) - exclude_links):
             detections.append(Detection(body, z))
+        #wait_for_user()
         remove_body(cone)
     return detections
 
