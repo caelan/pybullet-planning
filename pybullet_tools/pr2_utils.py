@@ -7,8 +7,6 @@ from itertools import combinations
 
 import numpy as np
 
-from pybullet_tools.utils import get_min_limit, get_max_limit, get_extend_fn, get_moving_links, set_joint_positions, \
-    any_link_pair_collision
 from .pr2_never_collisions import NEVER_COLLISIONS
 from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, joints_from_names, \
     set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \

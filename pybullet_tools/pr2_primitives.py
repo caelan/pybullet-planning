@@ -29,6 +29,9 @@ BASE_EXTENT = 3.5 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
 GRASP_LENGTH = 0.03
 APPROACH_DISTANCE = 0.1 + GRASP_LENGTH
+SELF_COLLISIONS = False
+
+##################################################
 
 def get_base_limits(robot):
     if is_drake_pr2(robot):
@@ -463,14 +466,14 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
         else:
             resolutions = 0.05**np.ones(len(arm_joints))
             grasp_path = plan_direct_joint_motion(robot, arm_joints, grasp_conf, attachments=attachments.values(),
-                                                  obstacles=approach_obstacles, self_collisions=False,
+                                                  obstacles=approach_obstacles, self_collisions=SELF_COLLISIONS,
                                                   custom_limits=custom_limits, resolutions=resolutions/2.)
             if grasp_path is None:
                 print('Grasp path failure')
                 return None
             set_joint_positions(robot, arm_joints, default_conf)
             approach_path = plan_joint_motion(robot, arm_joints, approach_conf, attachments=attachments.values(),
-                                              obstacles=obstacles, self_collisions=False,
+                                              obstacles=obstacles, self_collisions=SELF_COLLISIONS,
                                               custom_limits=custom_limits, resolutions=resolutions,
                                               restarts=2, iterations=25, smooth=25)
             if approach_path is None:
@@ -529,7 +532,7 @@ def get_motion_gen(problem, custom_limits={}, collisions=True, teleport=False):
             path = [bq1, bq2]
         elif is_drake_pr2(robot):
             raw_path = plan_joint_motion(robot, bq2.joints, bq2.values, attachments=[],
-                                         obstacles=obstacles, custom_limits=custom_limits, self_collisions=False,
+                                         obstacles=obstacles, custom_limits=custom_limits, self_collisions=SELF_COLLISIONS,
                                          restarts=4, iterations=50, smooth=50)
             if raw_path is None:
                 print('Failed motion plan!')
@@ -600,11 +603,11 @@ def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
                     path = [default_conf, approach_conf, grasp_conf]
                 else:
                     control_path = plan_direct_joint_motion(robot, joints, approach_conf,
-                                                     obstacles=fixed_wo_button, self_collisions=False)
+                                                     obstacles=fixed_wo_button, self_collisions=SELF_COLLISIONS)
                     if control_path is None: continue
                     set_joint_positions(robot, joints, approach_conf)
                     retreat_path = plan_joint_motion(robot, joints, default_conf,
-                                                     obstacles=fixed, self_collisions=False)
+                                                     obstacles=fixed, self_collisions=SELF_COLLISIONS)
                     if retreat_path is None: continue
                     path = retreat_path[::-1] + control_path[::-1]
                 mt = Trajectory(Conf(robot, joints, q) for q in path)

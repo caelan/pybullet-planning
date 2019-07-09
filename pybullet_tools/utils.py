@@ -2306,10 +2306,12 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) \
         if self_collisions else []
     moving_links = frozenset(get_moving_links(body, joints))
-    moving_bodies = [(body, moving_links)] + [attachment.child for attachment in attachments]
+    attached_bodies = [attachment.child for attachment in attachments]
+    moving_bodies = [(body, moving_links)] + attached_bodies
     #moving_bodies = [body] + [attachment.child for attachment in attachments]
     if obstacles is None:
-        obstacles = list(set(get_bodies()) - set(moving_bodies))
+        # TODO: deprecate this functionality
+        obstacles = list(set(get_bodies()) - {body} - set(moving_bodies))
     check_body_pairs = list(product(moving_bodies, obstacles))  # + list(combinations(moving_bodies, 2))
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits)
 
@@ -2324,8 +2326,13 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         for link1, link2 in check_link_pairs:
             # Self-collisions should not have the max_distance parameter
             if pairwise_link_collision(body, link1, body, link2): #, **kwargs):
+                #print(body, link1, link2)
                 return True
-        return any(pairwise_collision(*pair, **kwargs) for pair in check_body_pairs)
+        for body1, body2 in check_body_pairs:
+            if pairwise_collision(body1, body2, **kwargs):
+                #print(body1, body2)
+                return True
+        return False
     return collision_fn
 
 def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstacles=None, attachments=[],
