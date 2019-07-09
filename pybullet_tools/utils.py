@@ -899,11 +899,11 @@ def wrap_angle(theta):
 def circular_difference(theta2, theta1):
     return wrap_angle(theta2 - theta1)
 
-def base_values_from_pose(pose):
+def base_values_from_pose(pose, tolerance=1e-3):
     (point, quat) = pose
     x, y, _ = point
     roll, pitch, yaw = euler_from_quat(quat)
-    assert (abs(roll) < 1e-3) and (abs(pitch) < 1e-3)
+    assert (abs(roll) < tolerance) and (abs(pitch) < tolerance)
     return (x, y, yaw)
 
 def pose_from_base_values(base_values, default_pose):
@@ -1653,10 +1653,9 @@ def visual_shape_from_data(data, client=None):
         return -1
     # visualFramePosition: translational offset of the visual shape with respect to the link
     # visualFrameOrientation: rotational offset (quaternion x,y,z,w) of the visual shape with respect to the link frame
-    pose = (data.localVisualFrame_position, data.localVisualFrame_orientation)
     #inertial_pose = get_joint_inertial_pose(data.objectUniqueId, data.linkIndex)
     #point, quat = multiply(invert(inertial_pose), pose)
-    point, quat = pose
+    point, quat = get_data_pose(data)
     return p.createVisualShape(shapeType=data.visualGeometryType,
                                radius=get_data_radius(data),
                                halfExtents=np.array(get_data_extents(data))/2,
@@ -1683,8 +1682,7 @@ def collision_shape_from_data(data, body, link, client=None):
     client = get_client(client)
     if (data.geometry_type == p.GEOM_MESH) and (data.filename == UNKNOWN_FILE):
         return -1
-    pose = (data.local_frame_pos, data.local_frame_orn)
-    pose = multiply(get_joint_inertial_pose(body, link), pose)
+    pose = multiply(get_joint_inertial_pose(body, link), get_data_pose(data))
     point, quat = pose
     # TODO: the visual data seems affected by the collision data
     return p.createCollisionShape(shapeType=data.geometry_type,
