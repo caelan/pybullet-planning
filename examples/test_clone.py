@@ -4,7 +4,7 @@ from __future__ import print_function
 
 from pybullet_tools.pr2_utils import PR2_GROUPS
 from pybullet_tools.utils import HideOutput, disconnect, set_base_values, joint_from_name, connect, user_input, \
-    dump_world, get_link_name, wait_for_interrupt, clone_body, get_link_parent, get_link_descendants, load_model
+    dump_world, get_link_name, wait_for_user, clone_body, get_link_parent, get_link_descendants, load_model
 
 
 def test_clone_robot(pr2):
@@ -51,7 +51,7 @@ def test_clone_robot(pr2):
             print('Axis', get_link_name(pr2, link), link, joint_info1.jointAxis, joint_info2.jointAxis)
     """
     set_base_values(new_pr2, (2, 0, 0))
-    wait_for_interrupt()
+    wait_for_user()
     # TODO: the drake one has a large out-of-place cylinder as well
 
 def test_clone_arm(pr2):
@@ -64,7 +64,7 @@ def test_clone_arm(pr2):
     new_arm = clone_body(pr2, links=links, collision=False)
     dump_world()
     set_base_values(pr2, (-2, 0, 0))
-    wait_for_interrupt()
+    wait_for_user()
 
 def main():
     connect(use_gui=True)

@@ -1,7 +1,7 @@
 
 import os
 from pybullet_tools.utils import create_mesh, set_point, read_pcd_file, disconnect, \
-    wait_for_interrupt, mesh_from_points, mesh_from_body, get_links, get_num_links, connect
+    wait_for_user, mesh_from_points, mesh_from_body, get_links, get_num_links, connect
 
 SODA_CLOUD = 'soda.pcd'
 
@@ -62,7 +62,7 @@ def main():
     #print(mesh_from_body(body))
 
     #set_point(body, (1, 1, 1))
-    wait_for_interrupt()
+    wait_for_user()
     disconnect()
 
 if __name__ == '__main__':

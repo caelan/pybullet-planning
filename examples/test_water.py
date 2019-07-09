@@ -6,7 +6,7 @@ import time
 import numpy as np
 
 from pybullet_tools.utils import add_data_path, connect, enable_gravity, user_input, disconnect, create_sphere, set_point, Point, \
-    enable_real_time, dump_world, load_model, wait_for_interrupt, set_camera, stable_z, \
+    enable_real_time, dump_world, load_model, wait_for_user, set_camera, stable_z, \
     set_color, get_lower_upper, wait_for_duration, simulate_for_duration, load_pybullet
 
 
@@ -21,7 +21,6 @@ def main():
     #set_point(cup, Point(z=stable_z(cup, plane)))
     set_point(cup, Point(z=.2))
     set_color(cup, (1, 0, 0, .4))
-    #wait_for_interrupt()
 
     num_droplets = 100
     #radius = 0.025
@@ -53,7 +52,7 @@ def main():
         set_point(droplet, Point(x, y, z+i*(2*radius+1e-3)))
 
     #dump_world()
-    wait_for_interrupt()
+    wait_for_user()
 
     #user_input('Start?')
     enable_gravity()
@@ -69,8 +68,7 @@ def main():
     # print()
 
     #time.sleep(1.0)
-    #wait_for_interrupt()
-    user_input('Finish?')
+    wait_for_user('Finish?')
     disconnect()
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@ import pybullet as p
 from pybullet_tools.pr2_utils import HEAD_LINK_NAME, PR2_GROUPS, get_viewcone, get_detections, \
     REST_LEFT_ARM, rightarm_from_leftarm, inverse_visibility, get_detection_cone, visible_base_generator
 from pybullet_tools.utils import joint_from_name, set_joint_position, disconnect, HideOutput, \
-    set_joint_positions, connect, wait_for_interrupt, get_link_pose, link_from_name, set_point, set_pose, \
+    set_joint_positions, connect, wait_for_user, get_link_pose, link_from_name, set_point, set_pose, \
     dump_body, load_model, create_mesh, point_from_pose, get_pose, joints_from_names, BLOCK_URDF, remove_body
 
 
@@ -54,7 +54,7 @@ def main():
         set_pose(detect_cone, get_link_pose(pr2, link_from_name(pr2, HEAD_LINK_NAME)))
         view_cone = get_viewcone(depth=2.5, color=(1, 0, 0, 0.25))
         set_pose(view_cone, get_link_pose(pr2, link_from_name(pr2, HEAD_LINK_NAME)))
-        wait_for_interrupt()
+        wait_for_user()
         remove_body(detect_cone)
         remove_body(view_cone)
 

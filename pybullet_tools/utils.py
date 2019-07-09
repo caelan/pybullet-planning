@@ -2411,7 +2411,7 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
         elif not colliding_vertices.get((i1, i2), True):
             color = (0, 0, 0)
         handles.append(add_line(draw_fn(samples[i1]), draw_fn(samples[i2]), color=color))
-    wait_for_interrupt()
+    wait_for_user()
     return path
 
 #####################################

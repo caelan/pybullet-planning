@@ -154,7 +154,6 @@ class Command(object):
                 msg = '{},{}) step?'.format(i, j)
                 user_input(msg)
                 #print(msg)
-                #wait_for_interrupt()
 
     def execute(self, time_step=0.05):
         for i, body_path in enumerate(self.body_paths):

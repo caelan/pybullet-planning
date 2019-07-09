@@ -10,7 +10,7 @@ from pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, PR2_URDF, DRAKE_PR2_U
 from pybullet_tools.utils import set_base_values, joint_from_name, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, \
     joint_controller, dump_body, load_model, joints_from_names, user_input, disconnect, get_joint_positions, \
-    get_link_pose, link_from_name, HideOutput, get_pose, wait_for_interrupt
+    get_link_pose, link_from_name, HideOutput, get_pose, wait_for_user
 
 
 def test_base_motion(pr2, base_start, base_goal):
@@ -94,7 +94,7 @@ def test_ikfast(pr2):
         print(i, len(solutions))
         for q in solutions:
             set_joint_positions(pr2, torso_left, q)
-            wait_for_interrupt()
+            wait_for_user()
 
 #####################################
 

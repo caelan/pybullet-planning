@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import pybullet as p
 
-from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, disconnect, wait_for_interrupt, \
+from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, disconnect, wait_for_user, \
     get_movable_joints, get_sample_fn, set_joint_positions, get_joint_name, joints_from_names, get_configuration, LockRenderer
 
 MOVO_URDF = "models/movo_description/movo.urdf"
@@ -31,7 +31,7 @@ def main():
         robot = load_model(MOVO_URDF, fixed_base=True)
     dump_body(robot)
     print('Start?')
-    wait_for_interrupt()
+    wait_for_user()
 
     #joint_names = HEAD_JOINTS
     #joints = joints_from_names(robot, joint_names)
@@ -42,7 +42,7 @@ def main():
         print('Iteration:', i)
         conf = sample_fn()
         set_joint_positions(robot, joints, conf)
-        wait_for_interrupt()
+        wait_for_user()
 
     disconnect()
 

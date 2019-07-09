@@ -8,7 +8,7 @@ import os
 from pybullet_tools.parse_json import parse_pose, parse_robot, parse_region, parse_body
 from pybullet_tools.utils import connect, \
     disconnect, wait_for_interrupt, point_from_pose, set_camera_pose, \
-    reset_simulation
+    reset_simulation, wait_for_user
 from pybullet_tools.pr2_problems import Problem
 
 BODY_FIELDS = [u'table_names', u'sink_names', u'stove_names']
@@ -167,7 +167,7 @@ def main():
             os.system("screencapture -R {},{},{},{} {}".format(
                 225, 200, 600, 500, image_path))
         else:
-            wait_for_interrupt()
+            wait_for_user()
     disconnect()
 
 if __name__ == '__main__':
