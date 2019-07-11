@@ -23,7 +23,8 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_place
     get_min_limit, user_input, step_simulation, get_body_name, get_bodies, BASE_LINK, \
     add_segments, get_max_limit, link_from_name, BodySaver, get_aabb, Attachment, interpolate_poses, \
     plan_direct_joint_motion, has_gui, create_attachment, wait_for_duration, get_extend_fn, set_renderer, \
-    get_custom_limits, all_between, get_unit_vector, wait_for_user, set_base_values, euler_from_quat, INF, elapsed_time
+    get_custom_limits, all_between, get_unit_vector, wait_for_user, \
+    set_base_values, euler_from_quat, INF, elapsed_time, get_moving_links, flatten_links
 
 BASE_EXTENT = 3.5 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
@@ -54,6 +55,9 @@ class Pose(object):
         self.value = tuple(value)
         self.support = support
         self.init = init
+    @property
+    def bodies(self):
+        return flatten_links(self.body)
     def assign(self):
         set_pose(self.body, self.value)
     def iterate(self):
@@ -85,6 +89,9 @@ class Conf(object):
             values = get_joint_positions(self.body, self.joints)
         self.values = tuple(values)
         self.init = init
+    @property
+    def bodies(self): # TODO: misnomer
+        return flatten_links(self.body, get_moving_links(self.body, self.joints))
     def assign(self):
         set_joint_positions(self.body, self.joints, self.values)
     def iterate(self):

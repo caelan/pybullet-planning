@@ -1390,8 +1390,7 @@ def get_adjacent_links(body):
 
 def get_adjacent_fixed_links(body):
     return list(filter(lambda item: not is_movable(body, item[0]),
-                  get_adjacent_links(body)))
-
+                       get_adjacent_links(body)))
 
 def get_fixed_links(body):
     edges = defaultdict(list)
@@ -2086,6 +2085,11 @@ def pairwise_link_collision(body1, link1, body2, link2=BASE_LINK, max_distance=M
                                   linkIndexA=link1, linkIndexB=link2,
                                   physicsClientId=CLIENT)) != 0 # getContactPoints
 
+def flatten_links(body, links=None):
+    if links is None:
+        links = get_all_links(body)
+    return {(body, frozenset([link])) for link in links}
+
 def expand_links(body):
     body, links = body if isinstance(body, tuple) else (body, None)
     if links is None:
@@ -2270,9 +2274,9 @@ def waypoints_from_path(path, tolerance=1e-3):
     waypoints.append(last_conf)
     return waypoints
 
-def get_moving_links(body, moving_joints):
+def get_moving_links(body, joints):
     moving_links = set()
-    for joint in moving_joints:
+    for joint in joints:
         link = child_link_from_joint(joint)
         if link not in moving_links:
             moving_links.update(get_link_subtree(body, link))
@@ -2311,7 +2315,6 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
     # TODO: convert most of these to keyword arguments
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) \
         if self_collisions else []
-
     moving_links = frozenset(get_moving_links(body, joints))
     attached_bodies = [attachment.child for attachment in attachments]
     moving_bodies = [(body, moving_links)] + attached_bodies
@@ -2684,6 +2687,10 @@ class Attachment(object):
         self.grasp_pose = grasp_pose
         self.child = child
         #self.child_link = child_link # child_link=BASE_LINK
+    @property
+    def bodies(self):
+        return flatten_links(self.child) | flatten_links(self.parent, get_link_subtree(
+            self.parent, self.parent_link))
     def assign(self):
         parent_link_pose = get_link_pose(self.parent, self.parent_link)
         child_pose = body_from_end_effector(parent_link_pose, self.grasp_pose)
