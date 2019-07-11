@@ -3085,8 +3085,9 @@ def add_segments(points, closed=False, **kwargs):
         lines.append(add_line(points[-1], points[0], **kwargs))
     return lines
 
-def draw_link_name(body, link):
-    return add_text(get_link_name(body, link), position=(0, 0.2, 0), parent=body, parent_link=link)
+def draw_link_name(body, link=BASE_LINK):
+    return add_text(get_link_name(body, link), position=(0, 0.2, 0),
+                    parent=body, parent_link=link)
 
 def draw_pose(pose, length=0.1, **kwargs):
     origin_world = tform_point(pose, np.zeros(3))
@@ -3273,21 +3274,30 @@ def sample_edge_pose(polygon, world_from_surface, mesh):
 # Convex Hulls
 
 def convex_hull(points):
-    # TODO: 2D convex hull
     from scipy.spatial import ConvexHull
     # TODO: cKDTree is faster, but KDTree can do all pairs closest
     hull = ConvexHull(points)
     new_indices = {i: ni for ni, i in enumerate(hull.vertices)}
     vertices = hull.points[hull.vertices, :]
     faces = np.vectorize(lambda i: new_indices[i])(hull.simplices)
-    return vertices, faces
+    return Mesh(vertices.tolist(), faces.tolist())
 
-def convex_area(vertices):
+def convex_signed_area(vertices):
     if len(vertices) < 3:
         return 0.
-    vertices = [v[:2] for v in vertices]
-    segments = zip(vertices, vertices[1:] + vertices[-1:])
-    return 0.5 * abs(sum(x0*y1 - x1*y0 for ((x0, y0), (x1, y1)) in segments))
+    vertices = [np.array(v[:2]) for v in vertices]
+    segments = safe_zip(vertices, vertices[1:] + vertices[:1])
+    return sum(np.cross(v1, v2) for v1, v2 in segments) / 2.
+
+def convex_area(vertices):
+    return abs(convex_signed_area(vertices))
+
+def convex_centroid(vertices):
+    # TODO: also applies to non-overlapping polygons
+    vertices = [np.array(v[:2]) for v in vertices]
+    segments = list(safe_zip(vertices, vertices[1:] + vertices[:1]))
+    return sum((v1 + v2)*np.cross(v1, v2) for v1, v2 in segments) \
+           / (6.*convex_signed_area(vertices))
 
 def mesh_from_points(points):
     vertices, indices = convex_hull(points)
