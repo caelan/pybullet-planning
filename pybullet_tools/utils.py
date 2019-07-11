@@ -2423,45 +2423,54 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
 
 #####################################
 
-def get_nonholonomic_distance_fn(body, joints, weights=None):
+def get_nonholonomic_distance_fn(body, joints, weights=None, reversible=True):
     assert weights is None
     assert len(joints) == 3
     linear_extend_fn = get_distance_fn(body, joints[:2])
     angular_extend_fn = get_distance_fn(body, joints[2:])
 
     def distance_fn(q1, q2):
-        theta = get_angle(q1, q2)
-        return angular_extend_fn(q1[2:], [theta]) + \
-               linear_extend_fn(q1[:2], q2[:2]) + \
-               angular_extend_fn([theta], q2[2:])
+        angular_distances = []
+        for direction in [0, PI] if reversible else [PI]:
+            theta = get_angle(q1[:2], q2[:2]) + direction
+            angular_distances.append(angular_extend_fn(q1[2:], [theta]) +
+                                     linear_extend_fn(q1[:2], q2[:2]) +
+                                     angular_extend_fn([theta], q2[2:]))
+        return min(angular_distances)
     return distance_fn
 
-def get_nonholonomic_extend_fn(body, joints, resolutions=None):
+def get_nonholonomic_extend_fn(body, joints, resolutions=None, reversible=True):
     assert resolutions is None
     assert len(joints) == 3
     linear_extend_fn = get_extend_fn(body, joints[:2])
     angular_extend_fn = get_extend_fn(body, joints[2:])
 
     def extend_fn(q1, q2):
-        theta = get_angle(q1, q2)
-        for aq in angular_extend_fn(q1[2:], [theta]):
-            yield np.append(q1[:2], aq)
-        for lq in linear_extend_fn(q1[:2], q2[:2]):
-            yield np.append(lq, [theta])
-        for aq in angular_extend_fn([theta], q2[2:]):
-            yield np.append(q2[:2], aq)
+        paths = []
+        for direction in [0, PI] if reversible else [PI]:
+            theta = get_angle(q1[:2], q2[:2]) + direction
+            path = []
+            for aq in angular_extend_fn(q1[2:], [theta]):
+                path.append(np.append(q1[:2], aq))
+            for lq in linear_extend_fn(q1[:2], q2[:2]):
+                path.append(np.append(lq, [theta]))
+            for aq in angular_extend_fn([theta], q2[2:]):
+                path.append(np.append(q2[:2], aq))
+            paths.append(path)
+        return min(paths, key=len)
     return extend_fn
 
 def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[],
                              self_collisions=True, disabled_collisions=set(),
-                             weights=None, resolutions=None,
+                             weights=None, resolutions=None, reversible=True,
                              max_distance=MAX_DISTANCE, custom_limits={}, **kwargs):
 
     assert len(joints) == len(end_conf)
     sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
-    distance_fn = get_nonholonomic_distance_fn(body, joints, weights=weights)
-    extend_fn = get_nonholonomic_extend_fn(body, joints, resolutions=resolutions)
-    collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
+    distance_fn = get_nonholonomic_distance_fn(body, joints, weights=weights, reversible=reversible)
+    extend_fn = get_nonholonomic_extend_fn(body, joints, resolutions=resolutions, reversible=reversible)
+    collision_fn = get_collision_fn(body, joints, obstacles, attachments,
+                                    self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, max_distance=max_distance)
 
     start_conf = get_joint_positions(body, joints)
