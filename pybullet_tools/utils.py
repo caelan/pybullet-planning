@@ -3139,7 +3139,7 @@ def draw_circle(center, radius, n=24, **kwargs):
   vertices = []
   for i in range(n):
       theta = i*2*math.pi/n
-      unit = np.array([math.cos(theta), math.sin(theta), 0])
+      unit = np.append(unit_from_theta(theta), [0])
       vertices.append(center+radius*unit)
   return add_segments(vertices, closed=True, **kwargs)
 
@@ -3216,6 +3216,23 @@ def is_point_in_polygon(point, polygon):
         elif np.sign(dist) != sign:
             return False
     return True
+
+def distance_from_segment(x1, y1, x2, y2, x3, y3): # x3,y3 is the point
+    # https://stackoverflow.com/questions/10983872/distance-from-a-point-to-a-polygon
+    # https://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment
+    px = x2 - x1
+    py = y2 - y1
+    norm = px*px + py*py
+    u =  ((x3 - x1) * px + (y3 - y1) * py) / float(norm)
+    if u > 1:
+        u = 1
+    elif u < 0:
+        u = 0
+    x = x1 + u * px
+    y = y1 + u * py
+    dx = x - x3
+    dy = y - y3
+    return math.sqrt(dx*dx + dy*dy)
 
 def tform_point(affine, point):
     return point_from_pose(multiply(affine, Pose(point=point)))
@@ -3350,17 +3367,16 @@ def rectangular_mesh(width, length):
     faces = [(0, 1, 2), (2, 3, 0)]
     return Mesh(vertices, faces)
 
-def mesh_from_body(body, link=BASE_LINK):
-    # TODO: read obj files so I can always obtain the pointcloud
-    # TODO: approximate cylindrical/spherical using convex hull
-    # TODO: change based on geom_type
-    print(get_collision_data(body, link))
-    print(get_visual_data(body, link))
-    # TODO: these aren't working...
-    raise NotImplementedError()
-
 def tform_mesh(affine, mesh):
     return Mesh(apply_affine(affine, mesh.vertices), mesh.faces)
+
+def grow_polygon(vertices, radius, n=8):
+    points = []
+    for vertex in vertices:
+        points.append(vertex[:2])
+        for theta in np.linspace(0, 2*PI, num=n, endpoint=False):
+            points.append(vertex[:2] + radius*unit_from_theta(theta))
+    return convex_hull(points).vertices
 
 #####################################
 
