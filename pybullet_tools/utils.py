@@ -925,8 +925,8 @@ def base_values_from_pose(pose, tolerance=1e-3):
 
 def pose_from_base_values(base_values, default_pose=unit_pose()):
     x, y, yaw = base_values
-    _, _, z = default_pose[0]
-    roll, pitch, _ = euler_from_quat(default_pose[1])
+    _, _, z = point_from_pose(default_pose)
+    roll, pitch, _ = euler_from_quat(quat_from_pose(default_pose))
     return (x, y, z), quat_from_euler([roll, pitch, yaw])
 
 def quat_angle_between(quat0, quat1): # quaternion_slerp
@@ -2052,6 +2052,8 @@ def vertices_from_link(body, link):
         vertices.extend(vertices_from_data(data))
     return vertices
 
+OBJ_MESH_CACHE = {}
+
 def vertices_from_rigid(body):
     assert get_num_links(body) == 0
     try:
@@ -2061,7 +2063,9 @@ def vertices_from_rigid(body):
         assert info is not None
         _, ext = os.path.splitext(info.path)
         if ext == '.obj':
-            mesh = read_obj(info.path, decompose=False)
+            if info.path not in OBJ_MESH_CACHE:
+                OBJ_MESH_CACHE[info.path] = read_obj(info.path, decompose=False)
+            mesh = OBJ_MESH_CACHE[info.path]
             vertices = mesh.vertices
         else:
             raise NotImplementedError(ext)
