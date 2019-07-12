@@ -6,14 +6,14 @@ import math
 import os
 import pickle
 import platform
+import numpy as np
 import pybullet as p
 import random
 import sys
 import time
+import datetime
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count
-
-import numpy as np
 
 from .transformations import quaternion_from_matrix, unit_vector
 
@@ -61,6 +61,8 @@ STOVE_URDF = 'models/stove.urdf'
 #####################################
 
 # I/O
+
+SEPARATOR = '\n' + 50*'-' + '\n'
 
 def is_remote():
     return 'SSH_CONNECTION' in os.environ
@@ -115,6 +117,21 @@ def randomize(sequence): # TODO: bisect
     random.shuffle(indices)
     for i in indices:
         yield sequence[i]
+
+def get_random_seed():
+    # random.getstate()[1][0]
+    return np.random.get_state()[1][0]
+
+def set_seed(seed):
+    # These generators are different and independent
+    if seed is None:
+        return
+    random.seed(seed)
+    np.random.seed(seed % (2**32))
+    print('Seed:', seed)
+
+def get_date():
+    return datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
 
 #####################################
 
@@ -906,7 +923,7 @@ def base_values_from_pose(pose, tolerance=1e-3):
     assert (abs(roll) < tolerance) and (abs(pitch) < tolerance)
     return (x, y, yaw)
 
-def pose_from_base_values(base_values, default_pose):
+def pose_from_base_values(base_values, default_pose=unit_pose()):
     x, y, yaw = base_values
     _, _, z = default_pose[0]
     roll, pitch, _ = euler_from_quat(default_pose[1])
