@@ -3108,6 +3108,12 @@ def add_line(start, end, color=(0, 0, 0), width=1, lifetime=None, parent=-1, par
 def remove_debug(debug):
     p.removeUserDebugItem(debug, physicsClientId=CLIENT)
 
+remove_handle = remove_debug
+
+def remove_handles(handles):
+    for handle in handles:
+        remove_debug(handle)
+
 def remove_all_debug():
     p.removeAllUserDebugItems(physicsClientId=CLIENT)
 
