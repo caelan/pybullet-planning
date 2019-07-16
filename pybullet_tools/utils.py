@@ -282,8 +282,8 @@ class WorldSaver(Saver):
 
 # Simulation
 
+CLIENTS = {}
 CLIENT = 0
-# TODO: keep track of all the clients?
 
 def get_client(client=None):
     if client is None:
@@ -481,20 +481,27 @@ def disable_viewer():
     #p.COV_ENABLE_MOUSE_PICKING, p.COV_ENABLE_KEYBOARD_SHORTCUTS
 
 def set_renderer(enable):
-    p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, int(enable), physicsClientId=CLIENT)
+    client = CLIENT
+    if not has_gui(client):
+        return
+    CLIENTS[client] = enable
+    p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, int(enable), physicsClientId=client)
 
 class LockRenderer(Saver):
     # disabling rendering temporary makes adding objects faster
     def __init__(self, lock=True):
+        self.client = CLIENT
+        self.state = CLIENTS[self.client]
         # skip if the visualizer isn't active
-        self.renderer = has_gui()
-        if lock:
+        if has_gui(self.client) and lock:
             set_renderer(enable=False)
 
     def restore(self):
-        set_renderer(enable=self.renderer)
-
-CLIENTS = set()
+        if not has_gui(self.client):
+            return
+        assert self.state is not None
+        if self.state != CLIENTS[self.client]:
+           set_renderer(enable=self.state)
 
 def connect(use_gui=True, shadows=True):
     # Shared Memory: execute the physics simulation and rendering in a separate process
@@ -512,7 +519,7 @@ def connect(use_gui=True, shadows=True):
     assert 0 <= sim_id
     #sim_id2 = p.connect(p.SHARED_MEMORY)
     #print(sim_id, sim_id2)
-    CLIENTS.add(sim_id)
+    CLIENTS[sim_id] = True if use_gui else None
     if use_gui:
         # p.COV_ENABLE_PLANAR_REFLECTION
         # p.COV_ENABLE_SINGLE_STEP_RENDERING
@@ -574,7 +581,7 @@ def threaded_input(*args, **kwargs):
 def disconnect():
     # TODO: change CLIENT?
     if CLIENT in CLIENTS:
-        CLIENTS.remove(CLIENT)
+        del CLIENTS[CLIENT]
     with HideOutput():
         return p.disconnect(physicsClientId=CLIENT)
 
