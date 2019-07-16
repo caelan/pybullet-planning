@@ -2444,41 +2444,48 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
 
 #####################################
 
-def get_nonholonomic_distance_fn(body, joints, weights=None, reversible=True):
-    assert weights is None
+def get_closest_angle_fn(body, joints, reversible=True):
     assert len(joints) == 3
     linear_extend_fn = get_distance_fn(body, joints[:2])
     angular_extend_fn = get_distance_fn(body, joints[2:])
 
-    def distance_fn(q1, q2):
-        angular_distances = []
+    def closest_fn(q1, q2):
+        angle_and_distance = []
         for direction in [0, PI] if reversible else [PI]:
-            theta = get_angle(q1[:2], q2[:2]) + direction
-            angular_distances.append(angular_extend_fn(q1[2:], [theta]) +
-                                     linear_extend_fn(q1[:2], q2[:2]) +
-                                     angular_extend_fn([theta], q2[2:]))
-        return min(angular_distances)
+            angle = get_angle(q1[:2], q2[:2]) + direction
+            distance = angular_extend_fn(q1[2:], [angle]) \
+                       + linear_extend_fn(q1[:2], q2[:2]) \
+                       + angular_extend_fn([angle], q2[2:])
+            angle_and_distance.append((angle, distance))
+        return min(angle_and_distance, key=lambda pair: pair[1])
+    return closest_fn
+
+def get_nonholonomic_distance_fn(body, joints, weights=None, **kwargs):
+    assert weights is None
+    closest_angle_fn = get_closest_angle_fn(body, joints, **kwargs)
+
+    def distance_fn(q1, q2):
+        _, distance = closest_angle_fn(q1, q2)
+        return distance
     return distance_fn
 
-def get_nonholonomic_extend_fn(body, joints, resolutions=None, reversible=True):
+def get_nonholonomic_extend_fn(body, joints, resolutions=None, **kwargs):
     assert resolutions is None
     assert len(joints) == 3
     linear_extend_fn = get_extend_fn(body, joints[:2])
     angular_extend_fn = get_extend_fn(body, joints[2:])
+    closest_angle_fn = get_closest_angle_fn(body, joints, **kwargs)
 
     def extend_fn(q1, q2):
-        paths = []
-        for direction in [0, PI] if reversible else [PI]:
-            theta = get_angle(q1[:2], q2[:2]) + direction
-            path = []
-            for aq in angular_extend_fn(q1[2:], [theta]):
-                path.append(np.append(q1[:2], aq))
-            for lq in linear_extend_fn(q1[:2], q2[:2]):
-                path.append(np.append(lq, [theta]))
-            for aq in angular_extend_fn([theta], q2[2:]):
-                path.append(np.append(q2[:2], aq))
-            paths.append(path)
-        return min(paths, key=len)
+        angle, _ = closest_angle_fn(q1, q2)
+        path = []
+        for aq in angular_extend_fn(q1[2:], [angle]):
+            path.append(np.append(q1[:2], aq))
+        for lq in linear_extend_fn(q1[:2], q2[:2]):
+            path.append(np.append(lq, [angle]))
+        for aq in angular_extend_fn([angle], q2[2:]):
+            path.append(np.append(q2[:2], aq))
+        return path
     return extend_fn
 
 def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[],
