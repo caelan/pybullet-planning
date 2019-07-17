@@ -3391,12 +3391,15 @@ def tform_mesh(affine, mesh):
     return Mesh(apply_affine(affine, mesh.vertices), mesh.faces)
 
 def grow_polygon(vertices, radius, n=8):
+    if not vertices:
+        return []
     vertices2d = [vertex[:2] for vertex in vertices]
     points = []
     for vertex in convex_hull(vertices2d).vertices:
         points.append(vertex)
-        for theta in np.linspace(0, 2*PI, num=n, endpoint=False):
-            points.append(vertex + radius*unit_from_theta(theta))
+        if 0 < radius:
+            for theta in np.linspace(0, 2*PI, num=n, endpoint=False):
+                points.append(vertex + radius*unit_from_theta(theta))
     return convex_hull(points).vertices
 
 #####################################
