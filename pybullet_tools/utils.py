@@ -3391,9 +3391,9 @@ def tform_mesh(affine, mesh):
     return Mesh(apply_affine(affine, mesh.vertices), mesh.faces)
 
 def grow_polygon(vertices, radius, n=8):
-    if not vertices:
-        return []
     vertices2d = [vertex[:2] for vertex in vertices]
+    if not vertices2d:
+        return []
     points = []
     for vertex in convex_hull(vertices2d).vertices:
         points.append(vertex)
