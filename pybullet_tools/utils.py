@@ -457,6 +457,13 @@ def wait_for_user(message='Press enter to continue'):
         return threaded_input(message)
     return user_input(message)
 
+def is_unlocked():
+    return CLIENTS[CLIENT] is True
+
+def wait_if_unlocked(*args, **kwargs):
+    if is_unlocked():
+        wait_for_user(*args, **kwargs)
+
 def wait_for_interrupt(max_time=np.inf):
     """
     Hold Ctrl to move the camera as well as zoom
@@ -2196,7 +2203,7 @@ def batch_ray_collision(rays, threads=1):
     ray_ends = [end for _, end in rays]
     return [RayResult(*tup) for tup in p.rayTestBatch(
         ray_starts, ray_ends,
-        #numThreads=1,
+        numThreads=threads,
         #parentObjectUniqueId=
         #parentLinkIndex=
         physicsClientId=CLIENT)]
