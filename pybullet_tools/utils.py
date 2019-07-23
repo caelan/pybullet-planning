@@ -2589,26 +2589,29 @@ def stable_z(body, surface, surface_link=None):
     return stable_z_on_aabb(body, get_aabb(surface, link=surface_link))
 
 def is_placed_on_aabb(body, bottom_aabb, above_epsilon=1e-2, below_epsilon=0.0):
+    assert (0 <= above_epsilon) and (0 <= below_epsilon)
     top_aabb = get_aabb(body) # TODO: approximate_as_prism
-    bottom_z_max = bottom_aabb[1][2]
     top_z_min = top_aabb[0][2]
-    return ((bottom_z_max - below_epsilon) <= top_z_min) and \
-           (top_z_min <= (bottom_z_max + above_epsilon)) and \
+    bottom_z_max = bottom_aabb[1][2]
+    return ((bottom_z_max - below_epsilon) <= top_z_min <= (bottom_z_max + above_epsilon)) and \
            (aabb_contains_aabb(aabb2d_from_aabb(top_aabb), aabb2d_from_aabb(bottom_aabb)))
 
 def is_placement(body, surface, **kwargs):
     return is_placed_on_aabb(body, get_aabb(surface), **kwargs)
 
-def is_center_stable(body, surface, epsilon=1e-2):
+def is_center_on_aabb(body, bottom_aabb, above_epsilon=1e-2, below_epsilon=0.0):
     # TODO: compute AABB in origin
     # TODO: use center of mass?
-    center, extent = get_center_extent(body)
+    assert (0 <= above_epsilon) and (0 <= below_epsilon)
+    center, extent = get_center_extent(body) # TODO: approximate_as_prism
     base_center = center - np.array([0, 0, extent[2]])/2
-    bottom_aabb = get_aabb(surface)
+    top_z_min = base_center[2]
     bottom_z_max = bottom_aabb[1][2]
-    #return (bottom_z_max <= base_center[2] <= (bottom_z_max + epsilon)) and \
-    return (abs(base_center[2] - bottom_z_max) < epsilon) and \
+    return ((bottom_z_max - abs(below_epsilon)) <= top_z_min <= (bottom_z_max + abs(above_epsilon))) and \
            (aabb_contains_point(base_center[:2], aabb2d_from_aabb(bottom_aabb)))
+
+def is_center_stable(body, surface, **kwargs):
+    return is_center_on_aabb(body, get_aabb(surface), **kwargs)
 
 def sample_placement_on_aabb(top_body, bottom_aabb, top_pose=unit_pose(),
                              percent=1.0, max_attempts=50, epsilon=1e-3):
