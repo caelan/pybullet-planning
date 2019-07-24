@@ -937,6 +937,8 @@ def base_values_from_pose(pose, tolerance=1e-3):
     assert (abs(roll) < tolerance) and (abs(pitch) < tolerance)
     return (x, y, yaw)
 
+pose2d_from_pose = base_values_from_pose
+
 def pose_from_base_values(base_values, default_pose=unit_pose()):
     x, y, yaw = base_values
     _, _, z = point_from_pose(default_pose)
