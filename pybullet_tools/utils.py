@@ -924,8 +924,8 @@ def tform_from_pose(pose):
 def pose_from_tform(tform):
     return point_from_tform(tform), quat_from_matrix(matrix_from_tform(tform))
 
-def wrap_angle(theta):
-    return (theta + np.pi) % (2 * np.pi) - np.pi
+def wrap_angle(theta, lower=-np.pi): # [-np.pi, np.pi)
+    return (theta - lower) % (2 * np.pi) + lower
 
 def circular_difference(theta2, theta1):
     return wrap_angle(theta2 - theta1)
