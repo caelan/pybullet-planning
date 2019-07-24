@@ -2020,6 +2020,12 @@ def get_bodies_in_region(aabb):
     (lower, upper) = aabb
     return p.getOverlappingObjects(lower, upper, physicsClientId=CLIENT)
 
+def get_aabb_volume(aabb):
+    return np.prod(get_aabb_extent(aabb))
+
+def get_aabb_area(aabb):
+    return np.prod(get_aabb_extent(aabb2d_from_aabb(aabb)))
+
 #####################################
 
 # AABB approximation
