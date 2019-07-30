@@ -875,8 +875,11 @@ def unit_pose():
 def get_length(vec, norm=2):
     return np.linalg.norm(vec, ord=norm)
 
+def get_difference(p1, p2):
+    return np.array(p2) - np.array(p1)
+
 def get_distance(p1, p2, **kwargs):
-    return get_length(np.array(p2) - np.array(p1), **kwargs)
+    return get_length(get_difference(p1, p2), **kwargs)
 
 def angle_between(vec1, vec2):
     return np.math.acos(np.dot(vec1, vec2) / (get_length(vec1) *  get_length(vec2)))
