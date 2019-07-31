@@ -64,6 +64,9 @@ STOVE_URDF = 'models/stove.urdf'
 
 SEPARATOR = '\n' + 50*'-' + '\n'
 
+def print_separator(n=50):
+    print('\n' + n*'-' + '\n')
+
 def is_remote():
     return 'SSH_CONNECTION' in os.environ
 
@@ -119,16 +122,20 @@ def randomize(sequence): # TODO: bisect
         yield sequence[i]
 
 def get_random_seed():
-    # random.getstate()[1][0]
+    return random.getstate()[1][0]
+
+def get_numpy_seed():
     return np.random.get_state()[1][0]
 
-def set_seed(seed):
+def set_random_seed(seed):
+    if seed is not None:
+        random.seed(seed)
+
+def set_numpy_seed(seed):
     # These generators are different and independent
-    if seed is None:
-        return
-    random.seed(seed)
-    np.random.seed(seed % (2**32))
-    print('Seed:', seed)
+    if seed is not None:
+        np.random.seed(seed % (2**32))
+        print('Seed:', seed)
 
 def get_date():
     return datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
