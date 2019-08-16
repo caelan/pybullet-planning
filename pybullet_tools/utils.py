@@ -212,14 +212,18 @@ class ClientSaver(Saver):
 
 class VideoSaver(Saver):
     def __init__(self, path):
-        name, ext = os.path.splitext(path)
-        assert ext == '.mp4'
-        # STATE_LOGGING_PROFILE_TIMINGS, STATE_LOGGING_ALL_COMMANDS
-        # p.submitProfileTiming("pythontest")
-        self.log_id = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, fileName=path, physicsClientId=CLIENT)
+        if path is None:
+            self.log_id = None
+        else:
+            name, ext = os.path.splitext(path)
+            assert ext == '.mp4'
+            # STATE_LOGGING_PROFILE_TIMINGS, STATE_LOGGING_ALL_COMMANDS
+            # p.submitProfileTiming("pythontest")
+            self.log_id = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, fileName=path, physicsClientId=CLIENT)
 
     def restore(self):
-        p.stopStateLogging(self.log_id)
+        if self.log_id is not None:
+            p.stopStateLogging(self.log_id)
 
 #####################################
 
@@ -3232,7 +3236,9 @@ def draw_mesh(mesh, **kwargs):
             lines.append(add_line(verts[i1], verts[i2], **kwargs))
     return lines
 
-def draw_ray(ray, ray_result, visible_color=GREEN, occluded_color=RED, **kwargs):
+def draw_ray(ray, ray_result=None, visible_color=GREEN, occluded_color=RED, **kwargs):
+    if ray_result is None:
+        return [add_line(ray.start, ray.end, color=visible_color, **kwargs)]
     if ray_result.objectUniqueId == -1:
         hit_position = ray.end
     else:

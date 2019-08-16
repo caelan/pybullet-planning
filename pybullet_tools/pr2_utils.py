@@ -661,8 +661,7 @@ def get_view_aabb(body, view_pose, **kwargs):
     with PoseSaver(body):
         body_view = multiply(invert(view_pose), get_pose(body))
         set_pose(body, body_view)
-        aabb = get_aabb(body, **kwargs)
-        return aabb
+        return get_aabb(body, **kwargs)
 
 def get_detection_cone(pr2, body, camera_link=HEAD_LINK_NAME, depth=MAX_VISUAL_DISTANCE, **kwargs):
     head_link = link_from_name(pr2, camera_link)
