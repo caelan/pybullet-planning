@@ -963,8 +963,9 @@ def quat_angle_between(quat0, quat1): # quaternion_slerp
     #p.computeViewMatrixFromYawPitchRoll()
     q0 = unit_vector(quat0[:4])
     q1 = unit_vector(quat1[:4])
-    d = max(-1., min(np.dot(q0, q1), 1.))
+    d = clip(np.dot(q0, q1), min_value=-1., max_value=+1.)
     angle = math.acos(d)
+    # TODO: angle_between
     #delta = p.getDifferenceQuaternion(quat0, quat1)
     #angle = math.acos(delta[-1])
     return angle
@@ -1572,7 +1573,7 @@ def get_mesh_geometry(path, scale=1.):
 
 NULL_ID = -1
 
-def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
+def create_collision_shape(geometry, pose=unit_pose()):
     point, quat = pose
     collision_args = {
         'collisionFramePosition': point,
@@ -1584,10 +1585,12 @@ def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
         # TODO: pybullet bug visual => length, collision => height
         collision_args['height'] = collision_args['length']
         del collision_args['length']
-    collision_id = p.createCollisionShape(**collision_args)
+    return p.createCollisionShape(**collision_args)
 
+def create_visual_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
     if (color is None): # or not has_gui():
-        return collision_id, NULL_ID
+        return NULL_ID
+    point, quat = pose
     visual_args = {
         'rgbaColor': color,
         'visualFramePosition': point,
@@ -1597,7 +1600,11 @@ def create_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
     visual_args.update(geometry)
     if specular is not None:
         visual_args['specularColor'] = specular
-    visual_id = p.createVisualShape(**visual_args)
+    return p.createVisualShape(**visual_args)
+
+def create_shape(geometry, pose=unit_pose(), collision=True, **kwargs):
+    collision_id = create_collision_shape(geometry, pose=pose) if collision else NULL_ID
+    visual_id = create_visual_shape(geometry, pose=pose, **kwargs)
     return collision_id, visual_id
 
 def plural(word):
@@ -1668,8 +1675,8 @@ def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(0, 0, 0, 1)):
     collision_id, visual_id = create_shape(get_plane_geometry(normal), color=color)
     return create_body(collision_id, visual_id, mass=mass)
 
-def create_obj(path, scale=1., mass=STATIC_MASS, color=(0.5, 0.5, 0.5, 1)):
-    collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), color=color)
+def create_obj(path, scale=1., mass=STATIC_MASS, collision=True, color=(0.5, 0.5, 0.5, 1)):
+    collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), collision=collision, color=color)
     body = create_body(collision_id, visual_id, mass=mass)
     fixed_base = (mass == STATIC_MASS)
     INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, path, fixed_base, scale) # TODO: store geometry info instead?
@@ -2383,6 +2390,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
     # TODO: test self collision with the holding
     def collision_fn(q):
         if not all_between(lower_limits, q, upper_limits):
+            #print('Joint limits violated')
             return True
         set_joint_positions(body, joints, q)
         for attachment in attachments:
