@@ -140,6 +140,9 @@ def set_numpy_seed(seed):
 def get_date():
     return datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
 
+def implies(p1, p2):
+    return not p1 or p2
+
 #####################################
 
 # https://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python/14797594#14797594
@@ -313,9 +316,8 @@ def get_model_info(body):
     key = (CLIENT, body)
     return INFO_FROM_BODY.get(key, None)
 
-def get_urdf_flags(cache=False):
+def get_urdf_flags(cache=False, cylinder=False):
     # by default, Bullet disables self-collision
-    # URDF_USE_IMPLICIT_CYLINDER
     # URDF_INITIALIZE_SAT_FEATURES
     # URDF_ENABLE_CACHED_GRAPHICS_SHAPES seems to help
     # but URDF_INITIALIZE_SAT_FEATURES does not (might need to be provided a mesh)
@@ -323,6 +325,8 @@ def get_urdf_flags(cache=False):
     flags = 0
     if cache:
         flags |= p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
+    if cylinder:
+        flags |= p.URDF_USE_IMPLICIT_CYLINDER
     return flags
 
 def load_pybullet(filename, fixed_base=False, scale=1., **kwargs):
@@ -2062,6 +2066,7 @@ def vertices_from_data(data):
         aabb = AABB(-extents/2., +extents/2.)
         vertices = get_aabb_vertices(aabb)
     elif geometry_type in (p.GEOM_CYLINDER, p.GEOM_CAPSULE):
+        # TODO: p.URDF_USE_IMPLICIT_CYLINDER
         radius, height = get_data_radius(data), get_data_height(data)
         extents = np.array([2*radius, 2*radius, height])
         aabb = AABB(-extents/2., +extents/2.)
@@ -2097,10 +2102,10 @@ def vertices_from_link(body, link):
 
 OBJ_MESH_CACHE = {}
 
-def vertices_from_rigid(body):
-    assert get_num_links(body) == 0
+def vertices_from_rigid(body, link=BASE_LINK):
+    assert implies(link == BASE_LINK, get_num_links(body) == 0)
     try:
-        vertices = vertices_from_link(body, BASE_LINK)
+        vertices = vertices_from_link(body, link)
     except RuntimeError:
         info = get_model_info(body)
         assert info is not None
@@ -2114,9 +2119,9 @@ def vertices_from_rigid(body):
             raise NotImplementedError(ext)
     return vertices
 
-def approximate_as_prism(body, body_pose=unit_pose()): #, **kwargs):
+def approximate_as_prism(body, body_pose=unit_pose(), **kwargs):
     # TODO: make it just orientation
-    vertices = apply_affine(body_pose, vertices_from_rigid(body))
+    vertices = apply_affine(body_pose, vertices_from_rigid(body, **kwargs))
     aabb = aabb_from_points(vertices)
     return get_aabb_center(aabb), get_aabb_extent(aabb)
     #with PoseSaver(body):
@@ -2274,14 +2279,15 @@ def get_difference_fn(body, joints):
                      for circular, value2, value1 in zip(circular_joints, q2, q1))
     return fn
 
-def get_distance_fn(body, joints, weights=None):
+def get_distance_fn(body, joints, weights=None): #, norm=2):
     # TODO: use the energy resulting from the mass matrix here?
     if weights is None:
-        weights = 1*np.ones(len(joints))
+        weights = 1*np.ones(len(joints)) # TODO: use velocities here
     difference_fn = get_difference_fn(body, joints)
     def fn(q1, q2):
         diff = np.array(difference_fn(q2, q1))
         return np.sqrt(np.dot(weights, diff * diff))
+        #return np.linalg.norm(np.multiply(weights * diff), ord=norm)
     return fn
 
 def get_refine_fn(body, joints, num_steps=0):

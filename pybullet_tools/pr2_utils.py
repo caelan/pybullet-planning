@@ -381,8 +381,8 @@ def get_x_presses(body, max_orientations=1, body_pose=unit_pose(), top_offset=PR
         press_poses += [multiply(TOOL_POSE, translate, swap_xz, translate_center, body_pose)]
     return press_poses
 
-def get_top_presses(body, tool_pose=TOOL_POSE, body_pose=unit_pose(), top_offset=PRESS_OFFSET):
-    center, (_, height) = approximate_as_cylinder(body, body_pose=body_pose)
+def get_top_presses(body, tool_pose=TOOL_POSE, body_pose=unit_pose(), top_offset=PRESS_OFFSET, **kwargs):
+    center, (_, height) = approximate_as_cylinder(body, body_pose=body_pose, **kwargs)
     reflect_z = Pose(euler=[0, math.pi, 0])
     translate_z = Pose(point=[0, 0, height / 2 + top_offset])
     translate_center = Pose(point=point_from_pose(body_pose)-center)
