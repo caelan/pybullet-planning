@@ -135,7 +135,7 @@ def set_numpy_seed(seed):
     # These generators are different and independent
     if seed is not None:
         np.random.seed(seed % (2**32))
-        print('Seed:', seed)
+        #print('Seed:', seed)
 
 def get_date():
     return datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
@@ -2337,8 +2337,7 @@ def waypoints_from_path(path, tolerance=1e-3):
     path = remove_redundant(path, tolerance=tolerance)
     if len(path) < 2:
         return path
-    def difference_fn(q2, q1):
-        return np.array(q2) - np.array(q1)
+    difference_fn = lambda q2, q1: np.array(q2) - np.array(q1)
     #difference_fn = get_difference_fn(body, joints)
 
     waypoints = [path[0]]
