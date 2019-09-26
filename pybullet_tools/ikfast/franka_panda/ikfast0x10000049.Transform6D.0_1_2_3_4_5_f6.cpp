@@ -12823,3 +12823,167 @@ int main(int argc, char** argv)
 }
 
 #endif
+
+// start python bindings
+#include <Python.h>
+
+// https://github.com/caelan/ss-pybullet/blob/c5efe7ad32381a7a7a15c2bd147b5a8731d21342/pybullet_tools/ikfast/pr2/left_arm_ik.cpp#L12972
+// https://github.com/yijiangh/conrob_pybullet/blob/master/utils/ikfast/kuka_kr6_r900/ikfast0x1000004a.Transform6D.0_1_2_3_4_5.cpp#L9923
+
+static PyObject *get_ik(PyObject *self, PyObject *args)
+{
+    IkSolutionList<IkReal> solutions;
+
+    std::vector<IkReal> vfree(GetNumFreeParameters());
+    IkReal eerot[9], eetrans[3];
+
+    // First list if 3x3 rotation matrix, easier to compute in Python.
+    // Next list is [x, y, z] translation matrix.
+    // Last list is free joints.
+    PyObject *rotList; // 3x3 rotation matrix
+    PyObject *transList; // [x,y,z]
+    PyObject *freeList; // can be empty
+
+    // format 'O!': pass C object pointer with the pointer's address.
+    if(!PyArg_ParseTuple(args, "O!O!O!", &PyList_Type, &rotList, &PyList_Type, &transList, &PyList_Type, &freeList))
+    {
+        fprintf(stderr,"Failed to parse input to python objects\n");
+        return NULL;
+    }
+
+    for(std::size_t i = 0; i < 3; ++i)
+    {
+        eetrans[i] = PyFloat_AsDouble(PyList_GetItem(transList, i));
+
+        PyObject* rowList = PyList_GetItem(rotList, i);
+        for( std::size_t j = 0; j < 3; ++j)
+        {
+            eerot[3*i + j] = PyFloat_AsDouble(PyList_GetItem(rowList, j));
+        }
+    }
+
+    for(int i = 0; i < GetNumFreeParameters(); ++i)
+    {
+        vfree[i] = PyFloat_AsDouble(PyList_GetItem(freeList, i));
+    }
+
+    // call ikfast routine
+    bool bSuccess = ComputeIk(eetrans, eerot, &vfree[0], solutions);
+
+    if (!bSuccess)
+    {
+        //fprintf(stderr,"Failed to get ik solution\n");
+        return Py_BuildValue(""); // Equivalent to returning None in python
+    }
+
+    std::vector<IkReal> solvalues(GetNumJoints());
+    PyObject *solutionList = PyList_New(solutions.GetNumSolutions());
+
+    // convert all ikfast solutions into a python list
+    for(std::size_t i = 0; i < solutions.GetNumSolutions(); ++i)
+    {
+        const IkSolutionBase<IkReal>& sol = solutions.GetSolution(i);
+        std::vector<IkReal> vsolfree(sol.GetFree().size());
+        sol.GetSolution(&solvalues[0],vsolfree.size()>0?&vsolfree[0]:NULL);
+
+        PyObject *individualSolution = PyList_New(GetNumJoints());
+        for( std::size_t j = 0; j < solvalues.size(); ++j)
+        {
+            // I think IkReal is just a wrapper for double. So this should work.
+            PyList_SetItem(individualSolution, j, PyFloat_FromDouble(solvalues[j]));
+        }
+        PyList_SetItem(solutionList, i, individualSolution);
+    }
+
+    return solutionList;
+}
+
+static PyObject *get_fk(PyObject *self, PyObject *args)
+{
+    std::vector<IkReal> joints(GetNumJoints());
+    // eerot is a flattened 3x3 rotation matrix
+    IkReal eerot[9], eetrans[3];
+
+    PyObject *jointList;
+    if(!PyArg_ParseTuple(args, "O!", &PyList_Type, &jointList))
+    {
+        return NULL;
+    }
+
+    for(std::size_t i = 0; i < GetNumJoints(); ++i)
+    {
+        joints[i] = PyFloat_AsDouble(PyList_GetItem(jointList, i));
+    }
+
+    // call ikfast routine
+    ComputeFk(&joints[0], eetrans, eerot);
+
+    // convert computed EE pose to a python object
+    PyObject *pose = PyList_New(2);
+    PyObject *pos = PyList_New(3);
+    PyObject *rot = PyList_New(3);
+
+    for(std::size_t i = 0; i < 3; ++i)
+    {
+        PyList_SetItem(pos, i, PyFloat_FromDouble(eetrans[i]));
+
+        PyObject *row = PyList_New(3);
+        for( std::size_t j = 0; j < 3; ++j)
+        {
+            PyList_SetItem(row, j, PyFloat_FromDouble(eerot[3*i + j]));
+        }
+        PyList_SetItem(rot, i, row);
+    }
+
+    PyList_SetItem(pose, 0, pos);
+    PyList_SetItem(pose, 1, rot);
+
+    return pose;
+}
+
+static PyMethodDef ikfast_methods[] =
+{
+    {"get_ik", get_ik, METH_VARARGS, "Compute ik solutions using ikfast."},
+    {"get_fk", get_fk, METH_VARARGS, "Compute fk solutions using ikfast."},
+    {NULL, NULL, 0, NULL}
+    // Not sure why/if this is needed. It shows up in the examples though(something about Sentinel).
+};
+
+#if PY_MAJOR_VERSION >= 3
+
+static struct PyModuleDef ikfast_panda_arm_module = {
+    PyModuleDef_HEAD_INIT,
+    "ikfast_panda_arm",   /* name of module */
+    NULL, /* module documentation, may be NULL */
+    -1,       /* size of per-interpreter state of the module,
+                 or -1 if the module keeps state in global variables. */
+    ikfast_methods
+};
+
+#define INITERROR return NULL
+
+PyMODINIT_FUNC
+PyInit_ikfast_panda_arm(void)
+
+#else // PY_MAJOR_VERSION < 3
+#define INITERROR return
+
+PyMODINIT_FUNC
+initikfast_panda_arm(void)
+#endif
+{
+#if PY_MAJOR_VERSION >= 3
+    PyObject *module = PyModule_Create(&ikfast_panda_arm_module);
+#else
+    PyObject *module = Py_InitModule("ikfast_panda_arm", ikfast_methods);
+#endif
+
+if (module == NULL)
+    INITERROR;
+
+#if PY_MAJOR_VERSION >= 3
+    return module;
+#endif
+}
+
+// end python bindings

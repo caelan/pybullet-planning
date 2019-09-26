@@ -12,11 +12,28 @@ from distutils.core import setup, Extension
 # Build C++ extension by running: 'python setup.py build'
 # see: https://docs.python.org/3/extending/building.html
 
+# http://openrave.org/docs/0.8.2/openravepy/ikfast/
+# https://github.com/rdiankov/openrave/blob/master/python/ikfast.py#L92
+# http://wiki.ros.org/Industrial/Tutorials/Create_a_Fast_IK_Solution
+
+# Yijiang
+# https://github.com/yijiangh/ikfast_pybind
+# https://github.com/yijiangh/conrob_pybullet/tree/master/utils/ikfast
+# https://github.com/yijiangh/choreo/blob/bc777069b8eb7283c74af26e5461532aec3d9e8a/framefab_robot/abb/framefab_irb6600/framefab_irb6600_support/doc/ikfast_tutorial.rst
+
+# TODO: try building on demo@ariadne instead?
+
+#def main(robot_name):
+remove_build = True
+robot_name = 'panda_arm'
 # lib name template: 'ikfast_<robot name>'
-from utils import IKFAST, CPP_PATH
+IKFAST = 'ikfast_{}'.format(robot_name)
+#CPP_PATH = 'ikfast61_{}.cpp'.format(robot_name)
+#CPP_PATH = 'ik.cpp'
+CPP_PATH = 'panda_arm.cpp'
+CPP_PATH = 'ikfast0x10000049.Transform6D.0_1_2_3_4_5_f6.cpp'
 
 ikfast_module = Extension(IKFAST, sources=[CPP_PATH])
-
 setup(name=IKFAST,
       version='1.0',
       description="ikfast module for Franka Panda arm.",
@@ -30,11 +47,15 @@ for root, dirnames, filenames in os.walk(os.getcwd()):
 assert build_lib_path
 
 copy_tree(build_lib_path, os.getcwd())
-shutil.rmtree(os.path.join(os.getcwd(), 'build'))
+if remove_build:
+    shutil.rmtree(os.path.join(os.getcwd(), 'build'))
 
 try:
-    import ikfast_franka_panda
+    import ikfast_panda_arm
     print('\nikfast module {} imported successful'.format(IKFAST))
 except ImportError as e:
     print('\nikfast module {} imported failed'.format(IKFAST))
     raise e
+
+#if __name__ == '__main__':
+#    main('panda_arm')
