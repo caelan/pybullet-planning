@@ -5,6 +5,7 @@ from __future__ import print_function
 import os
 import shutil
 import fnmatch
+import importlib
 
 from distutils.dir_util import copy_tree
 from distutils.core import setup, Extension
@@ -21,41 +22,34 @@ from distutils.core import setup, Extension
 # https://github.com/yijiangh/conrob_pybullet/tree/master/utils/ikfast
 # https://github.com/yijiangh/choreo/blob/bc777069b8eb7283c74af26e5461532aec3d9e8a/framefab_robot/abb/framefab_irb6600/framefab_irb6600_support/doc/ikfast_tutorial.rst
 
-# TODO: try building on demo@ariadne instead?
+def main(robot_name, remove_build=True):
+    # lib name template: 'ikfast_<robot name>'
+    module_name = 'ikfast_{}'.format(robot_name)
+    cpp_filename = 'ikfast_{}.cpp'.format(robot_name)
 
-#def main(robot_name):
-remove_build = True
-robot_name = 'panda_arm'
-# lib name template: 'ikfast_<robot name>'
-IKFAST = 'ikfast_{}'.format(robot_name)
-#CPP_PATH = 'ikfast61_{}.cpp'.format(robot_name)
-#CPP_PATH = 'ik.cpp'
-CPP_PATH = 'panda_arm.cpp'
-CPP_PATH = 'ikfast0x10000049.Transform6D.0_1_2_3_4_5_f6.cpp'
+    ikfast_module = Extension(module_name, sources=[cpp_filename])
+    setup(name=module_name,
+          version='1.0',
+          description="ikfast module for {}.".format(robot_name),
+          ext_modules=[ikfast_module])
 
-ikfast_module = Extension(IKFAST, sources=[CPP_PATH])
-setup(name=IKFAST,
-      version='1.0',
-      description="ikfast module for Franka Panda arm.",
-      ext_modules=[ikfast_module])
+    build_lib_path = None
+    for root, dirnames, filenames in os.walk(os.getcwd()):
+        if fnmatch.fnmatch(root, os.path.join(os.getcwd(), "*build", "lib*")):
+            build_lib_path = root
+            break
+    assert build_lib_path
 
-build_lib_path = None
-for root, dirnames, filenames in os.walk(os.getcwd()):
-    if fnmatch.fnmatch(root, os.path.join(os.getcwd(), "*build", "lib*")):
-        build_lib_path = root
-        break
-assert build_lib_path
+    copy_tree(build_lib_path, os.getcwd())
+    if remove_build:
+        shutil.rmtree(os.path.join(os.getcwd(), 'build'))
 
-copy_tree(build_lib_path, os.getcwd())
-if remove_build:
-    shutil.rmtree(os.path.join(os.getcwd(), 'build'))
+    try:
+        importlib.import_module(module_name)
+        print('\nikfast module {} imported successful'.format(module_name))
+    except ImportError as e:
+        print('\nikfast module {} imported failed'.format(module_name))
+        raise e
 
-try:
-    import ikfast_panda_arm
-    print('\nikfast module {} imported successful'.format(IKFAST))
-except ImportError as e:
-    print('\nikfast module {} imported failed'.format(IKFAST))
-    raise e
-
-#if __name__ == '__main__':
-#    main('panda_arm')
+if __name__ == '__main__':
+    main(robot_name='panda_arm')
