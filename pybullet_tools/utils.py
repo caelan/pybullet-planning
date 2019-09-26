@@ -135,7 +135,7 @@ def set_numpy_seed(seed):
     # These generators are different and independent
     if seed is not None:
         np.random.seed(seed % (2**32))
-        print('Seed:', seed)
+        #print('Seed:', seed)
 
 def get_date():
     return datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
@@ -215,6 +215,7 @@ class ClientSaver(Saver):
 
 class VideoSaver(Saver):
     def __init__(self, path):
+        self.path = path
         if path is None:
             self.log_id = None
         else:
@@ -2323,12 +2324,20 @@ def get_extend_fn(body, joints, resolutions=None, norm=2):
         return refine_fn(q1, q2)
     return fn
 
+def remove_redundant(path, tolerance=1e-3):
+    assert path
+    new_path = [path[0]]
+    for conf in path[1:]:
+        difference = np.array(new_path[-1]) - np.array(conf)
+        if not np.allclose(np.zeros(len(difference)), difference, atol=tolerance, rtol=0):
+            new_path.append(conf)
+    return new_path
+
 def waypoints_from_path(path, tolerance=1e-3):
+    path = remove_redundant(path, tolerance=tolerance)
     if len(path) < 2:
         return path
-
-    def difference_fn(q2, q1):
-        return np.array(q2) - np.array(q1)
+    difference_fn = lambda q2, q1: np.array(q2) - np.array(q1)
     #difference_fn = get_difference_fn(body, joints)
 
     waypoints = [path[0]]
@@ -2343,6 +2352,15 @@ def waypoints_from_path(path, tolerance=1e-3):
         last_difference = difference
     waypoints.append(last_conf)
     return waypoints
+
+def adjust_path(robot, joints, path):
+    start_positions = get_joint_positions(robot, joints)
+    difference_fn = get_difference_fn(robot, joints)
+    differences = [difference_fn(q2, q1) for q1, q2 in zip(path, path[1:])]
+    adjusted_path = [np.array(start_positions)]
+    for difference in differences:
+        adjusted_path.append(adjusted_path[-1] + difference)
+    return adjusted_path
 
 def get_moving_links(body, joints):
     moving_links = set()
@@ -2494,10 +2512,10 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
 
 #####################################
 
-def get_closest_angle_fn(body, joints, reversible=True):
+def get_closest_angle_fn(body, joints, linear_weight=1., angular_weight=1., reversible=True):
     assert len(joints) == 3
-    linear_extend_fn = get_distance_fn(body, joints[:2])
-    angular_extend_fn = get_distance_fn(body, joints[2:])
+    linear_extend_fn = get_distance_fn(body, joints[:2], weights=linear_weight*np.ones(2))
+    angular_extend_fn = get_distance_fn(body, joints[2:], weights=[angular_weight])
 
     def closest_fn(q1, q2):
         angle_and_distance = []
@@ -2947,6 +2965,7 @@ def compute_jacobian(robot, link, positions=None):
 
 def compute_joint_weights(robot, num=100):
     # http://openrave.org/docs/0.6.6/_modules/openravepy/databases/linkstatistics/#LinkStatisticsModel
+    # TODO: use velocities instead
     start_time = time.time()
     joints = get_movable_joints(robot)
     sample_fn = get_sample_fn(robot, joints)
