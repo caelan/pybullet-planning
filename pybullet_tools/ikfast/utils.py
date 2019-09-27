@@ -23,7 +23,7 @@ def compute_inverse_kinematics(ik_fn, pose, sampled=[]):
     pos = point_from_pose(pose)
     rot = matrix_from_quat(quat_from_pose(pose)).tolist()
     if sampled:
-        solutions = ik_fn(list(rot), list(pos), sampled)
+        solutions = ik_fn(list(rot), list(pos), list(sampled))
     else:
         solutions = ik_fn(list(rot), list(pos))
     if solutions is None:
