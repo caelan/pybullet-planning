@@ -1,10 +1,12 @@
 import random
-import numpy as np
+from collections import namedtuple
 
 from ..utils import matrix_from_quat, point_from_pose, quat_from_pose, quat_from_matrix, \
     get_joint_limits, get_joint_position, get_joint_positions, get_distance
 
 # TODO: lookup robot & tool in dictionary and use if exists
+
+IKFastInfo = namedtuple('IKFastInfo', ['module_name', 'base_link', 'ee_link', 'free_joints'])
 
 USE_ALL = False
 USE_CURRENT = None

@@ -64,6 +64,11 @@ STOVE_URDF = 'models/stove.urdf'
 
 SEPARATOR = '\n' + 50*'-' + '\n'
 
+#def inf_generator():
+#    return iter(int, 1)
+
+inf_generator = count
+
 def print_separator(n=50):
     print('\n' + n*'-' + '\n')
 
@@ -1417,6 +1422,12 @@ def get_joint_ancestors(body, link):
 
 def get_movable_joint_ancestors(body, link):
     return prune_fixed_joints(body, get_joint_ancestors(body, link))
+
+def get_joint_descendants(body, link):
+    return list(map(parent_joint_from_link, get_link_descendants(body, link)))
+
+def get_movable_joint_descendants(body, link):
+    return prune_fixed_joints(body, get_joint_descendants(body, link))
 
 def get_link_descendants(body, link, test=lambda l: True):
     descendants = []
