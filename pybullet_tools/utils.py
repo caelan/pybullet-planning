@@ -2267,11 +2267,13 @@ def uniform_generator(d):
 
 def halton_generator(d):
     import ghalton
-    # sequencer = ghalton.Halton(d)
-    sequencer = ghalton.GeneralizedHalton(dim=d, seed=random.randint(0, 1000))
+    seed = random.randint(0, 1000)
+    #sequencer = ghalton.Halton(d)
+    sequencer = ghalton.GeneralizedHalton(d, seed)
     #sequencer.reset()
     while True:
-        yield sequencer.get(n=1)[0]
+        [weights] = sequencer.get(1)
+        yield np.array(weights)
 
 def unit_generator(d, use_halton=False):
     if use_halton:
