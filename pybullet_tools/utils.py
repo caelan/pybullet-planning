@@ -1412,12 +1412,15 @@ def get_link_children(body, link):
     return children.get(link, [])
 
 def get_link_ancestors(body, link):
+    # Returns in order of depth
+    # Does not include link
     parent = get_link_parent(body, link)
     if parent is None:
         return []
     return get_link_ancestors(body, parent) + [parent]
 
-def get_joint_ancestors(body, link):
+def get_joint_ancestors(body, joint):
+    link = child_link_from_joint(joint)
     return get_link_ancestors(body, link) + [link]
 
 def get_movable_joint_ancestors(body, link):
@@ -2265,11 +2268,18 @@ def uniform_generator(d):
 def halton_generator(d):
     import ghalton
     # sequencer = ghalton.Halton(d)
-    sequencer = ghalton.GeneralizedHalton(d, random.randint(0, 1000))
+    sequencer = ghalton.GeneralizedHalton(dim=d, seed=random.randint(0, 1000))
+    #sequencer.reset()
     while True:
-        yield sequencer.get(1)[0]
+        yield sequencer.get(n=1)[0]
 
 def unit_generator(d, use_halton=False):
+    if use_halton:
+        try:
+            import ghalton
+        except ImportError:
+            print('ghalton is not installed (https://pypi.org/project/ghalton/)')
+            use_halton = False
     return halton_generator(d) if use_halton else uniform_generator(d)
 
 def get_sample_fn(body, joints, custom_limits={}, **kwargs):
