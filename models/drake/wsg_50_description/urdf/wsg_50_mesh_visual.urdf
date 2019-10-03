@@ -209,7 +209,7 @@
   </gazebo>
   <link name="tool_link"/>
   <joint name="tool_joint" type="fixed">
-    <origin rpy="0 0 1.57079632679" xyz="0.0 0 0.125"/>
+    <origin rpy="0 0 0" xyz="0.0 0 0.125"/>
     <axis xyz="0 0 1"/>
     <parent link="wsg_50_base_link"/>
     <child link="tool_link"/>

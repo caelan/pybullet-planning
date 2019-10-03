@@ -65,6 +65,8 @@ WSG_GRIPPER = 'gripper/wsg50_one_motor_gripper.sdf' # wsg50_one_motor_gripper | 
 
 # Pybullet Objects
 KIVA_SHELF_SDF = "kiva_shelf/model.sdf"
+FLOOR_URDF = 'plane.urdf'
+TABLE_URDF = 'table'
 
 # Objects
 SMALL_BLOCK_URDF = "models/drake/objects/block_for_pick_and_place.urdf"
@@ -1401,7 +1403,7 @@ def get_link_pose(body, link):
     link_state = get_link_state(body, link) #, kinematics=True, velocity=False)
     return link_state.worldLinkFramePosition, link_state.worldLinkFrameOrientation
 
-def get_relative_pose(body, link1, link2):
+def get_relative_pose(body, link1, link2=BASE_LINK):
     world_from_link1 = get_link_pose(body, link1)
     world_from_link2 = get_link_pose(body, link2)
     link2_from_link1 = multiply(invert(world_from_link2), world_from_link1)
