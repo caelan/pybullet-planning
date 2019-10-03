@@ -28,7 +28,7 @@
       <visual>
           <origin xyz="0.0 0 0" rpy="0 0 0" />
           <geometry>
-             <mesh filename="package://wsg_50_simulation/meshes/WSG50_110.stl" scale="1 1 1"/>
+             <mesh filename="package://wsg_50_description/meshes/WSG50_110.stl" scale="1 1 1"/>
 	     <!--box size="0.146 0.05 0.0735"/-->
           </geometry>
           <material name="grey">
@@ -40,7 +40,7 @@
           <origin xyz="0.0 0 0" rpy="0 0 0" />
           <geometry>
 	     <!--box size="0.146 0.05 0.0735"/-->
-             <mesh filename="package://wsg_50_simulation/meshes/WSG50_110.stl" scale="1 1 1"/>
+             <mesh filename="package://wsg_50_description/meshes/WSG50_110.stl" scale="1 1 1"/>
          </geometry>
      </collision>
   </link>
@@ -81,7 +81,7 @@
       <visual>
           <origin xyz="0.0 0 0" rpy="0 0 0" />
           <geometry>
-             <mesh filename="package://wsg_50_simulation/meshes/GUIDE_WSG50_110.stl" scale="0.001 0.001 0.001"/>
+             <mesh filename="package://wsg_50_description/meshes/GUIDE_WSG50_110.stl" scale="0.001 0.001 0.001"/>
 	     <!--box size="0.0175 0.03 0.024"/-->
           </geometry>
           <material name="black">
@@ -93,7 +93,7 @@
           <origin xyz="0 0 0" rpy="0 0 0" />
           <geometry>
 	     <!--box size="0.0175 0.03 0.024"/-->
-             <mesh filename="package://wsg_50_simulation/meshes/GUIDE_WSG50_110.stl" scale="0.001 0.001 0.001"/>
+             <mesh filename="package://wsg_50_description/meshes/GUIDE_WSG50_110.stl" scale="0.001 0.001 0.001"/>
          </geometry>
      </collision>
   </link>
@@ -127,7 +127,7 @@
       <visual>
           <origin xyz="0.0 0 0" rpy="0 0 0" />
           <geometry>
-             <mesh filename="package://wsg_50_simulation/meshes/WSG-FMF.stl" scale="0.001 0.001 0.001"/>
+             <mesh filename="package://wsg_50_description/meshes/WSG-FMF.stl" scale="0.001 0.001 0.001"/>
           </geometry>
           <material name="black">
 		<color rgba="0 0 0 0"/>
@@ -137,7 +137,7 @@
       <collision>
           <origin xyz="0 0 0" rpy="0 0 0" />
           <geometry>
-             <mesh filename="package://wsg_50_simulation/meshes/WSG-FMF.stl" scale="0.001 0.001 0.001"/>
+             <mesh filename="package://wsg_50_description/meshes/WSG-FMF.stl" scale="0.001 0.001 0.001"/>
          </geometry>
      </collision>
   </link>
@@ -179,7 +179,7 @@
       <visual>
           <origin xyz="0.0 0 0" rpy="0 0 0" />
           <geometry>
-             <mesh filename="package://wsg_50_simulation/meshes/GUIDE_WSG50_110.stl" scale="0.001 0.001 0.001"/>
+             <mesh filename="package://wsg_50_description/meshes/GUIDE_WSG50_110.stl" scale="0.001 0.001 0.001"/>
 	     <!--box size="0.0175 0.03 0.024"/-->
           </geometry>
           <material name="black">
@@ -191,7 +191,7 @@
           <origin xyz="0 0 0" rpy="0 0 0" />
           <geometry>
 	     <!--box size="0.0175 0.03 0.024"/-->
-             <mesh filename="package://wsg_50_simulation/meshes/GUIDE_WSG50_110.stl" scale="0.001 0.001 0.001"/>
+             <mesh filename="package://wsg_50_description/meshes/GUIDE_WSG50_110.stl" scale="0.001 0.001 0.001"/>
          </geometry>
      </collision>
   </link>
@@ -224,7 +224,7 @@
       <visual>
           <origin xyz="0.0 0 0" rpy="0 0 0" />
           <geometry>
-             <mesh filename="package://wsg_50_simulation/meshes/WSG-FMF.stl" scale="0.001 0.001 0.001"/>
+             <mesh filename="package://wsg_50_description/meshes/WSG-FMF.stl" scale="0.001 0.001 0.001"/>
           </geometry>
           <material name="black">
 		<color rgba="0 0 0 0"/>
@@ -234,7 +234,7 @@
       <collision>
           <origin xyz="0 0 0" rpy="0 0 0" />
           <geometry>
-             <mesh filename="package://wsg_50_simulation/meshes/WSG-FMF.stl" scale="0.001 0.001 0.001"/>
+             <mesh filename="package://wsg_50_description/meshes/WSG-FMF.stl" scale="0.001 0.001 0.001"/>
          </geometry>
      </collision>
   </link>
