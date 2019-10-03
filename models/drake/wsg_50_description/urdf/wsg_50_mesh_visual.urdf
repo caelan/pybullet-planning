@@ -49,13 +49,14 @@
   </gazebo>
   <!-- GRIPPER LEFT -->
   <joint name="wsg_50_base_joint_gripper_left" type="prismatic">
-    <limit effort="1.0" lower="-0.055" upper="-0.0027" velocity="1.0"/>
+    <!--limit effort="1.0" lower="-0.055" upper="-0.0027" velocity="1.0"/-->
+    <limit effort="1.0" lower="0.0027" upper="0.055" velocity="1.0"/>
     <origin rpy="0 0 0" xyz="0 0 0"/>
     <!--origin xyz="-0.0067 0 0.049" rpy="0 0 0" /-->
     <parent link="wsg_50_base_link"/>
     <child link="wsg_50_gripper_left"/>
     <dynamics damping="100" friction="100"/>
-    <axis xyz="1 0 0"/>
+    <axis xyz="-1 0 0"/>
     <limit effort="100" velocity="100"/>
   </joint>
   <transmission name="wsg_50_base_trans_left" type="pr2_mechanism_model/SimpleTransmission">
@@ -206,4 +207,11 @@
     <material>Gazebo/White</material>
     <turnGravityOff>false</turnGravityOff>
   </gazebo>
+  <link name="tool_link"/>
+  <joint name="tool_joint" type="fixed">
+    <origin rpy="0 0 1.57079632679" xyz="0.0 0 0.125"/>
+    <axis xyz="0 0 1"/>
+    <parent link="wsg_50_base_link"/>
+    <child link="tool_link"/>
+  </joint>
 </robot>
