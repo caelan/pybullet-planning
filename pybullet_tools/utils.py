@@ -1164,7 +1164,7 @@ def get_joint_info(body, joint):
     return JointInfo(*p.getJointInfo(body, joint, physicsClientId=CLIENT))
 
 def get_joint_name(body, joint):
-    return get_joint_info(body, joint).jointName # .decode('UTF-8')
+    return get_joint_info(body, joint).jointName.decode('UTF-8')
 
 def get_joint_names(body, joints):
     return [get_joint_name(body, joint) for joint in joints]
