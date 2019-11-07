@@ -70,9 +70,7 @@ def get_open_positions(robot, arm):
     if has_kg3_gripper(robot, arm):
         return get_min_limits(robot, joints)
     elif has_robotiq_gripper(robot, arm):
-        return 6 * [0]
-        return [0.5] + [-0.5]*5
-        return [0]*4 + get_min_limits(robot, joints[4:6]) + [0]*0
+        return 6 * [0.]
     raise ValueError(arm)
 
 def get_closed_positions(robot, arm):
@@ -81,8 +79,7 @@ def get_closed_positions(robot, arm):
     if has_kg3_gripper(robot, arm):
         return get_max_limits(robot, joints)
     elif has_robotiq_gripper(robot, arm):
-        return [0.804]*6
-        return [0]*4 + get_max_limits(robot, joints[4:6]) + [0]*0
+        return [0.32]*6
     raise ValueError(arm)
 
 #####################################
@@ -105,12 +102,11 @@ def main():
 
     for arm in ARMS:
         gripper_joints = get_gripper_joints(robot, arm)
-        set_joint_positions(robot, gripper_joints, get_open_positions(robot, arm))
-    wait_for_user('Continue?')
-    for arm in ARMS:
-        gripper_joints = get_gripper_joints(robot, arm)
-        set_joint_positions(robot, gripper_joints, get_closed_positions(robot, arm))
-    wait_for_user('Continue?')
+        extend_fn = get_extend_fn(robot, gripper_joints)
+        for positions in extend_fn(get_open_positions(robot, arm), get_closed_positions(robot, arm)):
+            set_joint_positions(robot, gripper_joints, positions)
+            print(positions)
+            wait_for_user('Continue?')
 
     #joint_names = HEAD_JOINTS
     #joints = joints_from_names(robot, joint_names)
