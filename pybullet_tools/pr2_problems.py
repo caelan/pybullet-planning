@@ -5,7 +5,8 @@ from .pr2_utils import set_arm_conf, REST_LEFT_ARM, open_arm, \
     close_arm, get_carry_conf, arm_conf, get_other_arm, set_group_conf, PR2_URDF, DRAKE_PR2_URDF, create_gripper
 from .utils import create_box, set_base_values, set_point, set_pose, get_pose, \
     get_bodies, z_rotation, load_model, load_pybullet, HideOutput, create_body, \
-    get_box_geometry, get_cylinder_geometry, create_shape_array, unit_pose, Pose, Point, LockRenderer
+    get_box_geometry, get_cylinder_geometry, create_shape_array, unit_pose, Pose, \
+    Point, LockRenderer, FLOOR_URDF, TABLE_URDF, add_data_path
 
 
 class Problem(object):
@@ -58,16 +59,21 @@ def create_pr2(use_drake=True, fixed_base=True, torso=0.2):
     return pr2
 
 def create_floor():
-    return load_pybullet("plane.urdf")
+    add_data_path()
+    return load_pybullet(FLOOR_URDF)
 
 def create_table(width=0.6, length=1.2, height=0.73, thickness=0.03, radius=0.015,
-                 color=(0.7, 0.7, 0.7, 1.), **kwargs):
+                 color=(0.7, 0.7, 0.7, 1.), cylinder=True, **kwargs):
     # TODO: table URDF
     surface = get_box_geometry(width, length, thickness)
     surface_pose = Pose(Point(z=height - thickness/2.))
 
     leg_height = height-thickness
-    legs = [get_cylinder_geometry(radius, leg_height) for _ in range(4)]
+    if cylinder:
+        leg_geometry = get_cylinder_geometry(radius, leg_height)
+    else:
+        leg_geometry = get_box_geometry(width=2*radius, length=2*radius, height=leg_height)
+    legs = [leg_geometry for _ in range(4)]
     leg_center = np.array([width, length])/2. - radius*np.ones(2)
     leg_xys = [np.multiply(leg_center, np.array(signs))
                for signs in product([-1, +1], repeat=len(leg_center))]
@@ -102,7 +108,7 @@ def holding_problem(arm='left', grasp_type='side'):
     close_arm(pr2, other_arm)
 
     plane = create_floor()
-    table = load_pybullet("table/table.urdf")
+    table = load_pybullet(TABLE_URDF)
     #table = load_pybullet("table_square/table_square.urdf")
     box = create_box(.07, .05, .15)
     set_point(box, (0, 0, TABLE_MAX_Z + .15/2))
@@ -122,13 +128,13 @@ def stacking_problem(arm='left', grasp_type='top'):
     close_arm(pr2, other_arm)
 
     plane = create_floor()
-    table1 = load_pybullet("table/table.urdf")
+    table1 = load_pybullet(TABLE_URDF)
     #table = load_pybullet("table_square/table_square.urdf")
 
     block = create_box(.07, .05, .15)
     set_point(block, (0, 0, TABLE_MAX_Z + .15/2))
 
-    table2 = load_pybullet("table/table.urdf")
+    table2 = load_pybullet(TABLE_URDF)
     set_base_values(table2, (2, 0, 0))
 
     return Problem(robot=pr2, movable=[block], arms=[arm],

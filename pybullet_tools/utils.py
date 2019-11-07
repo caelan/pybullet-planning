@@ -37,12 +37,22 @@ DEFAULT_TIME_STEP = 1./240. # seconds
 
 #####################################
 
+DRAKE_PATH = 'models/drake/'
+
 # Models
 
 # Robots
-ROOMBA_URDF = 'models/turtlebots/roomba.urdf'
-TURTLEBOT_URDF = 'models/turtlebots/turtlebot_holonomic.urdf'
-DRAKE_IIWA_URDF = "models/drake/iiwa_description/urdf/iiwa14_polytope_collision.urdf"
+MODEL_DIRECTORY = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, 'models/'))
+ROOMBA_URDF = 'models/turtlebot/roomba.urdf'
+TURTLEBOT_URDF = 'models/turtlebot/turtlebot_holonomic.urdf'
+DRAKE_IIWA_URDF = 'models/drake/iiwa_description/urdf/iiwa14_polytope_collision.urdf'
+WSG_50_URDF = 'models/drake/wsg_50_description/urdf/wsg_50_mesh_visual.urdf' # wsg_50 | wsg_50_mesh_visual | wsg_50_mesh_collision
+#SCHUNK_URDF = 'models/drake/wsg_50_description/sdf/schunk_wsg_50.sdf'
+PANDA_HAND_URDF = "models/franka_description/robots/hand.urdf"
+PANDA_ARM_URDF = "models/franka_description/robots/panda_arm_hand.urdf"
+
+# Pybullet Robots
+#PYBULLET_DIRECTORY = add_data_path()
 KUKA_IIWA_URDF = "kuka_iiwa/model.urdf"
 KUKA_IIWA_GRIPPER_SDF = "kuka_iiwa/kuka_with_gripper.sdf"
 R2D2_URDF = "r2d2.urdf"
@@ -50,9 +60,15 @@ MINITAUR_URDF = "quadruped/minitaur.urdf"
 HUMANOID_MJCF = "mjcf/humanoid.xml"
 HUSKY_URDF = "husky/husky.urdf"
 RACECAR_URDF = 'racecar/racecar.urdf' # racecar_differential.urdf
+PR2_GRIPPER = 'pr2_gripper.urdf'
+WSG_GRIPPER = 'gripper/wsg50_one_motor_gripper.sdf' # wsg50_one_motor_gripper | wsg50_one_motor_gripper_new
+
+# Pybullet Objects
+KIVA_SHELF_SDF = "kiva_shelf/model.sdf"
+FLOOR_URDF = 'plane.urdf'
+TABLE_URDF = 'table'
 
 # Objects
-KIVA_SHELF_SDF = "kiva_shelf/model.sdf"
 SMALL_BLOCK_URDF = "models/drake/objects/block_for_pick_and_place.urdf"
 BLOCK_URDF = "models/drake/objects/block_for_pick_and_place_mid_size.urdf"
 SINK_URDF = 'models/sink.urdf'
@@ -120,11 +136,10 @@ def safe_zip(sequence1, sequence2):
 def clip(value, min_value=-INF, max_value=+INF):
     return min(max(min_value, value), max_value)
 
-def randomize(sequence): # TODO: bisect
-    indices = range(len(sequence))
-    random.shuffle(indices)
-    for i in indices:
-        yield sequence[i]
+def randomize(iterable): # TODO: bisect
+    sequence = list(iterable)
+    random.shuffle(sequence)
+    return sequence
 
 def get_random_seed():
     return random.getstate()[1][0]
@@ -373,7 +388,6 @@ URDF_FLAGS = [p.URDF_USE_INERTIA_FROM_FILE,
               p.URDF_USE_SELF_COLLISION,
               p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT,
               p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS]
-
 
 def get_model_path(rel_path): # TODO: add to search path
     directory = os.path.dirname(os.path.abspath(__file__))
@@ -1150,7 +1164,7 @@ def get_joint_info(body, joint):
     return JointInfo(*p.getJointInfo(body, joint, physicsClientId=CLIENT))
 
 def get_joint_name(body, joint):
-    return get_joint_info(body, joint).jointName # .decode('UTF-8')
+    return get_joint_info(body, joint).jointName.decode('UTF-8')
 
 def get_joint_names(body, joints):
     return [get_joint_name(body, joint) for joint in joints]
@@ -1388,7 +1402,7 @@ def get_link_pose(body, link):
     link_state = get_link_state(body, link) #, kinematics=True, velocity=False)
     return link_state.worldLinkFramePosition, link_state.worldLinkFrameOrientation
 
-def get_relative_pose(body, link1, link2):
+def get_relative_pose(body, link1, link2=BASE_LINK):
     world_from_link1 = get_link_pose(body, link1)
     world_from_link2 = get_link_pose(body, link2)
     link2_from_link1 = multiply(invert(world_from_link2), world_from_link1)
@@ -1412,12 +1426,15 @@ def get_link_children(body, link):
     return children.get(link, [])
 
 def get_link_ancestors(body, link):
+    # Returns in order of depth
+    # Does not include link
     parent = get_link_parent(body, link)
     if parent is None:
         return []
     return get_link_ancestors(body, parent) + [parent]
 
-def get_joint_ancestors(body, link):
+def get_joint_ancestors(body, joint):
+    link = child_link_from_joint(joint)
     return get_link_ancestors(body, link) + [link]
 
 def get_movable_joint_ancestors(body, link):
@@ -2264,20 +2281,36 @@ def uniform_generator(d):
 
 def halton_generator(d):
     import ghalton
-    # sequencer = ghalton.Halton(d)
-    sequencer = ghalton.GeneralizedHalton(d, random.randint(0, 1000))
+    seed = random.randint(0, 1000)
+    #sequencer = ghalton.Halton(d)
+    sequencer = ghalton.GeneralizedHalton(d, seed)
+    #sequencer.reset()
     while True:
-        yield sequencer.get(1)[0]
+        [weights] = sequencer.get(1)
+        yield np.array(weights)
 
 def unit_generator(d, use_halton=False):
+    if use_halton:
+        try:
+            import ghalton
+        except ImportError:
+            print('ghalton is not installed (https://pypi.org/project/ghalton/)')
+            use_halton = False
     return halton_generator(d) if use_halton else uniform_generator(d)
 
+def interval_generator(lower, upper, **kwargs):
+    assert len(lower) == len(upper)
+    assert np.less(lower, upper).all() # TODO: equality
+    extents = np.array(upper) - np.array(lower)
+    for scale in unit_generator(len(lower), **kwargs):
+        point = np.array(lower) + scale*extents
+        yield point
+
 def get_sample_fn(body, joints, custom_limits={}, **kwargs):
-    generator = unit_generator(len(joints), **kwargs)
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits, circular_limits=CIRCULAR_LIMITS)
-    limits_extents = np.array(upper_limits) - np.array(lower_limits)
+    generator = interval_generator(lower_limits, upper_limits, **kwargs)
     def fn():
-        return tuple(next(generator) * limits_extents + np.array(lower_limits))
+        return tuple(next(generator))
     return fn
 
 def get_halton_sample_fn(body, joints, **kwargs):
