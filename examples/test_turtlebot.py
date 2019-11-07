@@ -40,7 +40,7 @@ def main(floor_width=2.0):
     set_all_static()
 
     # Joints are also described by an integer index
-    # The turtlebot has explicit joints representing x, y, theta
+    # The turtlebots has explicit joints representing x, y, theta
     x_joint = joint_from_name(robot, 'x') # Looks up the robot joint named 'x'
     y_joint = joint_from_name(robot, 'y') # Looks up the robot joint named 'y'
     theta_joint = joint_from_name(robot, 'theta') # Looks up the robot joint named 'theta'
