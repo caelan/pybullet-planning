@@ -1363,6 +1363,9 @@ def get_link_name(body, link):
         return get_base_name(body)
     return get_joint_info(body, link).linkName.decode('UTF-8')
 
+def get_link_names(body, links):
+    return [get_link_name(body, link) for link in links]
+
 def get_link_parent(body, link):
     if link == BASE_LINK:
         return None

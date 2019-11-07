@@ -19,6 +19,22 @@ FRANKA_URDF = "models/franka_description/robots/panda_arm_hand.urdf"
 
 #####################################
 
+def test_retraction(robot, joints, tool_link, distance=0.1):
+    tool_pose_world = get_link_pose(robot, tool_link)
+    goal_pose_world = multiply(tool_pose_world, Pose(Point(z=-distance)))
+    for pose_word in interpolate_poses(tool_pose_world, goal_pose_world):
+        conf = next(closest_inverse_kinematics(robot, PANDA_INFO, tool_link, pose_word,
+                                                max_distance=0.01, max_time=0.05), None)
+        if conf is None:
+            print('Failure!')
+            wait_for_user()
+            break
+        set_joint_positions(robot, joints[:len(conf)], conf)
+        wait_for_user()
+        # for conf in islice(ikfast_inverse_kinematics(robot, PANDA_INFO, tool_link, pose_word, max_attempts=INF, max_distance=0.5), 1):
+        #    set_joint_positions(robot, joints[:len(conf)], conf)
+        #    wait_for_user()
+
 def main():
     connect(use_gui=True)
     add_data_path()
@@ -40,19 +56,8 @@ def main():
         conf = sample_fn()
         set_joint_positions(robot, joints, conf)
         wait_for_user()
+        test_retraction(robot, joints, tool_link)
 
-        tool_pose_world = get_link_pose(robot, tool_link)
-        goal_pose_world = multiply(tool_pose_world, Pose(Point(z=-0.1)))
-        for pose_word in interpolate_poses(tool_pose_world, goal_pose_world):
-            conf = closest_inverse_kinematics(robot, PANDA_INFO, tool_link, pose_word, max_distance=0.05)
-            if conf is None:
-                print('Failure!')
-                break
-            set_joint_positions(robot, joints[:len(conf)], conf)
-            wait_for_user()
-            #for conf in islice(ikfast_inverse_kinematics(robot, PANDA_INFO, tool_link, pose_word, max_attempts=INF, max_distance=0.5), 1):
-            #    set_joint_positions(robot, joints[:len(conf)], conf)
-            #    wait_for_user()
     disconnect()
 
 if __name__ == '__main__':

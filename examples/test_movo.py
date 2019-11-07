@@ -84,29 +84,29 @@ def get_closed_positions(robot, arm):
 
 #####################################
 
+def test_close_gripper(robot, arm):
+    gripper_joints = get_gripper_joints(robot, arm)
+    extend_fn = get_extend_fn(robot, gripper_joints)
+    for positions in extend_fn(get_open_positions(robot, arm), get_closed_positions(robot, arm)):
+        set_joint_positions(robot, gripper_joints, positions)
+        print(positions)
+        wait_for_user('Continue?')
+
 def main():
     # The URDF loader seems robust to package:// and slightly wrong relative paths?
     connect(use_gui=True)
     add_data_path()
-
     plane = p.loadURDF("plane.urdf")
     with HideOutput():
         with LockRenderer():
             robot = load_model(MOVO_URDF, fixed_base=True)
             for link in get_links(robot):
                 set_color(robot, color=apply_alpha(0.2*np.ones(3), 1), link=link)
-
     dump_body(robot)
-    print('Start?')
-    wait_for_user()
+    wait_for_user('Start?')
 
-    for arm in ARMS:
-        gripper_joints = get_gripper_joints(robot, arm)
-        extend_fn = get_extend_fn(robot, gripper_joints)
-        for positions in extend_fn(get_open_positions(robot, arm), get_closed_positions(robot, arm)):
-            set_joint_positions(robot, gripper_joints, positions)
-            print(positions)
-            wait_for_user('Continue?')
+    #for arm in ARMS:
+    #    test_close_gripper(robot, arm)
 
     #joint_names = HEAD_JOINTS
     #joints = joints_from_names(robot, joint_names)

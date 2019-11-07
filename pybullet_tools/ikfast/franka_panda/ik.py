@@ -9,7 +9,8 @@ from ..utils import compute_inverse_kinematics
 from ...utils import multiply, get_link_pose, link_from_name, invert, set_joint_positions, joints_from_names, \
     get_movable_joint_ancestors, get_joint_limits, inf_generator, get_joint_position, randomize, violates_limits, \
     get_joint_positions, INF, get_difference_fn, get_distance_fn, get_link_ancestors, prune_fixed_joints, \
-    parent_joint_from_link, get_length, unit_generator, get_min_limits, get_max_limits, elapsed_time
+    parent_joint_from_link, get_length, unit_generator, get_min_limits, get_max_limits, elapsed_time, \
+    get_joint_names, get_link_names, parent_link_from_joint
 
 PANDA_INFO = IKFastInfo(module_name='ikfast_panda_arm', base_link='panda_link0',
                         ee_link='panda_link8', free_joints=['panda_joint7'])
@@ -46,16 +47,19 @@ def get_ik_joints(robot, ikfast_info, tool_link):
     ee_link = link_from_name(robot, ikfast_info.ee_link)
     ee_ancestors = get_ordered_ancestors(robot, ee_link)
     tool_ancestors = get_ordered_ancestors(robot, tool_link)
+    [first_joint] = [parent_joint_from_link(link) for link in tool_ancestors
+                     if parent_link_from_joint(robot, parent_joint_from_link(link)) == base_link]
     assert prune_fixed_joints(robot, ee_ancestors) == prune_fixed_joints(robot, tool_ancestors)
-    assert base_link in ee_ancestors
-    ik_joints = prune_fixed_joints(robot, ee_ancestors[ee_ancestors.index(base_link):])
+    #assert base_link in ee_ancestors # base_link might be -1
+    ik_joints = prune_fixed_joints(robot, ee_ancestors[ee_ancestors.index(first_joint):])
     free_joints = joints_from_names(robot, ikfast_info.free_joints)
     assert set(free_joints) <= set(ik_joints)
     assert len(ik_joints) == 6 + len(free_joints)
     return ik_joints
 
 def ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
-                              max_attempts=INF, norm=INF, max_distance=INF, **kwargs):
+                              max_attempts=INF, max_time=INF, norm=INF, max_distance=INF, **kwargs):
+    assert (max_attempts < INF) or (max_time < INF)
     if max_distance is None:
         max_distance = INF
     #assert is_ik_compiled(ikfast_info)
@@ -74,7 +78,10 @@ def ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
                  for weights in unit_generator(d=len(free_joints), **kwargs))
     if max_attempts < INF:
         generator = islice(generator, max_attempts)
+    start_time = time.time()
     for free_positions in generator:
+        if max_time < elapsed_time(start_time):
+            break
         for conf in randomize(compute_inverse_kinematics(ikfast.get_ik, base_from_ee, free_positions)):
             difference = difference_fn(current_conf, conf)
             if not violates_limits(robot, ik_joints, conf) and get_length(difference, norm=norm):
@@ -82,19 +89,16 @@ def ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
                 yield conf
 
 def closest_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
-                               max_attempts=INF, max_time=INF, norm=INF, **kwargs):
-    assert (max_attempts < INF) or (max_time < INF)
+                               max_candidates=INF, norm=INF, **kwargs):
     start_time = time.time()
     ik_joints = get_ik_joints(robot, ikfast_info, tool_link)
     current_conf = get_joint_positions(robot, ik_joints)
-    generator = ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
-                                          max_attempts=max_attempts, norm=norm, **kwargs)
-    solutions = []
-    for conf in generator:
-        solutions.append(conf)
-        if max_time < elapsed_time(start_time):
-            break
-    #print('{} confs in {:.3f} seconds'.format(len(solutions), elapsed_time(start_time)))
+    generator = ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target, norm=norm, **kwargs)
+    if max_candidates < INF:
+        generator = islice(generator, max_candidates)
+    solutions = list(generator)
+    #print('Identified {} IK solutions in {:.3f} seconds'.format(len(solutions), elapsed_time(start_time)))
+    # TODO: relative to joint limits
     difference_fn = get_difference_fn(robot, ik_joints)
     #distance_fn = get_distance_fn(robot, ik_joints)
     #set_joint_positions(robot, ik_joints, closest_conf)
