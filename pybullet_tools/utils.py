@@ -151,10 +151,13 @@ def set_random_seed(seed):
     if seed is not None:
         random.seed(seed)
 
+def wrap_numpy_seed(seed):
+    return seed % (2**32)
+
 def set_numpy_seed(seed):
     # These generators are different and independent
     if seed is not None:
-        np.random.seed(seed % (2**32))
+        np.random.seed(wrap_numpy_seed(seed))
         #print('Seed:', seed)
 
 def get_date():
@@ -402,6 +405,12 @@ def load_model(rel_path, pose=None, **kwargs):
     if pose is not None:
         set_pose(body, pose)
     return body
+
+#TOOLS_VERSION = date.date()
+
+def get_version(): # year-month-0-day format
+    s = str(p.getAPIVersion(physicsClientId=CLIENT))
+    return datetime.date(year=int(s[:4]), month=int(s[4:6]), day=int(s[7:9]))
 
 #####################################
 
@@ -1497,18 +1506,17 @@ def get_fixed_links(body):
 
 #####################################
 
-DynamicsInfo = namedtuple('DynamicsInfo', ['mass', 'lateral_friction',
-                                           'local_inertia_diagonal', 'local_inertial_pos',  'local_inertial_orn',
-                                           'restitution', 'rolling_friction', 'spinning_friction',
-                                           'contact_damping', 'contact_stiffness'])
+DynamicsInfo = namedtuple('DynamicsInfo', [
+    'mass', 'lateral_friction', 'local_inertia_diagonal', 'local_inertial_pos',  'local_inertial_orn',
+    'restitution', 'rolling_friction', 'spinning_friction', 'contact_damping', 'contact_stiffness']) #, 'body_type'])
 
 def get_dynamics_info(body, link=BASE_LINK):
-    return DynamicsInfo(*p.getDynamicsInfo(body, link, physicsClientId=CLIENT))
+    return DynamicsInfo(*p.getDynamicsInfo(body, link, physicsClientId=CLIENT)[:len(DynamicsInfo._fields)])
 
 get_link_info = get_dynamics_info
 
 def get_mass(body, link=BASE_LINK):
-    # TOOD: get full mass
+    # TODO: get full mass
     return get_dynamics_info(body, link).mass
 
 def set_dynamics(body, link=BASE_LINK, **kwargs):
@@ -3478,7 +3486,7 @@ def convex_centroid(vertices):
            / (6.*convex_signed_area(vertices))
 
 def mesh_from_points(points):
-    vertices, indices = convex_hull(points)
+    vertices, indices = map(np.array, convex_hull(points))
     new_indices = []
     for triplet in indices:
         centroid = np.average(vertices[triplet], axis=0)
