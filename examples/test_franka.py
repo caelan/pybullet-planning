@@ -10,7 +10,7 @@ from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, 
 
 from itertools import islice
 
-from pybullet_tools.ikfast.franka_panda.ik import ikfast_inverse_kinematics, PANDA_INFO, closest_inverse_kinematics
+from pybullet_tools.ikfast.franka_panda.ik import ikfast_inverse_kinematics, PANDA_INFO, closest_inverse_kinematics, get_ik_joints
 
 
 #FRANKA_URDF = "models/franka_description/robots/panda_arm.urdf"
@@ -19,19 +19,19 @@ FRANKA_URDF = "models/franka_description/robots/panda_arm_hand.urdf"
 
 #####################################
 
-def test_retraction(robot, joints, tool_link, distance=0.1):
-    tool_pose_world = get_link_pose(robot, tool_link)
-    goal_pose_world = multiply(tool_pose_world, Pose(Point(z=-distance)))
-    for pose_word in interpolate_poses(tool_pose_world, goal_pose_world):
-        conf = next(closest_inverse_kinematics(robot, PANDA_INFO, tool_link, pose_word,
-                                                max_distance=0.01, max_time=0.05), None)
+def test_retraction(robot, info, tool_link, distance=0.1, **kwargs):
+    ik_joints = get_ik_joints(robot, info, tool_link)
+    start_pose = get_link_pose(robot, tool_link)
+    end_pose = multiply(start_pose, Pose(Point(z=-distance)))
+    for pose in interpolate_poses(start_pose, end_pose, pos_step_size=0.01):
+        conf = next(closest_inverse_kinematics(robot, info, tool_link, pose, **kwargs), None)
         if conf is None:
             print('Failure!')
             wait_for_user()
             break
-        set_joint_positions(robot, joints[:len(conf)], conf)
+        set_joint_positions(robot, ik_joints, conf)
         wait_for_user()
-        # for conf in islice(ikfast_inverse_kinematics(robot, PANDA_INFO, tool_link, pose_word, max_attempts=INF, max_distance=0.5), 1):
+        # for conf in islice(ikfast_inverse_kinematics(robot, info, tool_link, pose, max_attempts=INF, max_distance=0.5), 1):
         #    set_joint_positions(robot, joints[:len(conf)], conf)
         #    wait_for_user()
 
@@ -56,8 +56,7 @@ def main():
         conf = sample_fn()
         set_joint_positions(robot, joints, conf)
         wait_for_user()
-        test_retraction(robot, joints, tool_link)
-
+        test_retraction(robot, PANDA_INFO, tool_link, max_distance=0.01, max_time=0.05)
     disconnect()
 
 if __name__ == '__main__':

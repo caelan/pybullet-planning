@@ -1,6 +1,7 @@
 import random
 import numpy as np
 import time
+import importlib
 
 from itertools import product, islice
 
@@ -12,14 +13,13 @@ from ...utils import multiply, get_link_pose, link_from_name, invert, set_joint_
     parent_joint_from_link, get_length, unit_generator, get_min_limits, get_max_limits, elapsed_time, \
     get_joint_names, get_link_names, parent_link_from_joint
 
-PANDA_INFO = IKFastInfo(module_name='ikfast_panda_arm', base_link='panda_link0',
+# TODO: refactor this file
+
+PANDA_INFO = IKFastInfo(module_name='franka_panda.ikfast_panda_arm', base_link='panda_link0',
                         ee_link='panda_link8', free_joints=['panda_joint7'])
 
 def import_ikfast(ikfast_info):
-    # TODO: relative import
-    import pybullet_tools.ikfast.franka_panda.ikfast_panda_arm as ikfast
-    return ikfast
-    #return importlib.import_module(ikfast_info.module_name, package=pybullet_tools.ikfast.franka_panda)
+    return importlib.import_module('pybullet_tools.ikfast.{}'.format(ikfast_info.module_name))
 
 def is_ik_compiled(ikfast_info):
     try:
@@ -27,6 +27,8 @@ def is_ik_compiled(ikfast_info):
         return True
     except ImportError:
         return False
+
+# TODO: forward kinematics
 
 def get_base_from_ee(robot, ikfast_info, tool_link, world_from_target):
     world_from_base = get_link_pose(robot, link_from_name(robot, ikfast_info.base_link))
@@ -58,7 +60,8 @@ def get_ik_joints(robot, ikfast_info, tool_link):
     return ik_joints
 
 def ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
-                              max_attempts=INF, max_time=INF, norm=INF, max_distance=INF, **kwargs):
+                              max_attempts=INF, max_time=INF, norm=INF, max_distance=INF,
+                              sample_free=True, **kwargs):
     assert (max_attempts < INF) or (max_time < INF)
     if max_distance is None:
         max_distance = INF
@@ -69,13 +72,15 @@ def ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
     base_from_ee = get_base_from_ee(robot, ikfast_info, tool_link, world_from_target)
     difference_fn = get_difference_fn(robot, ik_joints)
     current_conf = get_joint_positions(robot, ik_joints)
-    # TODO: handle circular joints
     current_positions = get_joint_positions(robot, free_joints)
-    free_deltas = max_distance*np.ones(len(free_joints))
-    lower_limits = np.maximum(get_min_limits(robot, free_joints), current_positions - free_deltas)
-    upper_limits = np.minimum(get_max_limits(robot, free_joints), current_positions + free_deltas)
-    generator = (weights*lower_limits + (1-weights)*upper_limits
-                 for weights in unit_generator(d=len(free_joints), **kwargs))
+    if sample_free:
+        free_deltas = max_distance*np.ones(len(free_joints)) # TODO: handle circular joints
+        lower_limits = np.maximum(get_min_limits(robot, free_joints), current_positions - free_deltas)
+        upper_limits = np.minimum(get_max_limits(robot, free_joints), current_positions + free_deltas)
+        generator = (weights*lower_limits + (1-weights)*upper_limits
+                     for weights in unit_generator(d=len(free_joints), **kwargs))
+    else:
+        generator = iter([current_positions])
     if max_attempts < INF:
         generator = islice(generator, max_attempts)
     start_time = time.time()
