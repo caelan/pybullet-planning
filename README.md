@@ -9,9 +9,33 @@ STRIPStream + pybullet
 Install PyBullet on OS X or Linux using: 
 ```
 $ pip install numpy pybullet
-$ git clone https://github.com/caelan/ss-pybullet.git
+$ git clone --recurse-submodules https://github.com/caelan/ss-pybullet.git
 $ cd ss-pybullet
-$ git submodule update --init --recursive
+$ git pull --recurse-submodules
+```
+
+## IKFAST Comilation
+
+### Franka Panda
+
+```
+$ cd ss-pybullet/pybullet_tools/ikfast/franka_panda
+$ python2 setup.py build
+```
+
+### MOVO
+
+```
+$ cd ss-pybullet/pybullet_tools/ikfast/movo
+$ python2 setup.py -a left
+$ python2 setup.py -a arm
+```
+
+### PR2
+
+```
+$ cd ss-pybullet/pybullet_tools/ikfast/pr2
+$ python2 setup.py build
 ```
 
 ## Tests
@@ -27,7 +51,8 @@ Examples:
 * PR2 visibility - ```$ python -m examples.test_visibility```
 * PR2 copying - ```$ python -m examples.test_clone```
 * TurtleBot collisions - ```$ python -m examples.test_turtlebot```
-* MOVO random configurations - ```$ python -m examples.test_movo```
+* Franka Panda workspace planning - ```$ python -m examples.test_franka```
+* MOVO random workspace planning - ```$ python -m examples.test_movo```
 * Dropping beads - ```$ python -m examples.test_water```
 
 <img src="images/turtlebot.png" height="150">&emsp;<img src="images/movo.png" height="150">
