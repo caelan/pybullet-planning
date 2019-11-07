@@ -18,6 +18,14 @@
 ///     gcc -lstdc++ ik.cpp
 /// To compile without any main function as a shared object (might need -llapack):
 ///     gcc -fPIC -lstdc++ -DIKFAST_NO_MAIN -DIKFAST_CLIBRARY -shared -Wl,-soname,libik.so -o libik.so ik.cpp
+
+//// START
+//// Make sure the version number matches.
+//// You might need to install the dev version to get the header files.
+//// sudo apt-get install python3.4-dev
+#include "Python.h"
+//// END
+
 #define IKFAST_HAS_LIBRARY
 #include "ikfast.h" // found inside share/openrave-X.Y/python/ikfast.h
 using namespace ikfast;
@@ -31,10 +39,6 @@ IKFAST_COMPILE_ASSERT(IKFAST_VERSION==0x1000004a);
 #include <limits>
 #include <algorithm>
 #include <complex>
-
-//// START
-#include "python2.7/Python.h"
-//// END
 
 #ifndef IKFAST_ASSERT
 #include <stdexcept>
@@ -13356,7 +13360,28 @@ static PyMethodDef ikRightMethods[] = {
     {NULL, NULL, 0, NULL} // Not sure why/if this is needed. It shows up in the examples though(something about Sentinel).
 };
 
+#if PY_MAJOR_VERSION >= 3
+
+//// This is the python3.4 version.
+static struct PyModuleDef ikRightModule = {
+    PyModuleDef_HEAD_INIT,
+    "ikRight",
+    NULL,
+    -1,
+    ikRightMethods
+};
+
+PyMODINIT_FUNC PyInit_ikRight(void) {
+    return PyModule_Create(&ikRightModule);
+}
+
+#else
+
+//// This is the python2.7 version.
 PyMODINIT_FUNC initikRight(void) {
     (void) Py_InitModule("ikRight", ikRightMethods);
 }
+
+#endif
+
 //// END
