@@ -14,7 +14,7 @@ $ cd ss-pybullet
 $ git pull --recurse-submodules
 ```
 
-## IKFAST Comilation
+## IKFast Compilation
 
 ### Franka Panda
 
