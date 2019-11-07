@@ -9,7 +9,7 @@ from pybullet_tools.ikfast.utils import IKFastInfo
 from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, disconnect, wait_for_user, \
     get_movable_joints, get_sample_fn, set_joint_positions, get_joint_name, LockRenderer, link_from_name, HideOutput, \
     joints_from_names, has_joint, set_color, get_links, BLACK, get_max_limits, get_min_limits, apply_alpha, \
-    get_extend_fn, get_link_pose, get_joint_names, draw_pose, remove_handles
+    get_extend_fn, get_link_pose, get_joint_names, draw_pose, remove_handles, draw_base_limits
 from examples.test_franka import test_retraction
 from pybullet_tools.ikfast.franka_panda.ik import ikfast_inverse_kinematics, get_ik_joints
 
@@ -25,6 +25,8 @@ MOVO_URDF = "models/movo_description/movo_robotiq.urdf"
 
 ARMS = ['right', 'left']
 
+BASE_JOINTS = ['x', 'y', 'theta']
+TORSO_JOINTS = ['linear_joint']
 HEAD_JOINTS = ['pan_joint', 'tilt_joint']
 
 ARM_JOINTS = ['{}_shoulder_pan_joint', '{}_shoulder_lift_joint', '{}_arm_half_joint', '{}_elbow_joint',
@@ -36,15 +38,12 @@ ROBOTIQ_GRIPPER_JOINTS = ['{}_gripper_finger1_joint', '{}_gripper_finger2_joint'
                           '{}_gripper_finger1_inner_knuckle_joint', '{}_gripper_finger1_finger_tip_joint',
                           '{}_gripper_finger2_inner_knuckle_joint', '{}_gripper_finger2_finger_tip_joint']
 
-TORSO_JOINTS = ['linear_joint']
-
 EE_LINK = '{}_ee_link'
+TOOL_LINK = '{}_tool_link'
 
 #PASSIVE_JOINTS = ['mid_body_joint']
 # TODO: mid_body_joint - might be passive
 # https://github.com/Kinovarobotics/kinova-movo/blob/master/movo_moveit_config/config/movo_kg2.srdf
-
-JOINTS = TORSO_JOINTS + HEAD_JOINTS
 
 # https://github.mit.edu/Learning-and-Intelligent-Systems/ltamp_pr2/blob/master/control_tools/ik/ik_tools/movo_ik/movo_ik_generator.py
 MOVO_INFOS = {
@@ -111,29 +110,36 @@ def main():
     connect(use_gui=True)
     add_data_path()
     plane = p.loadURDF("plane.urdf")
-    with HideOutput():
-        with LockRenderer():
+    with LockRenderer():
+        with HideOutput():
             robot = load_model(MOVO_URDF, fixed_base=True)
-            for link in get_links(robot):
-                set_color(robot, color=apply_alpha(0.2*np.ones(3), 1), link=link)
+        for link in get_links(robot):
+            set_color(robot, color=apply_alpha(0.25*np.ones(3), 1), link=link)
+        base_joints = joints_from_names(robot, BASE_JOINTS)
+        draw_base_limits((get_min_limits(robot, base_joints),
+                          get_max_limits(robot, base_joints)), z=1e-2)
     dump_body(robot)
     wait_for_user('Start?')
 
     #for arm in ARMS:
     #    test_close_gripper(robot, arm)
 
-    arm = 'left'
-    tool_link = link_from_name(robot, EE_LINK.format(arm))
+    arm = 'right'
+    tool_link = link_from_name(robot, TOOL_LINK.format(arm))
     #joint_names = HEAD_JOINTS
     #joints = joints_from_names(robot, joint_names)
-    #joints = get_arm_joints(robot, arm)
-    joints = get_ik_joints(robot, MOVO_INFOS[arm], tool_link)
+    joints = base_joints + get_arm_joints(robot, arm)
     #joints = get_movable_joints(robot)
     print('Joints:', get_joint_names(robot, joints))
 
+    ik_joints = get_ik_joints(robot, MOVO_INFOS[arm], tool_link)
+    #fixed_joints = []
+    fixed_joints = ik_joints[:1]
+    #fixed_joints = ik_joints
+
     sample_fn = get_sample_fn(robot, joints)
     handles = []
-    for i in range(100):
+    for i in range(10):
         print('Iteration:', i)
         conf = sample_fn()
         print(conf)
@@ -143,13 +149,13 @@ def main():
         handles = draw_pose(tool_pose)
         wait_for_user()
 
-        conf = next(ikfast_inverse_kinematics(robot, MOVO_INFOS[arm], tool_link, tool_pose,
-                                              max_time=0.1, sample_free=True), None)
-        print(conf)
-        if conf is not None:
-            set_joint_positions(robot, joints, conf)
-        wait_for_user()
-        #test_retraction(robot, MOVO_INFOS[arm], joints, tool_link)
+        #conf = next(ikfast_inverse_kinematics(robot, MOVO_INFOS[arm], tool_link, tool_pose,
+        #                                      fixed_joints=fixed_joints, max_time=0.1), None)
+        #if conf is not None:
+        #    set_joint_positions(robot, ik_joints, conf)
+        #wait_for_user()
+        test_retraction(robot, MOVO_INFOS[arm], tool_link,
+                        fixed_joints=fixed_joints, max_time=0.1)
     disconnect()
 
 if __name__ == '__main__':

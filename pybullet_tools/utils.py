@@ -2311,11 +2311,10 @@ def unit_generator(d, use_halton=False):
 
 def interval_generator(lower, upper, **kwargs):
     assert len(lower) == len(upper)
-    assert np.less(lower, upper).all() # TODO: equality
-    extents = np.array(upper) - np.array(lower)
-    for scale in unit_generator(len(lower), **kwargs):
-        point = np.array(lower) + scale*extents
-        yield point
+    assert np.less_equal(lower, upper).all()
+    if np.equal(lower, upper).all():
+        return iter([lower])
+    return (weights*lower + (1-weights)*upper for weights in unit_generator(d=len(lower), **kwargs))
 
 def get_sample_fn(body, joints, custom_limits={}, **kwargs):
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits, circular_limits=CIRCULAR_LIMITS)

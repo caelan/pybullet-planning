@@ -11,7 +11,7 @@ from ...utils import multiply, get_link_pose, link_from_name, invert, set_joint_
     get_movable_joint_ancestors, get_joint_limits, inf_generator, get_joint_position, randomize, violates_limits, \
     get_joint_positions, INF, get_difference_fn, get_distance_fn, get_link_ancestors, prune_fixed_joints, \
     parent_joint_from_link, get_length, unit_generator, get_min_limits, get_max_limits, elapsed_time, \
-    get_joint_names, get_link_names, parent_link_from_joint
+    get_joint_names, get_link_names, parent_link_from_joint, interval_generator
 
 # TODO: refactor this file
 
@@ -60,8 +60,8 @@ def get_ik_joints(robot, ikfast_info, tool_link):
     return ik_joints
 
 def ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
-                              max_attempts=INF, max_time=INF, norm=INF, max_distance=INF,
-                              sample_free=True, **kwargs):
+                              fixed_joints=[], max_attempts=INF, max_time=INF,
+                              norm=INF, max_distance=INF, **kwargs):
     assert (max_attempts < INF) or (max_time < INF)
     if max_distance is None:
         max_distance = INF
@@ -73,14 +73,12 @@ def ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
     difference_fn = get_difference_fn(robot, ik_joints)
     current_conf = get_joint_positions(robot, ik_joints)
     current_positions = get_joint_positions(robot, free_joints)
-    if sample_free:
-        free_deltas = max_distance*np.ones(len(free_joints)) # TODO: handle circular joints
-        lower_limits = np.maximum(get_min_limits(robot, free_joints), current_positions - free_deltas)
-        upper_limits = np.minimum(get_max_limits(robot, free_joints), current_positions + free_deltas)
-        generator = (weights*lower_limits + (1-weights)*upper_limits
-                     for weights in unit_generator(d=len(free_joints), **kwargs))
-    else:
-        generator = iter([current_positions])
+
+    # TODO: handle circular joints
+    free_deltas = np.array([0. if joint in fixed_joints else max_distance for joint in free_joints])
+    lower_limits = np.maximum(get_min_limits(robot, free_joints), current_positions - free_deltas)
+    upper_limits = np.minimum(get_max_limits(robot, free_joints), current_positions + free_deltas)
+    generator = interval_generator(lower_limits, upper_limits)
     if max_attempts < INF:
         generator = islice(generator, max_attempts)
     start_time = time.time()

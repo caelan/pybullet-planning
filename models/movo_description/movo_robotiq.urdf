@@ -57,6 +57,28 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
       <updateRate>100.0</updateRate>
     </plugin>
   </gazebo>
+  <!-- Modification -->
+  <link name="world_link"/>
+  <link name="base_link_0"/>
+  <link name="base_link_1"/>
+  <joint name="x" type="prismatic">
+    <parent link="world_link"/>
+    <child link="base_link_0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="1000.0" lower="-2.5" upper="2.5" velocity="1.0"/>
+  </joint>
+  <joint name="y" type="prismatic">
+    <parent link="base_link_0"/>
+    <child link="base_link_1"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="1000.0" lower="-2.5" upper="2.5" velocity="1.0"/>
+  </joint>
+  <joint name="theta" type="continuous">
+    <parent link="base_link_1"/>
+    <child link="base_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="1000.0" velocity="1.5708"/>
+  </joint>
   <!-- Base link is the center of the robot's chassis between the motors projected on the ground -->
   <link name="base_link"/>
   <gazebo reference="base_link">
@@ -786,6 +808,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <origin rpy="3.14159265 1.570796325 0" xyz="0 0 -0.1600"/>
   </joint>
   <link name="right_ee_link"/>
+  <!-- Modification -->
+  <joint name="right_tool_fixed_joint" type="fixed">
+    <parent link="right_ee_link"/>
+    <child link="right_tool_link"/>
+    <origin rpy="1.570796325 0 1.570796325" xyz="0 0 0"/>
+  </joint>
+  <link name="right_tool_link"/>
   <transmission name="right_shoulder_pan_trans">
     <type>transmission_interface/SimpleTransmission</type>
     <joint name="right_shoulder_pan_joint">
@@ -1116,6 +1145,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     <origin rpy="3.14159265 1.570796325 0" xyz="0 0 -0.1600"/>
   </joint>
   <link name="left_ee_link"/>
+  <!-- Modification -->
+  <joint name="left_tool_fixed_joint" type="fixed">
+    <parent link="left_ee_link"/>
+    <child link="left_tool_link"/>
+    <origin rpy="1.570796325 0 1.570796325" xyz="0 0 0"/>
+  </joint>
+  <link name="left_tool_link"/>
   <transmission name="left_shoulder_pan_trans">
     <type>transmission_interface/SimpleTransmission</type>
     <joint name="left_shoulder_pan_joint">
