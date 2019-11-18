@@ -71,6 +71,12 @@ See the following examples: https://github.com/caelan/pddlstream/tree/master/exa
 * Wordpress - https://pybullet.org/wordpress/
 * Examples - https://github.com/bulletphysics/bullet3/tree/master/examples/pybullet/examples
 * Bindings - https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/pybullet.c
+* PyBullet Planning - https://github.com/yijiangh/pybullet_planning
+* PyPI - https://pypi.org/project/pybullet-planning/
 
 ## Bullet Resources
 * Github - https://github.com/bulletphysics/bullet3
+
+## Citation
+
+Caelan Reed Garrett. PyBullet Planning. https://pypi.org/project/pybullet-planning/. 2018.
