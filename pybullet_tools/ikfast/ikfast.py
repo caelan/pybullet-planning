@@ -1,8 +1,11 @@
 import importlib
 import time
-from itertools import islice
-
 import numpy as np
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+
+from itertools import islice
 
 from .utils import compute_inverse_kinematics
 from ..utils import get_link_pose, link_from_name, multiply, invert, get_link_ancestors, \
@@ -14,8 +17,11 @@ from ..utils import get_link_pose, link_from_name, multiply, invert, get_link_an
 
 
 def import_ikfast(ikfast_info):
+    # https://stackoverflow.com/questions/67631/how-to-import-a-module-given-the-full-path
+    #print(sys.modules['__main__'].__file__)
     #return importlib.import_module('pybullet_tools.ikfast.{}'.format(ikfast_info.module_name), package=None)
-    return importlib.import_module('.{}'.format(ikfast_info.module_name), package='pybullet_tools.ikfast')
+    #return importlib.import_module('{}'.format(ikfast_info.module_name), package='pybullet_tools.ikfast')
+    return importlib.import_module('ikfast.{}'.format(ikfast_info.module_name), package=None)
 
 
 def is_ik_compiled(ikfast_info):
