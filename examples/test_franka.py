@@ -10,8 +10,8 @@ from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, 
 
 from itertools import islice
 
-from pybullet_tools.ikfast.franka_panda.ik import ikfast_inverse_kinematics, PANDA_INFO, closest_inverse_kinematics, get_ik_joints
-
+from pybullet_tools.ikfast.franka_panda.ik import PANDA_INFO
+from pybullet_tools.ikfast.ikfast import get_ik_joints, ikfast_inverse_kinematics, closest_inverse_kinematics
 
 #FRANKA_URDF = "models/franka_description/robots/panda_arm.urdf"
 #FRANKA_URDF = "models/franka_description/robots/hand.urdf"

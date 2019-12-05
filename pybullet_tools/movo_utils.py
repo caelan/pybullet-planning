@@ -6,8 +6,8 @@ from itertools import combinations
 
 import numpy as np
 
-from pybullet_tools.ikfast.utils import IKFastInfo
-from pybullet_tools.utils import joints_from_names, has_joint, get_max_limits, get_min_limits, apply_alpha, \
+from .ikfast.utils import IKFastInfo
+from .utils import joints_from_names, has_joint, get_max_limits, get_min_limits, apply_alpha, \
     pairwise_link_collision, get_all_links, get_link_name, are_links_adjacent
 
 #MOVO_URDF = "models/movo_description/movo.urdf"
