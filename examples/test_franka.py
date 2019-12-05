@@ -5,19 +5,12 @@ from __future__ import print_function
 import pybullet as p
 
 from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, disconnect, wait_for_user, \
-    get_movable_joints, get_sample_fn, set_joint_positions, get_joint_name, joints_from_names, get_configuration, \
-    LockRenderer, link_from_name, get_link_pose, INF, multiply, Pose, Point, interpolate_poses, HideOutput
+    get_movable_joints, get_sample_fn, set_joint_positions, get_joint_name, LockRenderer, link_from_name, get_link_pose, \
+    multiply, Pose, Point, interpolate_poses, HideOutput
 
-from itertools import islice
+from pybullet_tools.ikfast.franka_panda.ik import PANDA_INFO, FRANKA_URDF
+from pybullet_tools.ikfast.ikfast import get_ik_joints, closest_inverse_kinematics
 
-from pybullet_tools.ikfast.franka_panda.ik import PANDA_INFO
-from pybullet_tools.ikfast.ikfast import get_ik_joints, ikfast_inverse_kinematics, closest_inverse_kinematics
-
-#FRANKA_URDF = "models/franka_description/robots/panda_arm.urdf"
-#FRANKA_URDF = "models/franka_description/robots/hand.urdf"
-FRANKA_URDF = "models/franka_description/robots/panda_arm_hand.urdf"
-
-#####################################
 
 def test_retraction(robot, info, tool_link, distance=0.1, **kwargs):
     ik_joints = get_ik_joints(robot, info, tool_link)
@@ -34,6 +27,8 @@ def test_retraction(robot, info, tool_link, distance=0.1, **kwargs):
         # for conf in islice(ikfast_inverse_kinematics(robot, info, tool_link, pose, max_attempts=INF, max_distance=0.5), 1):
         #    set_joint_positions(robot, joints[:len(conf)], conf)
         #    wait_for_user()
+
+#####################################
 
 def main():
     connect(use_gui=True)
