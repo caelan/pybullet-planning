@@ -15,8 +15,9 @@ from pybullet_tools.ikfast.franka_panda.setup import compile_ikfast
 ARMS = ['left', 'right']
 
 def main():
+    # TODO: doesn't currently work with python3
     parser = argparse.ArgumentParser()
-    parser.add_argument('-a', '--arm', choices=ARMS,
+    parser.add_argument('-a', '--arm', choices=ARMS, required=True,
                         help='Which arm to compile')
     args = parser.parse_args()
     sys.argv[:] = sys.argv[:1] + ['build']

@@ -5,8 +5,7 @@ import importlib
 
 from itertools import product, islice
 
-from pybullet_tools.ikfast.utils import IKFastInfo
-from ..utils import compute_inverse_kinematics
+from ..utils import compute_inverse_kinematics, IKFastInfo
 from ...utils import multiply, get_link_pose, link_from_name, invert, set_joint_positions, joints_from_names, \
     get_movable_joint_ancestors, get_joint_limits, inf_generator, get_joint_position, randomize, violates_limits, \
     get_joint_positions, INF, get_difference_fn, get_distance_fn, get_link_ancestors, prune_fixed_joints, \
@@ -19,7 +18,8 @@ PANDA_INFO = IKFastInfo(module_name='franka_panda.ikfast_panda_arm', base_link='
                         ee_link='panda_link8', free_joints=['panda_joint7'])
 
 def import_ikfast(ikfast_info):
-    return importlib.import_module('pybullet_tools.ikfast.{}'.format(ikfast_info.module_name))
+    #return importlib.import_module('pybullet_tools.ikfast.{}'.format(ikfast_info.module_name), package=None)
+    return importlib.import_module('.{}'.format(ikfast_info.module_name), package='pybullet_tools.ikfast')
 
 def is_ik_compiled(ikfast_info):
     try:

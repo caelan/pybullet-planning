@@ -115,6 +115,23 @@ def test_close_gripper(robot, arm):
         print(positions)
         wait_for_user('Continue?')
 
+def test_grasps(robot, block):
+    for arm in ARMS:
+        gripper_joints = get_gripper_joints(robot, arm)
+        tool_link = link_from_name(robot, TOOL_LINK.format(arm))
+        tool_pose = get_link_pose(robot, tool_link)
+        #handles = draw_pose(tool_pose)
+        #grasps = get_top_grasps(block, under=True, tool_pose=unit_pose())
+        grasps = get_side_grasps(block, under=True, tool_pose=unit_pose())
+        for i, grasp_pose in enumerate(grasps):
+            block_pose = multiply(tool_pose, grasp_pose)
+            set_pose(block, block_pose)
+            close_until_collision(robot, gripper_joints, bodies=[block], open_conf=get_open_positions(robot, arm),
+                                  closed_conf=get_closed_positions(robot, arm))
+            handles = draw_pose(block_pose)
+            wait_for_user('Grasp {}'.format(i))
+            remove_handles(handles)
+
 #####################################
 
 def get_colliding(robot):
@@ -163,22 +180,10 @@ def main():
     #print(get_colliding(robot))
     #for arm in ARMS:
     #    test_close_gripper(robot, arm)
+    #test_grasps(robot, block)
 
-    for arm in ARMS:
-        gripper_joints = get_gripper_joints(robot, arm)
-        tool_link = link_from_name(robot, TOOL_LINK.format(arm))
-        tool_pose = get_link_pose(robot, tool_link)
-        #handles = draw_pose(tool_pose)
-        #grasps = get_top_grasps(block, under=True, tool_pose=unit_pose())
-        grasps = get_side_grasps(block, under=True, tool_pose=unit_pose())
-        for i, grasp_pose in enumerate(grasps):
-            block_pose = multiply(tool_pose, grasp_pose)
-            set_pose(block, block_pose)
-            close_until_collision(robot, gripper_joints, bodies=[block], open_conf=get_open_positions(robot, arm),
-                                  closed_conf=get_closed_positions(robot, arm))
-            handles = draw_pose(block_pose)
-            wait_for_user('Grasp {}'.format(i))
-            remove_handles(handles)
+    arm = RIGHT
+    tool_link = link_from_name(robot, TOOL_LINK.format(arm))
     wait_for_user('Start?')
 
     #joint_names = HEAD_JOINTS
