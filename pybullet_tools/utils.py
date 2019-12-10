@@ -742,14 +742,16 @@ def demask_pixel(pixel):
     return body, link
 
 def save_image(filename, rgba):
-    import scipy.misc
-    if filename.endswith('.jpg'):
-        scipy.misc.imsave(filename, rgba[:, :, :3])
-    elif filename.endswith('.png'):
-        scipy.misc.imsave(filename, rgba)  # (480, 640, 4)
-        # scipy.misc.toimage(image_array, cmin=0.0, cmax=...).save('outfile.jpg')
-    else:
-        raise ValueError(filename)
+    import imageio
+    imageio.imwrite(filename, rgba)
+    # import scipy.misc
+    # if filename.endswith('.jpg'):
+    #     scipy.misc.imsave(filename, rgba[:, :, :3])
+    # elif filename.endswith('.png'):
+    #     scipy.misc.imsave(filename, rgba)  # (480, 640, 4)
+    #     # scipy.misc.toimage(image_array, cmin=0.0, cmax=...).save('outfile.jpg')
+    # else:
+    #     raise ValueError(filename)
     print('Saved image at {}'.format(filename))
 
 def get_projection_matrix(width, height, vertical_fov, near, far):
@@ -811,19 +813,34 @@ def image_from_segmented(segmented, color_from_body=None):
             image[r, c, :] = color_from_body.get(body, (0, 0, 0))
     return image
 
+def get_image_flags(segment=False, segment_links=False):
+    if segment:
+        if segment_links:
+            return p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX
+        return 0
+    return p.ER_NO_SEGMENTATION_MASK
+
+def take_picture():
+    camera_info = get_camera()
+    image = CameraImage(*p.getCameraImage(camera_info.width, camera_info.height,
+                                          #viewMatrix=camera_info.viewMatrix,
+                                          #projectionMatrix=camera_info.projectionMatrix,
+                                          shadow=True,
+                                          flags=get_image_flags(segment=False),
+                                          renderer=p.ER_BULLET_HARDWARE_OPENGL, # p.ER_TINY_RENDERER
+                                          physicsClientId=CLIENT)[2:])
+    #p.resetDebugVisualizerCamera(camera_info.dist, camera_info.yaw, camera_info.pitch,
+    #                             camera_info.target, physicsClientId=CLIENT)
+    return image.rgbPixels
+
 def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, near=0.02, far=5.0,
-              segment=False, segment_links=False):
+              segment=False, **kwargs):
     # computeViewMatrixFromYawPitchRoll
     view_matrix = p.computeViewMatrix(cameraEyePosition=camera_pos, cameraTargetPosition=target_pos,
                                       cameraUpVector=[0, 0, 1], physicsClientId=CLIENT)
     projection_matrix = get_projection_matrix(width, height, vertical_fov, near, far)
-    if segment:
-        if segment_links:
-            flags = p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX
-        else:
-            flags = 0
-    else:
-        flags = p.ER_NO_SEGMENTATION_MASK
+
+    flags = get_image_flags(segment=segment, **kwargs)
     image = CameraImage(*p.getCameraImage(width, height, viewMatrix=view_matrix,
                                           projectionMatrix=projection_matrix,
                                           shadow=False,
