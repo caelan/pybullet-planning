@@ -495,7 +495,7 @@ def simulate_for_sim_duration(sim_duration, real_dt=0, frequency=INF):
         time.sleep(real_dt)
 
 def wait_for_user(message='Press enter to continue'):
-    if is_darwin():
+    if has_gui() and is_darwin():
         # OS X doesn't multi-thread the OpenGL visualizer
         #wait_for_interrupt()
         return threaded_input(message)
@@ -1127,11 +1127,11 @@ def is_rigid_body(body):
 def is_fixed_base(body):
     return get_mass(body) == STATIC_MASS
 
-def dump_body(body):
+def dump_body(body, fixed=False):
     print('Body id: {} | Name: {} | Rigid: {} | Fixed: {}'.format(
         body, get_body_name(body), is_rigid_body(body), is_fixed_base(body)))
     for joint in get_joints(body):
-        if is_movable(body, joint):
+        if fixed or is_movable(body, joint):
             print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
                 joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
                 is_circular(body, joint), get_joint_limits(body, joint)))
@@ -2102,8 +2102,9 @@ def aabb_contains_point(point, container):
 
 def get_bodies_in_region(aabb):
     (lower, upper) = aabb
+    #step_simulation() # Like visibility, need to step first
     bodies = p.getOverlappingObjects(lower, upper, physicsClientId=CLIENT)
-    return [] if bodies is None else bodies
+    return [] if bodies is None else sorted(bodies)
 
 def get_aabb_volume(aabb):
     return np.prod(get_aabb_extent(aabb))
