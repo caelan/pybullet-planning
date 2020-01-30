@@ -800,6 +800,8 @@ COLOR_FROM_NAME = {
 }
 
 def apply_alpha(color, alpha=1.0):
+    if color is None:
+        return None
     return tuple(color[:3]) + (alpha,)
 
 def spaced_colors(n, s=1, v=1):
@@ -1737,7 +1739,9 @@ def create_sphere(radius, mass=STATIC_MASS, color=(0, 0, 1, 1)):
 def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(0, 0, 0, 1)):
     # color seems to be ignored in favor of a texture
     collision_id, visual_id = create_shape(get_plane_geometry(normal), color=color)
-    return create_body(collision_id, visual_id, mass=mass)
+    body = create_body(collision_id, visual_id, mass=mass)
+    set_texture(body, texture=None) # otherwise 'plane.urdf'
+    return body
 
 def create_obj(path, scale=1., mass=STATIC_MASS, collision=True, color=(0.5, 0.5, 0.5, 1)):
     collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), collision=collision, color=color)
@@ -2033,6 +2037,12 @@ def set_color(body, color, link=BASE_LINK, shape_index=-1):
     # specularColor
     return p.changeVisualShape(body, link, shapeIndex=shape_index, rgbaColor=color,
                                #textureUniqueId=None, specularColor=None,
+                               physicsClientId=CLIENT)
+
+def set_texture(body, texture=None, link=BASE_LINK, shape_index=-1):
+    if texture is None:
+        texture = -1
+    return p.changeVisualShape(body, link, shapeIndex=shape_index, textureUniqueId=texture,
                                physicsClientId=CLIENT)
 
 #####################################
