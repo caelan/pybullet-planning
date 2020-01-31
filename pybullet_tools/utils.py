@@ -1741,6 +1741,7 @@ def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(0, 0, 0, 1)):
     collision_id, visual_id = create_shape(get_plane_geometry(normal), color=color)
     body = create_body(collision_id, visual_id, mass=mass)
     set_texture(body, texture=None) # otherwise 'plane.urdf'
+    set_color(body, color=color) # must perform after set_texture
     return body
 
 def create_obj(path, scale=1., mass=STATIC_MASS, collision=True, color=(0.5, 0.5, 0.5, 1)):
