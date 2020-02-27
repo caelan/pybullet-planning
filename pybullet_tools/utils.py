@@ -6,6 +6,9 @@ import math
 import os
 import pickle
 import platform
+import signal
+from contextlib import contextmanager
+
 import numpy as np
 import pybullet as p
 import random
@@ -13,7 +16,7 @@ import sys
 import time
 import datetime
 from collections import defaultdict, deque, namedtuple
-from itertools import product, combinations, count
+from itertools import product, combinations, count, cycle, islice
 
 from .transformations import quaternion_from_matrix, unit_vector
 
@@ -133,6 +136,9 @@ def safe_zip(sequence1, sequence2):
     assert len(sequence1) == len(sequence2)
     return zip(sequence1, sequence2)
 
+def get_pairs(sequence):
+    return list(safe_zip(sequence[:-1], sequence[1:]))
+
 def clip(value, min_value=-INF, max_value=+INF):
     return min(max(min_value, value), max_value)
 
@@ -160,11 +166,94 @@ def set_numpy_seed(seed):
         np.random.seed(wrap_numpy_seed(seed))
         #print('Seed:', seed)
 
+DATE_FORMAT = '%y-%m-%d_%H-%M-%S'
+
 def get_date():
-    return datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
+    return datetime.datetime.now().strftime(DATE_FORMAT)
 
 def implies(p1, p2):
     return not p1 or p2
+
+def roundrobin(*iterables):
+    # https://docs.python.org/3.1/library/itertools.html#recipes
+    "roundrobin('ABC', 'D', 'EF') --> A D E B F C"
+    # Recipe credited to George Sakkis
+    pending = len(iterables)
+    nexts = cycle(iter(it).__next__ for it in iterables)
+    while pending:
+        try:
+            for next in nexts:
+                yield next()
+        except StopIteration:
+            pending -= 1
+            nexts = cycle(islice(nexts, pending))
+
+def chunks(sequence, n=1):
+    for i in range(0, len(sequence), n):
+        yield sequence[i:i + n]
+
+##################################################
+
+BYTES_PER_KILOBYTE = math.pow(2, 10)
+BYTES_PER_GIGABYTE = math.pow(2, 30)
+KILOBYTES_PER_GIGABYTE = BYTES_PER_GIGABYTE / BYTES_PER_KILOBYTE
+
+def get_memory_in_kb():
+    # https://pypi.org/project/psutil/
+    # https://psutil.readthedocs.io/en/latest/
+    import psutil
+    #rss: aka "Resident Set Size", this is the non-swapped physical memory a process has used. (bytes)
+    #vms: aka "Virtual Memory Size", this is the total amount of virtual memory used by the process. (bytes)
+    #shared: (Linux) memory that could be potentially shared with other processes.
+    #text (Linux, BSD): aka TRS (text resident set) the amount of memory devoted to executable code.
+    #data (Linux, BSD): aka DRS (data resident set) the amount of physical memory devoted to other than executable code.
+    #lib (Linux): the memory used by shared libraries.
+    #dirty (Linux): the number of dirty pages.
+    #pfaults (macOS): number of page faults.
+    #pageins (macOS): number of actual pageins.
+    process = psutil.Process(os.getpid())
+    #process.pid()
+    #process.ppid()
+    pmem = process.memory_info() # this seems to actually get the current memory!
+    return pmem.vms / BYTES_PER_KILOBYTE
+    #print(process.memory_full_info())
+    #print(process.memory_percent())
+    # process.rlimit(psutil.RLIMIT_NOFILE)  # set resource limits (Linux only)
+    #print(psutil.virtual_memory())
+    #print(psutil.swap_memory())
+    #print(psutil.pids())
+
+def raise_timeout(signum, frame):
+    raise TimeoutError()
+
+@contextmanager
+def timeout(duration):
+    # https://www.jujens.eu/posts/en/2018/Jun/02/python-timeout-function/
+    # https://code-maven.com/python-timeout
+    # https://pypi.org/project/func-timeout/
+    # https://pypi.org/project/timeout-decorator/
+    # https://eli.thegreenplace.net/2011/08/22/how-not-to-set-a-timeout-on-a-computation-in-python
+    # https://docs.python.org/3/library/signal.html
+    # https://docs.python.org/3/library/contextlib.html
+    # https://stackoverflow.com/a/22348885
+    assert 0 < duration
+    if duration == INF:
+        yield
+        return
+    # Register a function to raise a TimeoutError on the signal
+    signal.signal(signal.SIGALRM, raise_timeout)
+    # Schedule the signal to be sent after ``duration``
+    signal.alarm(int(math.ceil(duration)))
+    try:
+        yield
+    except TimeoutError as e:
+        print('Timeout after {} sec'.format(duration))
+        #traceback.print_exc()
+        pass
+    finally:
+        # Unregister the signal so it won't be triggered
+        # if the timeout is not reached
+        signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
 #####################################
 
@@ -320,7 +409,7 @@ class WorldSaver(Saver):
 
 # Simulation
 
-CLIENTS = {}
+CLIENTS = {} # TODO: rename to include locked
 CLIENT = 0
 
 def get_client(client=None):
@@ -500,6 +589,10 @@ def wait_for_user(message='Press enter to continue'):
         #wait_for_interrupt()
         return threaded_input(message)
     return user_input(message)
+
+def wait_if_gui(*args, **kwargs):
+    if has_gui():
+        wait_for_user(*args, **kwargs)
 
 def is_unlocked():
     return CLIENTS[CLIENT] is True
