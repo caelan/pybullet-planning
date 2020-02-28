@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import colorsys
+import inspect
 import json
 import math
 import os
@@ -191,6 +192,19 @@ def roundrobin(*iterables):
 def chunks(sequence, n=1):
     for i in range(0, len(sequence), n):
         yield sequence[i:i + n]
+
+def get_function_name(depth=1):
+   return inspect.stack()[depth][3]
+
+def load_yaml(path):
+    import yaml
+    # grep -r --include="*.py" "yaml\." *
+    # yaml.dump()
+    with open(path, 'r') as f:
+        try:
+            return yaml.safe_load(f)
+        except yaml.YAMLError as exc:
+            raise exc
 
 ##################################################
 
