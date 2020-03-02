@@ -8,16 +8,17 @@ import os
 import pickle
 import platform
 import signal
-from contextlib import contextmanager
-
 import numpy as np
 import pybullet as p
 import random
 import sys
 import time
 import datetime
+
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count, cycle, islice
+from multiprocessing import TimeoutError
+from contextlib import contextmanager
 
 from .transformations import quaternion_from_matrix, unit_vector
 
