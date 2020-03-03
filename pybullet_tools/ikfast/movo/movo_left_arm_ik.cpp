@@ -18,6 +18,14 @@
 ///     gcc -lstdc++ ik.cpp
 /// To compile without any main function as a shared object (might need -llapack):
 ///     gcc -fPIC -lstdc++ -DIKFAST_NO_MAIN -DIKFAST_CLIBRARY -shared -Wl,-soname,libik.so -o libik.so ik.cpp
+
+//// START
+//// Make sure the version number matches.
+//// You might need to install the dev version to get the header files.
+//// sudo apt-get install python3.4-dev
+#include "Python.h"
+//// END
+
 #define IKFAST_HAS_LIBRARY
 #include "ikfast.h" // found inside share/openrave-X.Y/python/ikfast.h
 using namespace ikfast;
@@ -16104,8 +16112,6 @@ int main(int argc, char** argv)
 #endif
 
 // start python bindings
-#include <Python.h>
-
 // https://github.com/caelan/ss-pybullet/blob/c5efe7ad32381a7a7a15c2bd147b5a8731d21342/pybullet_tools/ikfast/pr2/left_arm_ik.cpp#L12972
 // https://github.com/yijiangh/conrob_pybullet/blob/master/utils/ikfast/kuka_kr6_r900/ikfast0x1000004a.Transform6D.0_1_2_3_4_5.cpp#L9923
 
