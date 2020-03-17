@@ -1252,17 +1252,17 @@ def dump_body(body, fixed=False):
             print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
                 joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
                 is_circular(body, joint), get_joint_limits(body, joint)))
-    link = -1
+    link = NULL_ID
     print('Link id: {} | Name: {} | Mass: {} | Collision: {} | Visual: {}'.format(
         link, get_base_name(body), get_mass(body),
-        len(get_collision_data(body, link)), -1)) # len(get_visual_data(body, link))))
+        len(get_collision_data(body, link)), NULL_ID)) # len(get_visual_data(body, link))))
     for link in get_links(body):
         joint = parent_joint_from_link(link)
         joint_name = JOINT_TYPES[get_joint_type(body, joint)] if is_fixed(body, joint) else get_joint_name(body, joint)
         print('Link id: {} | Name: {} | Joint: {} | Parent: {} | Mass: {} | Collision: {} | Visual: {}'.format(
             link, get_link_name(body, link), joint_name,
             get_link_name(body, get_link_parent(body, link)), get_mass(body, link),
-            len(get_collision_data(body, link)), -1)) # len(get_visual_data(body, link))))
+            len(get_collision_data(body, link)), NULL_ID)) # len(get_visual_data(body, link))))
         #print(get_joint_parent_frame(body, link))
         #print(map(get_data_geometry, get_visual_data(body, link)))
         #print(map(get_data_geometry, get_collision_data(body, link)))
@@ -1765,7 +1765,7 @@ def create_collision_shape(geometry, pose=unit_pose()):
         del collision_args['length']
     return p.createCollisionShape(**collision_args)
 
-def create_visual_shape(geometry, pose=unit_pose(), color=(1, 0, 0, 1), specular=None):
+def create_visual_shape(geometry, pose=unit_pose(), color=RED, specular=None):
     if (color is None): # or not has_gui():
         return NULL_ID
     point, quat = pose
@@ -1826,29 +1826,84 @@ def create_shape_array(geoms, poses, colors=None):
 
 #####################################
 
-def create_body(collision_id=-1, visual_id=-1, mass=STATIC_MASS):
+def create_body(collision_id=NULL_ID, visual_id=NULL_ID, mass=STATIC_MASS):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
 
-def create_box(w, l, h, mass=STATIC_MASS, color=(1, 0, 0, 1)):
+CARTESIAN_TYPES = {
+    'x': (p.JOINT_PRISMATIC, [1, 0, 0]),
+    'y': (p.JOINT_PRISMATIC, [0, 1, 0]),
+    'z': (p.JOINT_PRISMATIC, [0, 0, 1]),
+    'roll': (p.JOINT_REVOLUTE, [1, 0, 0]),
+    'pitch': (p.JOINT_REVOLUTE, [0, 1, 0]),
+    'yaw': (p.JOINT_REVOLUTE, [0, 0, 1]),
+}
+
+T2 = ['x', 'y']
+T3 = ['x', 'y', 'z']
+
+SE2 = T2 + ['yaw']
+SE3 = T3 + ['roll', 'pitch', 'yaw']
+
+def create_flying_body(group, collision_id=NULL_ID, visual_id=NULL_ID, mass=STATIC_MASS):
+    # TODO: more generally clone the body
+    indices = list(range(len(group) + 1))
+    masses = len(group) * [STATIC_MASS] + [mass]
+    visuals = len(group) * [NULL_ID] + [visual_id]
+    collisions = len(group) * [NULL_ID] + [collision_id]
+    types = [CARTESIAN_TYPES[joint][0] for joint in group] + [p.JOINT_FIXED]
+    #parents = [BASE_LINK] + indices[:-1]
+    parents = indices
+
+    assert len(indices) == len(visuals) == len(collisions) == len(types) == len(parents)
+    link_positions = len(indices) * [unit_point()]
+    link_orientations = len(indices) * [unit_quat()]
+    inertial_positions = len(indices) * [unit_point()]
+    inertial_orientations = len(indices) * [unit_quat()]
+    axes = len(indices) * [unit_point()]
+    axes = [CARTESIAN_TYPES[joint][1] for joint in group] + [unit_point()]
+    # TODO: no way of specifying joint limits
+
+    return p.createMultiBody(
+        baseMass=STATIC_MASS,
+        baseCollisionShapeIndex=NULL_ID,
+        baseVisualShapeIndex=NULL_ID,
+        basePosition=unit_point(),
+        baseOrientation=unit_quat(),
+        baseInertialFramePosition=unit_point(),
+        baseInertialFrameOrientation=unit_quat(),
+        linkMasses=masses,
+        linkCollisionShapeIndices=collisions,
+        linkVisualShapeIndices=visuals,
+        linkPositions=link_positions,
+        linkOrientations=link_orientations,
+        linkInertialFramePositions=inertial_positions,
+        linkInertialFrameOrientations=inertial_orientations,
+        linkParentIndices=parents,
+        linkJointTypes=types,
+        linkJointAxis=axes,
+        physicsClientId=CLIENT,
+    )
+
+def create_box(w, l, h, mass=STATIC_MASS, color=RED):
     collision_id, visual_id = create_shape(get_box_geometry(w, l, h), color=color)
     return create_body(collision_id, visual_id, mass=mass)
     # basePosition | baseOrientation
     # linkCollisionShapeIndices | linkVisualShapeIndices
 
-def create_cylinder(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
+def create_cylinder(radius, height, mass=STATIC_MASS, color=BLUE):
     collision_id, visual_id = create_shape(get_cylinder_geometry(radius, height), color=color)
     return create_body(collision_id, visual_id, mass=mass)
 
-def create_capsule(radius, height, mass=STATIC_MASS, color=(0, 0, 1, 1)):
+def create_capsule(radius, height, mass=STATIC_MASS, color=BLUE):
     collision_id, visual_id = create_shape(get_capsule_geometry(radius, height), color=color)
     return create_body(collision_id, visual_id, mass=mass)
 
-def create_sphere(radius, mass=STATIC_MASS, color=(0, 0, 1, 1)):
+def create_sphere(radius, mass=STATIC_MASS, color=BLUE):
     collision_id, visual_id = create_shape(get_sphere_geometry(radius), color=color)
     return create_body(collision_id, visual_id, mass=mass)
 
-def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(0, 0, 0, 1)):
+def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=BLACK):
     # color seems to be ignored in favor of a texture
     collision_id, visual_id = create_shape(get_plane_geometry(normal), color=color)
     body = create_body(collision_id, visual_id, mass=mass)
@@ -1856,7 +1911,7 @@ def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=(0, 0, 0, 1)):
     set_color(body, color=color) # must perform after set_texture
     return body
 
-def create_obj(path, scale=1., mass=STATIC_MASS, collision=True, color=(0.5, 0.5, 0.5, 1)):
+def create_obj(path, scale=1., mass=STATIC_MASS, collision=True, color=GREY):
     collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), collision=collision, color=color)
     body = create_body(collision_id, visual_id, mass=mass)
     fixed_base = (mass == STATIC_MASS)
@@ -1890,7 +1945,7 @@ UNKNOWN_FILE = 'unknown_file'
 def visual_shape_from_data(data, client=None):
     client = get_client(client)
     if (data.visualGeometryType == p.GEOM_MESH) and (data.meshAssetFileName == UNKNOWN_FILE):
-        return -1
+        return NULL_ID
     # visualFramePosition: translational offset of the visual shape with respect to the link
     # visualFrameOrientation: rotational offset (quaternion x,y,z,w) of the visual shape with respect to the link frame
     #inertial_pose = get_joint_inertial_pose(data.objectUniqueId, data.linkIndex)
@@ -1921,7 +1976,7 @@ CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'link
 def collision_shape_from_data(data, body, link, client=None):
     client = get_client(client)
     if (data.geometry_type == p.GEOM_MESH) and (data.filename == UNKNOWN_FILE):
-        return -1
+        return NULL_ID
     pose = multiply(get_joint_inertial_pose(body, link), get_data_pose(data))
     point, quat = pose
     # TODO: the visual data seems affected by the collision data
@@ -1942,10 +1997,10 @@ def collision_shape_from_data(data, body, link, client=None):
 def clone_visual_shape(body, link, client=None):
     client = get_client(client)
     #if not has_gui(client):
-    #    return -1
+    #    return NULL_ID
     visual_data = get_visual_data(body, link)
     if not visual_data:
-        return -1
+        return NULL_ID
     assert (len(visual_data) == 1)
     return visual_shape_from_data(visual_data[0], client)
 
@@ -1953,7 +2008,7 @@ def clone_collision_shape(body, link, client=None):
     client = get_client(client)
     collision_data = get_collision_data(body, link)
     if not collision_data:
-        return -1
+        return NULL_ID
     assert (len(collision_data) == 1)
     # TODO: can do CollisionArray
     return collision_shape_from_data(collision_data[0], body, link, client)
@@ -1971,7 +2026,7 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
     #movable_joints = [joint for joint in links if is_movable(body, joint)]
     new_from_original = {}
     base_link = get_link_parent(body, links[0]) if links else BASE_LINK
-    new_from_original[base_link] = -1
+    new_from_original[base_link] = NULL_ID
 
     masses = []
     collision_shapes = []
@@ -1988,8 +2043,8 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
         joint_info = get_joint_info(body, link)
         dynamics_info = get_dynamics_info(body, link)
         masses.append(dynamics_info.mass)
-        collision_shapes.append(clone_collision_shape(body, link, client) if collision else -1)
-        visual_shapes.append(clone_visual_shape(body, link, client) if visual else -1)
+        collision_shapes.append(clone_collision_shape(body, link, client) if collision else NULL_ID)
+        visual_shapes.append(clone_visual_shape(body, link, client) if visual else NULL_ID)
         point, quat = get_local_link_pose(body, link)
         positions.append(point)
         orientations.append(quat)
@@ -2003,8 +2058,8 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
     base_dynamics_info = get_dynamics_info(body, base_link)
     base_point, base_quat = get_link_pose(body, base_link)
     new_body = p.createMultiBody(baseMass=base_dynamics_info.mass,
-                                 baseCollisionShapeIndex=clone_collision_shape(body, base_link, client) if collision else -1,
-                                 baseVisualShapeIndex=clone_visual_shape(body, base_link, client) if visual else -1,
+                                 baseCollisionShapeIndex=clone_collision_shape(body, base_link, client) if collision else NULL_ID,
+                                 baseVisualShapeIndex=clone_visual_shape(body, base_link, client) if visual else NULL_ID,
                                  basePosition=base_point,
                                  baseOrientation=base_quat,
                                  baseInertialFramePosition=base_dynamics_info.local_inertial_pos,
@@ -2136,7 +2191,7 @@ def get_data_geometry(data):
         raise ValueError(geometry_type)
     return SHAPE_TYPES[geometry_type], parameters
 
-def set_color(body, color, link=BASE_LINK, shape_index=-1):
+def set_color(body, color, link=BASE_LINK, shape_index=NULL_ID):
     """
     Experimental for internal use, recommended ignore shapeIndex or leave it -1.
     Intention was to let you pick a specific shape index to modify,
@@ -2152,9 +2207,9 @@ def set_color(body, color, link=BASE_LINK, shape_index=-1):
                                #textureUniqueId=None, specularColor=None,
                                physicsClientId=CLIENT)
 
-def set_texture(body, texture=None, link=BASE_LINK, shape_index=-1):
+def set_texture(body, texture=None, link=BASE_LINK, shape_index=NULL_ID):
     if texture is None:
-        texture = -1
+        texture = NULL_ID
     return p.changeVisualShape(body, link, shapeIndex=shape_index, textureUniqueId=texture,
                                physicsClientId=CLIENT)
 
@@ -2698,7 +2753,7 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
         #return np.array([1, 1, 0.25])*(q + np.array([0., 0., np.pi]))
     handles = []
     for q1, q2 in zip(path, path[1:]):
-        handles.append(add_line(draw_fn(q1), draw_fn(q2), color=(0, 1, 0)))
+        handles.append(add_line(draw_fn(q1), draw_fn(q2), color=GREEN))
     for i1, i2 in edges:
         color = (0, 0, 1)
         if any(colliding_vertices.get(i, False) for i in (i1, i2)) or colliding_vertices.get((i1, i2), False):
@@ -3359,12 +3414,12 @@ def add_debug_parameter():
     #maxForce = p.readUserDebugParameter(maxForceSlider)
     raise NotImplementedError()
 
-def add_text(text, position=(0, 0, 0), color=(0, 0, 0), lifetime=None, parent=-1, parent_link=BASE_LINK):
+def add_text(text, position=(0, 0, 0), color=BLACK, lifetime=None, parent=NULL_ID, parent_link=BASE_LINK):
     return p.addUserDebugText(str(text), textPosition=position, textColorRGB=color[:3], # textSize=1,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
 
-def add_line(start, end, color=(0, 0, 0), width=1, lifetime=None, parent=-1, parent_link=BASE_LINK):
+def add_line(start, end, color=BLACK, width=1, lifetime=None, parent=NULL_ID, parent_link=BASE_LINK):
     return p.addUserDebugLine(start, end, lineColorRGB=color[:3], lineWidth=width,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
@@ -3471,7 +3526,7 @@ def draw_mesh(mesh, **kwargs):
 def draw_ray(ray, ray_result=None, visible_color=GREEN, occluded_color=RED, **kwargs):
     if ray_result is None:
         return [add_line(ray.start, ray.end, color=visible_color, **kwargs)]
-    if ray_result.objectUniqueId == -1:
+    if ray_result.objectUniqueId == NULL_ID:
         hit_position = ray.end
     else:
         hit_position = ray_result.hit_position
