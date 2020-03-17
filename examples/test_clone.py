@@ -74,7 +74,7 @@ def main():
     test_clone_robot(pr2)
     test_clone_arm(pr2)
 
-    user_input('Finish?')
+    wait_for_user('Finish?')
     disconnect()
 
 

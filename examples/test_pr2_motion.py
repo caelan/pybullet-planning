@@ -7,28 +7,33 @@ import time
 
 from pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, PR2_URDF, DRAKE_PR2_URDF, \
     SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, get_disabled_collisions, REST_LEFT_ARM, rightarm_from_leftarm
-from pybullet_tools.utils import set_base_values, joint_from_name, set_joint_position, \
+from pybullet_tools.utils import set_base_values, joint_from_name, quat_from_euler, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, \
     joint_controller, dump_body, load_model, joints_from_names, user_input, disconnect, get_joint_positions, \
-    get_link_pose, link_from_name, HideOutput, get_pose, wait_for_user
+    get_link_pose, link_from_name, HideOutput, get_pose, wait_for_user, load_pybullet, set_quat, Euler, PI, RED, add_line
+
+# TODO: consider making this a function
+SLEEP = 0.05 # None | 0.05
 
 
-def test_base_motion(pr2, base_start, base_goal):
+def test_base_motion(pr2, base_start, base_goal, obstacles=[]):
     #disabled_collisions = get_disabled_collisions(pr2)
     set_base_values(pr2, base_start)
-    user_input('Plan Base?')
+    wait_for_user('Plan Base?')
     base_limits = ((-2.5, -2.5), (2.5, 2.5))
-    base_path = plan_base_motion(pr2, base_goal, base_limits)
+    base_path = plan_base_motion(pr2, base_goal, base_limits, obstacles=obstacles)
     if base_path is None:
         print('Unable to find a base path')
         return
     print(len(base_path))
     for bq in base_path:
         set_base_values(pr2, bq)
-        # user_input('Continue?')
-        time.sleep(0.05)
+        if SLEEP is None:
+            wait_for_user('Continue?')
+        else:
+            time.sleep(SLEEP)
 
-def test_drake_base_motion(pr2, base_start, base_goal):
+def test_drake_base_motion(pr2, base_start, base_goal, obstacles=[]):
     # TODO: combine this with test_arm_motion
     """
     Drake's PR2 URDF has explicit base joints
@@ -38,22 +43,25 @@ def test_drake_base_motion(pr2, base_start, base_goal):
     set_joint_positions(pr2, base_joints, base_start)
     base_joints = base_joints[:2]
     base_goal = base_goal[:len(base_joints)]
-    user_input('Plan Base?')
-    base_path = plan_joint_motion(pr2, base_joints, base_goal, disabled_collisions=disabled_collisions)
+    wait_for_user('Plan Base?')
+    base_path = plan_joint_motion(pr2, base_joints, base_goal, obstacles=obstacles,
+                                  disabled_collisions=disabled_collisions)
     if base_path is None:
         print('Unable to find a base path')
         return
     print(len(base_path))
     for bq in base_path:
         set_joint_positions(pr2, base_joints, bq)
-        user_input('Continue?')
-        # time.sleep(0.05)
+        if SLEEP is None:
+            wait_for_user('Continue?')
+        else:
+            time.sleep(SLEEP)
 
 #####################################
 
 def test_arm_motion(pr2, left_joints, arm_goal):
     disabled_collisions = get_disabled_collisions(pr2)
-    user_input('Plan Arm?')
+    wait_for_user('Plan Arm?')
     arm_path = plan_joint_motion(pr2, left_joints, arm_goal, disabled_collisions=disabled_collisions)
     if arm_path is None:
         print('Unable to find an arm path')
@@ -65,7 +73,7 @@ def test_arm_motion(pr2, left_joints, arm_goal):
         time.sleep(0.01)
 
 def test_arm_control(pr2, left_joints, arm_start):
-    user_input('Control Arm?')
+    wait_for_user('Control Arm?')
     real_time = False
     enable_gravity()
     p.setRealTimeSimulation(real_time)
@@ -98,15 +106,16 @@ def test_ikfast(pr2):
 
 #####################################
 
-def main(use_pr2_drake=False):
+def main(use_pr2_drake=True):
     connect(use_gui=True)
     add_data_path()
 
     plane = p.loadURDF("plane.urdf")
-    #table_path = "table/table.urdf"
-    # table_path = "models/table_collision/table.urdf"
-    # table = p.loadURDF(table_path, 0, 0, 0, 0, 0, 0.707107, 0.707107)
-    # table_square/table_square.urdf, cube.urdf, block.urdf, door.urdf
+    table_path = "models/table_collision/table.urdf"
+    table = load_pybullet(table_path, fixed_base=True)
+    set_quat(table, quat_from_euler(Euler(yaw=PI/2)))
+    # table/table.urdf, table_square/table_square.urdf, cube.urdf, block.urdf, door.urdf
+    obstacles = [plane, table]
 
     pr2_urdf = DRAKE_PR2_URDF if use_pr2_drake else PR2_URDF
     with HideOutput():
@@ -130,17 +139,17 @@ def main(use_pr2_drake=False):
     open_arm(pr2, 'left')
     # test_ikfast(pr2)
 
-    p.addUserDebugLine(base_start, base_goal, lineColorRGB=(1, 0, 0)) # addUserDebugText
+    add_line(base_start, base_goal, color=RED)
     print(base_start, base_goal)
     if use_pr2_drake:
-        test_drake_base_motion(pr2, base_start, base_goal)
+        test_drake_base_motion(pr2, base_start, base_goal, obstacles=obstacles)
     else:
-        test_base_motion(pr2, base_start, base_goal)
+        test_base_motion(pr2, base_start, base_goal, obstacles=obstacles)
 
     test_arm_motion(pr2, left_joints, arm_goal)
     # test_arm_control(pr2, left_joints, arm_start)
 
-    user_input('Finish?')
+    wait_for_user('Finish?')
     disconnect()
 
 if __name__ == '__main__':
