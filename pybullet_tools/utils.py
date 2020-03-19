@@ -20,7 +20,7 @@ from itertools import product, combinations, count, cycle, islice
 from multiprocessing import TimeoutError
 from contextlib import contextmanager
 
-from .transformations import quaternion_from_matrix, unit_vector
+from .transformations import quaternion_from_matrix, unit_vector, euler_from_quaternion
 
 directory = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(directory, '../motion'))
@@ -1032,10 +1032,14 @@ def unit_from_theta(theta):
     return np.array([np.cos(theta), np.sin(theta)])
 
 def quat_from_euler(euler):
-    return p.getQuaternionFromEuler(euler)
+    return p.getQuaternionFromEuler(euler) # TODO: extrinsic (static) vs intrinsic (rotating)
 
 def euler_from_quat(quat):
-    return p.getEulerFromQuaternion(quat)
+    return p.getEulerFromQuaternion(quat) # rotation around fixed axis
+
+def intrinsic_euler_from_quat(quat):
+    #axes = 'sxyz' if static else 'rxyz'
+    return euler_from_quaternion(quat, axes='rxyz')
 
 def unit_point():
     return (0., 0., 0.)

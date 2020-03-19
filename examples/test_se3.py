@@ -5,10 +5,9 @@ from __future__ import print_function
 import numpy as np
 
 from pybullet_tools.utils import connect, disconnect, wait_for_user, create_box, dump_body, \
-    get_link_pose, \
-    euler_from_quat, RED, set_camera_pose, create_flying_body, create_shape, get_cylinder_geometry, \
+    get_link_pose, euler_from_quat, RED, set_camera_pose, create_flying_body, create_shape, get_cylinder_geometry, \
     BLUE, get_movable_joints, get_links, SE3, set_joint_positions, \
-    plan_joint_motion, add_line, GREEN
+    plan_joint_motion, add_line, GREEN, intrinsic_euler_from_quat
 
 SIZE = 1.
 
@@ -68,7 +67,8 @@ def main(group=SE3):
     for i, conf in enumerate(path):
         set_joint_positions(robot, joints, conf)
         point, quat = get_link_pose(robot, body_link)
-        euler = euler_from_quat(quat)
+        #euler = euler_from_quat(quat)
+        euler = intrinsic_euler_from_quat(quat)
         print(conf)
         print(point, euler)
         wait_for_user('Step: {}/{}'.format(i, len(path)))
