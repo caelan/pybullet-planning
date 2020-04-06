@@ -355,6 +355,7 @@ class VideoSaver(Saver):
     def restore(self):
         if self.log_id is not None:
             p.stopStateLogging(self.log_id)
+            print('Saved', self.path)
 
 #####################################
 
@@ -901,6 +902,7 @@ BROWN = (0.396, 0.263, 0.129, 1)
 TAN = (0.824, 0.706, 0.549, 1)
 GREY = (0.5, 0.5, 0.5, 1)
 YELLOW = (1, 1, 0, 1)
+TRANSPARENT = (0, 0, 0, 0)
 
 COLOR_FROM_NAME = {
     'red': RED,
@@ -1067,8 +1069,7 @@ def angle_between(vec1, vec2):
     return np.math.acos(np.dot(vec1, vec2) / (get_length(vec1) *  get_length(vec2)))
 
 def get_angle(q1, q2):
-    dx, dy = np.array(q2[:2]) - np.array(q1[:2])
-    return np.math.atan2(dy, dx)
+    return get_yaw(np.array(q2) - np.array(q1))
 
 def get_unit_vector(vec):
     norm = get_length(vec)
