@@ -20,22 +20,21 @@ $ git pull --recurse-submodules
 
 ```
 $ cd ss-pybullet/pybullet_tools/ikfast/franka_panda
-$ python2 setup.py build
+$ python setup.py build
 ```
 
 ### MOVO
 
 ```
 $ cd ss-pybullet/pybullet_tools/ikfast/movo
-$ python2 setup.py -a left
-$ python2 setup.py -a arm
+$ python setup.py -a {left,right}
 ```
 
 ### PR2
 
 ```
 $ cd ss-pybullet/pybullet_tools/ikfast/pr2
-$ python2 setup.py build
+$ python setup.py build
 ```
 
 ## Tests
