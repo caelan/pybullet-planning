@@ -6,8 +6,9 @@ from .pr2_utils import set_arm_conf, REST_LEFT_ARM, open_arm, \
 from .utils import create_box, set_base_values, set_point, set_pose, get_pose, \
     get_bodies, z_rotation, load_model, load_pybullet, HideOutput, create_body, \
     get_box_geometry, get_cylinder_geometry, create_shape_array, unit_pose, Pose, \
-    Point, LockRenderer, FLOOR_URDF, TABLE_URDF, add_data_path
+    Point, LockRenderer, FLOOR_URDF, TABLE_URDF, add_data_path, TAN, set_color, BASE_LINK
 
+LIGHT_GREY = (0.7, 0.7, 0.7, 1.)
 
 class Problem(object):
     def __init__(self, robot, arms=tuple(), movable=tuple(), grasp_types=tuple(),
@@ -63,7 +64,7 @@ def create_floor():
     return load_pybullet(FLOOR_URDF)
 
 def create_table(width=0.6, length=1.2, height=0.73, thickness=0.03, radius=0.015,
-                 color=(0.7, 0.7, 0.7, 1.), cylinder=True, **kwargs):
+                 top_color=LIGHT_GREY, leg_color=TAN, cylinder=True, **kwargs):
     # TODO: table URDF
     surface = get_box_geometry(width, length, thickness)
     surface_pose = Pose(Point(z=height - thickness/2.))
@@ -81,10 +82,14 @@ def create_table(width=0.6, length=1.2, height=0.73, thickness=0.03, radius=0.01
 
     geoms = [surface] + legs
     poses = [surface_pose] + leg_poses
-    colors = len(geoms)*[color]
+    colors = [top_color] + len(legs)*[leg_color]
 
     collision_id, visual_id = create_shape_array(geoms, poses, colors)
     body = create_body(collision_id, visual_id, **kwargs)
+
+    # TODO: unable to use several colors
+    #for idx, color in enumerate(geoms):
+    #    set_color(body, shape_index=idx, color=color)
     return body
 
 def create_door():
