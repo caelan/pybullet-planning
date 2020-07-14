@@ -3,21 +3,21 @@ import os
 import random
 import re
 from collections import namedtuple
-from itertools import combinations
 
 import numpy as np
 
+from .grasps import close_until_collision
+from .perception import support_from_aabb, cone_wires_from_support, cone_mesh_from_support
+from .perception import get_camera_matrix, ray_from_pixel, dimensions_from_camera_matrix
 from .pr2_never_collisions import NEVER_COLLISIONS
-from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, joints_from_names, \
-    set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
-    get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, \
-    unit_pose, joints_from_names, PoseSaver, get_aabb, get_joint_limits, get_joints, \
-    ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, \
+from .utils import multiply, get_link_pose, set_joint_position, set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, \
+    get_pose, euler_from_quat, link_from_name, point_from_pose, invert, Pose, \
+    unit_pose, joints_from_names, PoseSaver, get_aabb, get_joint_limits, ConfSaver, get_bodies, create_mesh, remove_body, \
+    unit_from_theta, violates_limit, \
     violates_limits, add_line, get_body_name, get_num_joints, approximate_as_cylinder, \
-    approximate_as_prism, unit_quat, unit_point, clip, get_joint_info, tform_point, get_yaw, \
-    get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
-    movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name,\
-    draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision, draw_point, get_link_subtree, \
+    approximate_as_prism, unit_quat, unit_point, angle_between, quat_from_pose, compute_jacobian, \
+    movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
+    link_pairs_collision, get_link_subtree, \
     clone_body, get_all_links, set_color, pairwise_collision, tform_point
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
@@ -451,36 +451,16 @@ def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
 MAX_VISUAL_DISTANCE = 5.0
 MAX_KINECT_DISTANCE = 2.5
 
-def get_camera_matrix(width, height, fx, fy):
-    # cx, cy = 320.5, 240.5
-    cx, cy = width / 2., height / 2.
-    return np.array([[fx, 0, cx],
-                     [0, fy, cy],
-                     [0, 0, 1]])
-
-def clip_pixel(pixel, width, height):
-    x, y = pixel
-    return clip(x, 0, width-1), clip(y, 0, height-1)
-
-def ray_from_pixel(camera_matrix, pixel):
-    return np.linalg.inv(camera_matrix).dot(np.append(pixel, 1))
-
-def pixel_from_ray(camera_matrix, ray):
-    return camera_matrix.dot(np.array(ray) / ray[2])[:2]
-
 PR2_CAMERA_MATRIX = get_camera_matrix(
     width=640, height=480, fx=772.55, fy=772.5)
 
-def dimensions_from_camera_matrix(camera_matrix):
-    width, height = 2 * np.array(camera_matrix)[:2, 2]
-    return width, height
 
 def get_pr2_view_section(z, camera_matrix=None):
     if camera_matrix is None:
         camera_matrix = PR2_CAMERA_MATRIX
     width, height = dimensions_from_camera_matrix(camera_matrix)
     pixels = [(0, 0), (width, height)]
-    return [z*ray_from_pixel(camera_matrix, p) for p in pixels]
+    return [z * ray_from_pixel(camera_matrix, p) for p in pixels]
 
 def get_pr2_field_of_view(**kwargs):
     z = 1
@@ -491,13 +471,6 @@ def get_pr2_field_of_view(**kwargs):
                              [0, view_upper[1], z]) # 0.6024511557247721
     return horizontal, vertical
 
-def is_visible_point(camera_matrix, depth, point_world, camera_pose=unit_pose()):
-    point_camera = tform_point(invert(camera_pose), point_world)
-    if not (0 <= point_camera[2] < depth):
-        return False
-    px, py = pixel_from_ray(camera_matrix, point_camera)
-    width, height = dimensions_from_camera_matrix(camera_matrix)
-    return (0 <= px < width) and (0 <= py < height)
 
 def is_visible_aabb(aabb, **kwargs):
     # TODO: do intersect as well for identifying new obstacles
@@ -510,44 +483,8 @@ def is_visible_aabb(aabb, **kwargs):
     return not (np.any(body_lower[:2] < view_lower[:2]) or
                 np.any(view_upper[:2] < body_upper[:2]))
 
-def support_from_aabb(aabb):
-    lower, upper = aabb
-    min_x, min_y, z = lower
-    max_x, max_y, _ = upper
-    return [(min_x, min_y, z), (min_x, max_y, z),
-            (max_x, max_y, z), (max_x, min_y, z)]
 
 #####################################
-
-def cone_vertices_from_base(base):
-    return [np.zeros(3)] + base
-
-def cone_wires_from_support(support):
-    #vertices = cone_vertices_from_base(support)
-    # TODO: could obtain from cone_mesh_from_support
-    # TODO: could also just return vertices and indices
-    apex = np.zeros(3)
-    lines = []
-    for vertex in support:
-        lines.append((apex, vertex))
-    #for i, v2 in enumerate(support):
-    #    v1 = support[i-1]
-    #    lines.append((v1, v2))
-    for v1, v2 in combinations(support, 2):
-        lines.append((v1, v2))
-    center = np.average(support, axis=0)
-    lines.append((apex, center))
-    return lines
-
-def cone_mesh_from_support(support):
-    assert(len(support) == 4)
-    vertices = cone_vertices_from_base(support)
-    faces = [(1, 4, 3), (1, 3, 2)]
-    for i in range(len(support)):
-        index1 = 1+i
-        index2 = 1+(i+1)%len(support)
-        faces.append((0, index1, index2))
-    return vertices, faces
 
 def get_viewcone_base(depth=MAX_VISUAL_DISTANCE, camera_matrix=None):
     if camera_matrix is None:
@@ -722,26 +659,6 @@ def get_base_extend_fn(robot):
     raise NotImplementedError()
 
 #####################################
-
-def close_until_collision(robot, gripper_joints, bodies=[], open_conf=None, closed_conf=None, num_steps=25, **kwargs):
-    if not gripper_joints:
-        return None
-    if open_conf is None:
-        open_conf = [get_max_limit(robot, joint) for joint in gripper_joints]
-    if closed_conf is None:
-        closed_conf = [get_min_limit(robot, joint) for joint in gripper_joints]
-    resolutions = np.abs(np.array(open_conf) - np.array(closed_conf)) / num_steps
-    extend_fn = get_extend_fn(robot, gripper_joints, resolutions=resolutions)
-    close_path = [open_conf] + list(extend_fn(open_conf, closed_conf))
-    collision_links = frozenset(get_moving_links(robot, gripper_joints))
-
-    for i, conf in enumerate(close_path):
-        set_joint_positions(robot, gripper_joints, conf)
-        if any(pairwise_collision((robot, collision_links), body, **kwargs) for body in bodies):
-            if i == 0:
-                return None
-            return close_path[i-1][0]
-    return close_path[-1][0]
 
 
 def compute_grasp_width(robot, arm, body, grasp_pose, **kwargs):

@@ -10,7 +10,8 @@ from examples.test_franka import test_retraction
 from pybullet_tools.ikfast.ikfast import get_ik_joints
 from pybullet_tools.movo_constants import get_closed_positions, get_open_positions, TOOL_LINK, get_gripper_joints, ARMS, \
     MOVO_URDF, MOVO_INFOS, RIGHT, get_arm_joints, MOVO_COLOR, BASE_JOINTS
-from pybullet_tools.pr2_utils import get_side_grasps, close_until_collision
+from pybullet_tools.pr2_utils import get_side_grasps
+from pybullet_tools.grasps import close_until_collision
 from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, disconnect, wait_for_user, \
     get_sample_fn, set_joint_positions, LockRenderer, link_from_name, HideOutput, \
     joints_from_names, set_color, get_links, get_max_limits, get_min_limits, get_extend_fn, get_link_pose, \

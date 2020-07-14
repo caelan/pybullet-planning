@@ -1650,7 +1650,8 @@ def get_fixed_links(body):
 
 DynamicsInfo = namedtuple('DynamicsInfo', [
     'mass', 'lateral_friction', 'local_inertia_diagonal', 'local_inertial_pos',  'local_inertial_orn',
-    'restitution', 'rolling_friction', 'spinning_friction', 'contact_damping', 'contact_stiffness']) #, 'body_type'])
+    'restitution', 'rolling_friction', 'spinning_friction', 'contact_damping', 'contact_stiffness'])
+    #, 'body_type', 'collision_margin'])
 
 def get_dynamics_info(body, link=BASE_LINK):
     return DynamicsInfo(*p.getDynamicsInfo(body, link, physicsClientId=CLIENT)[:len(DynamicsInfo._fields)])
