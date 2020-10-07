@@ -7,7 +7,7 @@ import sys
 import termios
 import tty
 
-from pybullet_tools.pr2_utils import PR2_GROUPS
+from pybullet_tools.pr2_utils import PR2_GROUPS, DRAKE_PR2_URDF
 from pybullet_tools.utils import add_data_path, connect, enable_gravity, load_model, \
 	joints_from_names, load_pybullet, \
 	velocity_control_joints, disconnect, enable_real_time
@@ -130,7 +130,7 @@ def main():
 	add_data_path()
 	load_pybullet("plane.urdf")
 	#load_pybullet("models/table_collision/table.urdf")
-	pr2 = load_model("models/drake/pr2_description/urdf/pr2_simplified.urdf", fixed_base=True)
+	pr2 = load_model(DRAKE_PR2_URDF, fixed_base=True)
 	enable_gravity()
 	enable_real_time() # TODO: won't work as well on OS X due to simulation thread
 

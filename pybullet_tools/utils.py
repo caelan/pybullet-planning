@@ -195,7 +195,7 @@ def chunks(sequence, n=1):
         yield sequence[i:i + n]
 
 def get_function_name(depth=1):
-   return inspect.stack()[depth][3]
+    return inspect.stack()[depth][3]
 
 def load_yaml(path):
     import yaml

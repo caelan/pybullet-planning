@@ -5,7 +5,7 @@ from __future__ import print_function
 import pybullet as p
 
 from pybullet_tools.pr2_utils import HEAD_LINK_NAME, PR2_GROUPS, get_viewcone, get_detections, \
-    REST_LEFT_ARM, rightarm_from_leftarm, inverse_visibility, get_detection_cone, visible_base_generator
+    REST_LEFT_ARM, rightarm_from_leftarm, inverse_visibility, get_detection_cone, visible_base_generator, DRAKE_PR2_URDF
 from pybullet_tools.utils import joint_from_name, set_joint_position, disconnect, HideOutput, \
     set_joint_positions, connect, wait_for_user, get_link_pose, link_from_name, set_point, set_pose, \
     dump_body, load_model, create_mesh, point_from_pose, get_pose, joints_from_names, BLOCK_URDF, remove_body
@@ -14,7 +14,7 @@ from pybullet_tools.utils import joint_from_name, set_joint_position, disconnect
 def main():
     connect(use_gui=True)
     with HideOutput():
-        pr2 = load_model("models/drake/pr2_description/urdf/pr2_simplified.urdf")
+        pr2 = load_model(DRAKE_PR2_URDF)
     set_joint_positions(pr2, joints_from_names(pr2, PR2_GROUPS['left_arm']), REST_LEFT_ARM)
     set_joint_positions(pr2, joints_from_names(pr2, PR2_GROUPS['right_arm']), rightarm_from_leftarm(REST_LEFT_ARM))
     set_joint_positions(pr2, joints_from_names(pr2, PR2_GROUPS['torso']), [0.2])
@@ -45,6 +45,7 @@ def main():
 
         # head_conf = sub_inverse_kinematics(pr2, head_joints[0], HEAD_LINK, )
         head_conf = inverse_visibility(pr2, target_point)
+        assert head_conf is not None
         set_joint_positions(pr2, head_joints, head_conf)
         print(get_detections(pr2))
         # TODO: does this detect the robot sometimes?
