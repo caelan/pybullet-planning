@@ -7,7 +7,8 @@ from itertools import product
 from .utils import unit_pose, safe_zip, multiply, Pose, AABB, create_box, set_pose, get_all_links, LockRenderer, \
     get_aabb, pairwise_link_collision, remove_body, draw_aabb, get_box_geometry, create_shape, create_body, STATIC_MASS, \
     unit_quat, unit_point, CLIENT, create_shape_array, set_color, get_point, clip, load_model, TEMP_DIR, NULL_ID, \
-    elapsed_time, draw_point, invert, tform_point, draw_pose
+    elapsed_time, draw_point, invert, tform_point, draw_pose, get_aabb_edges, add_line, \
+    get_pose, PoseSaver, get_aabb_vertices, aabb_from_points
 
 MAX_TEXTURE_WIDTH = 418 # max square dimension
 MAX_PIXEL_VALUE = 255
@@ -41,11 +42,14 @@ class VoxelGrid(object):
         return tform_point(self.world_from_grid, point_grid)
 
     def voxel_from_point(self, point):
-        return tuple(np.floor(np.divide(self.to_grid(point), self.resolutions)).astype(int))
+        point_grid = self.to_grid(point)
+        return tuple(np.floor(np.divide(point_grid, self.resolutions)).astype(int))
     def voxels_from_aabb(self, aabb):
-        lower_voxel, upper_voxel = map(self.voxel_from_point, aabb)
-        return map(tuple, product(*[range(l, u + 1) for l, u in safe_zip(lower_voxel, upper_voxel)]))
+        voxel_lower, voxel_upper = aabb_from_points([
+            self.voxel_from_point(point) for point in get_aabb_vertices(aabb)])
+        return map(tuple, product(*[range(l, u + 1) for l, u in safe_zip(voxel_lower, voxel_upper)]))
 
+    # Grid coordinate frame
     def lower_from_voxel(self, voxel):
         return np.multiply(voxel, self.resolutions) # self.to_world(
     def center_from_voxel(self, voxel):
@@ -54,8 +58,11 @@ class VoxelGrid(object):
         return self.lower_from_voxel(np.array(voxel) + 1.0)
     def aabb_from_voxel(self, voxel):
         return AABB(self.lower_from_voxel(voxel), self.upper_from_voxel(voxel))
+
+    # World coordinate frame
     def pose_from_voxel(self, voxel):
-        return multiply(self.world_from_grid, Pose(self.center_from_voxel(voxel)))
+        pose_grid = Pose(self.center_from_voxel(voxel))
+        return multiply(self.world_from_grid, pose_grid)
 
     def is_occupied(self, voxel):
         return voxel in self.occupied
@@ -104,12 +111,17 @@ class VoxelGrid(object):
         #color = None
         box = create_box(*self.resolutions, color=color)
         #set_color(box, color=color)
-        set_pose(box, self.world_from_grid)
+        set_pose(box, self.world_from_grid) # Set to (0, 0, 0) instead?
         return box
     def get_affected(self, bodies, occupied):
         #assert self.world_from_grid == unit_pose()
         check_voxels = {}
         for body in bodies:
+            # TODO: compute AABB in grid frame
+            # pose_world = get_pose(body)
+            # pose_grid = multiply(invert(self.world_from_grid), pose_world)
+            # with PoseSaver(body):
+            #     set_pose(body, pose_grid)
             for link in get_all_links(body):
                 aabb = get_aabb(body, link) # TODO: pad using threshold
                 for voxel in self.voxels_from_aabb(aabb):
@@ -148,17 +160,20 @@ class VoxelGrid(object):
                 self.set_free(voxel)
         remove_body(box)
 
-    def draw_origin(self, **kwargs):
-        size = np.min(self.resolutions)
+    def draw_origin(self, scale=1, **kwargs):
+        size = scale*np.min(self.resolutions)
         return draw_pose(self.world_from_grid, length=size, **kwargs)
-    def draw_voxel_bodies(self): # TODO: draw_voxel_boxes
-        # TODO: transform into the world frame
+    def draw_voxel_boxes(self):
         with LockRenderer():
             handles = []
             for voxel in sorted(self.occupied):
-                handles.extend(draw_aabb(self.aabb_from_voxel(voxel), color=self.color[:3]))
+                aabb = self.aabb_from_voxel(voxel)
+                for p1, p2 in get_aabb_edges(aabb):
+                    handles.append(add_line(self.to_world(p1), self.to_world(p2), color=self.color[:3]))
+                #handles.extend(draw_aabb(aabb, color=self.color[:3]))
             return handles
     def draw_voxel_centers(self):
+        # TODO: could align with grid orientation
         with LockRenderer():
             size = np.min(self.resolutions) / 2
             handles = []
