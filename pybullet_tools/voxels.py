@@ -6,12 +6,14 @@ from itertools import product
 
 from .utils import unit_pose, safe_zip, multiply, Pose, AABB, create_box, set_pose, get_all_links, LockRenderer, \
     get_aabb, pairwise_link_collision, remove_body, draw_aabb, get_box_geometry, create_shape, create_body, STATIC_MASS, \
-    unit_quat, unit_point, CLIENT, create_shape_array, set_color, get_point, clip, load_model, TEMP_DIR, NULL_ID, elapsed_time
+    unit_quat, unit_point, CLIENT, create_shape_array, set_color, get_point, clip, load_model, TEMP_DIR, NULL_ID, \
+    elapsed_time, draw_point, invert, tform_point, draw_pose
 
 MAX_TEXTURE_WIDTH = 418 # max square dimension
 MAX_PIXEL_VALUE = 255
 MAX_LINKS = 125  # Max links seems to be 126
 
+################################################################################
 
 class VoxelGrid(object):
     # https://github.mit.edu/caelan/ROS/blob/master/sparse_voxel_grid.py
@@ -21,34 +23,39 @@ class VoxelGrid(object):
     # TODO: can always display the grid in RVIZ after filtering
     # TODO: compute the maximum sized cuboid (rectangle) in a grid (matrix)
 
-    def __init__(self, resolutions, color=(1, 0, 0, 0.5)):
+    def __init__(self, resolutions, world_from_grid=unit_pose(), color=(1, 0, 0, 0.5)):
     #def __init__(self, sizes, centers, pose=unit_pose()):
         #assert len(sizes) == len(centers)
         self.resolutions = resolutions
         self.occupied = set()
-        self.world_from_grid = unit_pose() # TODO: support for real
+        self.world_from_grid = world_from_grid # TODO: finish implementation
         self.color = color
         #self.bodies = None
         # TODO: store voxels more intelligently spatially
     def __len__(self):
         return len(self.occupied)
 
+    def to_grid(self, point_world):
+        return tform_point(invert(self.world_from_grid), point_world)
+    def to_world(self, point_grid):
+        return tform_point(self.world_from_grid, point_grid)
+
     def voxel_from_point(self, point):
-        return tuple(np.floor(np.divide(point, self.resolutions)).astype(int))
+        return tuple(np.floor(np.divide(self.to_grid(point), self.resolutions)).astype(int))
     def voxels_from_aabb(self, aabb):
         lower_voxel, upper_voxel = map(self.voxel_from_point, aabb)
         return map(tuple, product(*[range(l, u + 1) for l, u in safe_zip(lower_voxel, upper_voxel)]))
 
     def lower_from_voxel(self, voxel):
-        return np.multiply(voxel, self.resolutions)
+        return np.multiply(voxel, self.resolutions) # self.to_world(
     def center_from_voxel(self, voxel):
-        return self.lower_from_voxel(voxel) + self.resolutions/2.
+        return self.lower_from_voxel(np.array(voxel) + 0.5)
     def upper_from_voxel(self, voxel):
-        return self.lower_from_voxel(voxel) + self.resolutions
-    def pose_from_voxel(self, voxel):
-        return multiply(self.world_from_grid, Pose(self.center_from_voxel(voxel)))
+        return self.lower_from_voxel(np.array(voxel) + 1.0)
     def aabb_from_voxel(self, voxel):
         return AABB(self.lower_from_voxel(voxel), self.upper_from_voxel(voxel))
+    def pose_from_voxel(self, voxel):
+        return multiply(self.world_from_grid, Pose(self.center_from_voxel(voxel)))
 
     def is_occupied(self, voxel):
         return voxel in self.occupied
@@ -100,7 +107,7 @@ class VoxelGrid(object):
         set_pose(box, self.world_from_grid)
         return box
     def get_affected(self, bodies, occupied):
-        assert self.world_from_grid == unit_pose()
+        #assert self.world_from_grid == unit_pose()
         check_voxels = {}
         for body in bodies:
             for link in get_all_links(body):
@@ -120,6 +127,8 @@ class VoxelGrid(object):
     def add_aabb(self, aabb):
         for voxel in self.voxels_from_aabb(aabb):
             self.set_occupied(voxel)
+    def add_body(self, body, **kwargs):
+        self.add_bodies([body], **kwargs)
     def add_bodies(self, bodies, threshold=0.):
         # Otherwise, need to transform bodies
         check_voxels = self.get_affected(bodies, occupied=False)
@@ -128,6 +137,8 @@ class VoxelGrid(object):
             if self.check_collision(box, voxel, pairs, threshold=threshold):
                 self.set_occupied(voxel)
         remove_body(box)
+    def remove_body(self, body, **kwargs):
+        self.remove_bodies([body], **kwargs)
     def remove_bodies(self, bodies, threshold=1e-2):
         # TODO: could also just iterate over the voxels directly
         check_voxels = self.get_affected(bodies, occupied=True)
@@ -137,13 +148,24 @@ class VoxelGrid(object):
                 self.set_free(voxel)
         remove_body(box)
 
-    def draw_voxel_bodies(self):
+    def draw_origin(self, **kwargs):
+        size = np.min(self.resolutions)
+        return draw_pose(self.world_from_grid, length=size, **kwargs)
+    def draw_voxel_bodies(self): # TODO: draw_voxel_boxes
         # TODO: transform into the world frame
         with LockRenderer():
             handles = []
             for voxel in sorted(self.occupied):
                 handles.extend(draw_aabb(self.aabb_from_voxel(voxel), color=self.color[:3]))
             return handles
+    def draw_voxel_centers(self):
+        with LockRenderer():
+            size = np.min(self.resolutions) / 2
+            handles = []
+            for voxel in sorted(self.occupied):
+                handles.extend(draw_point(self.center_from_voxel(voxel), size=size, color=self.color[:3]))
+            return handles
+
     def create_voxel_bodies1(self):
         start_time = time.time()
         geometry = get_box_geometry(*self.resolutions)
@@ -238,6 +260,7 @@ class VoxelGrid(object):
                     height_map[r, c] = max(height_map[r, c], scaled_z)
         return height_map
 
+################################################################################
 
 def create_textured_square(size, color=None,
                            width=MAX_TEXTURE_WIDTH, height=MAX_TEXTURE_WIDTH):

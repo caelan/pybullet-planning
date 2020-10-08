@@ -810,6 +810,8 @@ def update_state():
 def reset_simulation():
     p.resetSimulation(physicsClientId=CLIENT)
 
+#####################################
+
 CameraInfo = namedtuple('CameraInfo', ['width', 'height', 'viewMatrix', 'projectionMatrix', 'cameraUp', 'cameraForward',
                                        'horizontal', 'vertical', 'yaw', 'pitch', 'dist', 'target'])
 
@@ -989,6 +991,8 @@ def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, 
 def set_default_camera():
     set_camera(160, -35, 2.5, Point())
 
+#####################################
+
 def save_state():
     return p.saveState(physicsClientId=CLIENT)
 
@@ -1155,6 +1159,9 @@ def all_between(lower_limits, values, upper_limits):
     assert len(values) == len(upper_limits)
     return np.less_equal(lower_limits, values).all() and \
            np.less_equal(values, upper_limits).all()
+
+def convex_combination(x, y, w):
+    return (1-w)*x + w*y
 
 #####################################
 
@@ -3500,7 +3507,7 @@ def get_aabb_vertices(aabb):
     return [tuple(aabb[i[k]][k] for k in range(d))
             for i in product(range(len(aabb)), repeat=d)]
 
-def draw_aabb(aabb, **kwargs):
+def get_aabb_edges(aabb):
     d = len(aabb[0])
     vertices = list(product(range(len(aabb)), repeat=d))
     lines = []
@@ -3508,8 +3515,11 @@ def draw_aabb(aabb, **kwargs):
         if sum(i1[k] != i2[k] for k in range(d)) == 1:
             p1 = [aabb[i1[k]][k] for k in range(d)]
             p2 = [aabb[i2[k]][k] for k in range(d)]
-            lines.append(add_line(p1, p2, **kwargs))
+            lines.append((p1, p2))
     return lines
+
+def draw_aabb(aabb, **kwargs):
+    return [add_line(p1, p2, **kwargs) for p1, p2 in get_aabb_edges(aabb)]
 
 def draw_point(point, size=0.01, **kwargs):
     lines = []
