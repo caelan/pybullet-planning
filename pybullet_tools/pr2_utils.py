@@ -583,6 +583,7 @@ def attach_viewcone(robot, head_name=HEAD_LINK_NAME, depth=MAX_VISUAL_DISTANCE,
 
 def draw_viewcone(pose, depth=MAX_VISUAL_DISTANCE,
                   camera_matrix=None, color=(1, 0, 0), **kwargs):
+    # TODO: unify with attach_viewcone
     lines = []
     for v1, v2 in cone_wires_from_support(get_viewcone_base(
             depth=depth, camera_matrix=camera_matrix)):

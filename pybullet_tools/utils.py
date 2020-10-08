@@ -939,7 +939,16 @@ def get_image_flags(segment=False, segment_links=False):
         return 0
     return p.ER_NO_SEGMENTATION_MASK
 
+def extract_segmented(seg_image):
+    segmented = np.zeros(seg_image.shape + (2,))
+    for r in range(segmented.shape[0]):
+        for c in range(segmented.shape[1]):
+            pixel = seg_image[r, c]
+            segmented[r, c, :] = demask_pixel(pixel)
+    return segmented
+
 def take_picture():
+    # TODO: use get_image
     camera_info = get_camera()
     image = CameraImage(*p.getCameraImage(camera_info.width, camera_info.height,
                                           #viewMatrix=camera_info.viewMatrix,
@@ -953,29 +962,28 @@ def take_picture():
     return image.rgbPixels
 
 def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, near=0.02, far=5.0,
-              segment=False, **kwargs):
+              tiny=False, segment=False, **kwargs):
     # computeViewMatrixFromYawPitchRoll
+    up_vector = [0, 0, 1] # up vector of the camera, in Cartesian world coordinates
     view_matrix = p.computeViewMatrix(cameraEyePosition=camera_pos, cameraTargetPosition=target_pos,
-                                      cameraUpVector=[0, 0, 1], physicsClientId=CLIENT)
+                                      cameraUpVector=up_vector, physicsClientId=CLIENT)
     projection_matrix = get_projection_matrix(width, height, vertical_fov, near, far)
 
     flags = get_image_flags(segment=segment, **kwargs)
+    # DIRECT mode has no OpenGL, so it requires ER_TINY_RENDERER
+    renderer = p.ER_TINY_RENDERER if tiny else p.ER_BULLET_HARDWARE_OPENGL
     image = CameraImage(*p.getCameraImage(width, height, viewMatrix=view_matrix,
                                           projectionMatrix=projection_matrix,
-                                          shadow=False,
+                                          shadow=False, # only applies to ER_TINY_RENDERER
                                           flags=flags,
-                                          renderer=p.ER_TINY_RENDERER, # p.ER_BULLET_HARDWARE_OPENGL
+                                          renderer=renderer,
                                           physicsClientId=CLIENT)[2:])
     depth = far * near / (far - (far - near) * image.depthPixels)
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/pointCloudFromCameraImage.py
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/getCameraImageTest.py
     segmented = None
     if segment:
-        segmented = np.zeros(image.segmentationMaskBuffer.shape + (2,))
-        for r in range(segmented.shape[0]):
-            for c in range(segmented.shape[1]):
-                pixel = image.segmentationMaskBuffer[r, c]
-                segmented[r, c, :] = demask_pixel(pixel)
+        segmented = extract_segmented(image.segmentationMaskBuffer)
     return CameraImage(image.rgbPixels, depth, segmented)
 
 def set_default_camera():
