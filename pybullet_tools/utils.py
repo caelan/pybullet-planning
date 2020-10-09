@@ -2335,16 +2335,18 @@ OOBB = namedtuple('OOBB', ['aabb', 'pose'])
 
 def oobb_from_points(points): # Not necessarily minimal volume
     points = np.array(points).T
-    mu = np.resize(np.mean(points, axis=1), (3, 1))
+    d = points.shape[0]
+    mu = np.resize(np.mean(points, axis=1), (d, 1))
     centered = points - mu
     u, _, _ = np.linalg.svd(centered)
     if np.linalg.det(u) < 0:
         u[:, 1] *= -1
+    # TODO: rotate such that z is up
 
     aabb = aabb_from_points(np.dot(u.T, centered).T)
     tform = np.identity(4)
-    tform[:3, :3] = u
-    tform[:3, 3] = mu.T
+    tform[:d, :d] = u
+    tform[:d, 3] = mu.T
     return OOBB(aabb, pose_from_tform(tform))
 
 #####################################
@@ -3540,6 +3542,14 @@ def draw_circle(center, radius, n=24, **kwargs):
 def draw_aabb(aabb, **kwargs):
     return [add_line(p1, p2, **kwargs) for p1, p2 in get_aabb_edges(aabb)]
 
+def draw_oobb(oobb, **kwargs):
+    aabb, pose = oobb
+    handles = []
+    for edge in get_aabb_edges(aabb):
+        p1, p2 = apply_affine(pose, edge)
+        handles.append(add_line(p1, p2, **kwargs))
+    return handles
+
 def draw_point(point, size=0.01, **kwargs):
     lines = []
     for i in range(len(point)):
@@ -3620,7 +3630,7 @@ def distance_from_segment(x1, y1, x2, y2, x3, y3): # x3,y3 is the point
 def tform_point(affine, point):
     return point_from_pose(multiply(affine, Pose(point=point)))
 
-def apply_affine(affine, points):
+def apply_affine(affine, points): # TODO: tform_points
     return [tform_point(affine, p) for p in points]
 
 def is_mesh_on_surface(polygon, world_from_surface, mesh, world_from_mesh, epsilon=1e-2):

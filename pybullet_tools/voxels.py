@@ -8,7 +8,7 @@ from .utils import unit_pose, safe_zip, multiply, Pose, AABB, create_box, set_po
     get_aabb, pairwise_link_collision, remove_body, draw_aabb, get_box_geometry, create_shape, create_body, STATIC_MASS, \
     unit_quat, unit_point, CLIENT, create_shape_array, set_color, get_point, clip, load_model, TEMP_DIR, NULL_ID, \
     elapsed_time, draw_point, invert, tform_point, draw_pose, get_aabb_edges, add_line, \
-    get_pose, PoseSaver, get_aabb_vertices, aabb_from_points
+    get_pose, PoseSaver, get_aabb_vertices, aabb_from_points, apply_affine, OOBB, draw_oobb
 
 MAX_TEXTURE_WIDTH = 418 # max square dimension
 MAX_PIXEL_VALUE = 255
@@ -203,8 +203,7 @@ class VoxelGrid(object):
             handles = []
             for voxel in sorted(self.occupied):
                 aabb = self.aabb_from_voxel(voxel)
-                for p1, p2 in get_aabb_edges(aabb):
-                    handles.append(add_line(self.to_world(p1), self.to_world(p2), color=self.color[:3]))
+                handles.extend(draw_oobb(OOBB(aabb, self.world_from_grid), color=self.color[:3]))
                 #handles.extend(draw_aabb(aabb, color=self.color[:3]))
             return handles
     def draw_voxel_centers(self):
