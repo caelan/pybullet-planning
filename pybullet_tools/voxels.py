@@ -44,6 +44,9 @@ class VoxelGrid(object):
     def voxel_from_point(self, point):
         point_grid = self.to_grid(point)
         return tuple(np.floor(np.divide(point_grid, self.resolutions)).astype(int))
+    #def voxels_from_aabb_grid(self, aabb):
+    #    voxel_lower, voxel_upper = map(self.voxel_from_point, aabb)
+    #    return map(tuple, product(*[range(l, u + 1) for l, u in safe_zip(voxel_lower, voxel_upper)]))
     def voxels_from_aabb(self, aabb):
         voxel_lower, voxel_upper = aabb_from_points([
             self.voxel_from_point(point) for point in get_aabb_vertices(aabb)])
@@ -59,10 +62,42 @@ class VoxelGrid(object):
     def aabb_from_voxel(self, voxel):
         return AABB(self.lower_from_voxel(voxel), self.upper_from_voxel(voxel))
 
+    def ray_trace(self, start_cell, goal_point):
+        if self.is_occupied(start_cell):
+            return [], False
+        goal_cell = self.get_index(goal_point)
+        start_point = self.get_center(start_cell)
+        unit = goal_point - start_point
+        unit /= np.linalg.norm(unit)
+        direction = (unit / np.abs(unit)).astype(int)
+
+        path = []
+        current_point = start_point
+        current_cell = start_cell
+        while current_cell != goal_cell:
+            path.append(current_cell)
+            min_k, min_t = None, float('inf')
+            for k, sign in enumerate(direction):
+                next_point = self.get_min(current_cell) if sign < 0 else self.get_max(current_cell)
+                t = ((next_point - current_point)/direction)[k]
+                assert(t > 0)
+                if (t != 0) and (t < min_t):
+                    min_k, min_t = k, t
+            assert(min_k is not None)
+            current_point += min_t*unit
+            current_cell = np.array(current_cell, dtype=int)
+            current_cell[min_k] += direction[min_k]
+            current_cell = tuple(current_cell)
+            if self.is_occupied(current_cell):
+                return path, False
+        return path, True
+
     # World coordinate frame
     def pose_from_voxel(self, voxel):
         pose_grid = Pose(self.center_from_voxel(voxel))
         return multiply(self.world_from_grid, pose_grid)
+    def vertices_from_voxel(self, voxel):
+        return list(map(self.to_world, get_aabb_vertices(self.aabb_from_voxel(voxel))))
 
     def is_occupied(self, voxel):
         return voxel in self.occupied

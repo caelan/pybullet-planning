@@ -2313,6 +2313,40 @@ def get_aabb_volume(aabb):
 def get_aabb_area(aabb):
     return np.prod(get_aabb_extent(aabb2d_from_aabb(aabb)))
 
+def get_aabb_vertices(aabb):
+    d = len(aabb[0])
+    return [tuple(aabb[i[k]][k] for k in range(d))
+            for i in product(range(len(aabb)), repeat=d)]
+
+def get_aabb_edges(aabb):
+    d = len(aabb[0])
+    vertices = list(product(range(len(aabb)), repeat=d))
+    lines = []
+    for i1, i2 in combinations(vertices, 2):
+        if sum(i1[k] != i2[k] for k in range(d)) == 1:
+            p1 = [aabb[i1[k]][k] for k in range(d)]
+            p2 = [aabb[i2[k]][k] for k in range(d)]
+            lines.append((p1, p2))
+    return lines
+
+#####################################
+
+OOBB = namedtuple('OOBB', ['aabb', 'pose'])
+
+def oobb_from_points(points): # Not necessarily minimal volume
+    points = np.array(points).T
+    mu = np.resize(np.mean(points, axis=1), (3, 1))
+    centered = points - mu
+    u, _, _ = np.linalg.svd(centered)
+    if np.linalg.det(u) < 0:
+        u[:, 1] *= -1
+
+    aabb = aabb_from_points(np.dot(u.T, centered).T)
+    tform = np.identity(4)
+    tform[:3, :3] = u
+    tform[:3, 3] = mu.T
+    return OOBB(aabb, pose_from_tform(tform))
+
 #####################################
 
 # AABB approximation
@@ -3440,6 +3474,7 @@ def add_text(text, position=(0, 0, 0), color=BLACK, lifetime=None, parent=NULL_I
                               physicsClientId=CLIENT)
 
 def add_line(start, end, color=BLACK, width=1, lifetime=None, parent=NULL_ID, parent_link=BASE_LINK):
+    assert (len(start) == 3) and (len(end) == 3)
     return p.addUserDebugLine(start, end, lineColorRGB=color[:3], lineWidth=width,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
@@ -3466,9 +3501,9 @@ def add_body_name(body, name=None, **kwargs):
     position = upper
     return add_text(name, position=position, parent=body, **kwargs)  # removeUserDebugItem
 
-def add_segments(points, closed=False, **kwargs):
+def add_segments(points, closed=False, **kwargs): # TODO: draw_segments
     lines = []
-    for v1, v2 in zip(points, points[1:]):
+    for v1, v2 in get_pairs(points):
         lines.append(add_line(v1, v2, **kwargs))
     if closed:
         lines.append(add_line(points[-1], points[0], **kwargs))
@@ -3501,22 +3536,6 @@ def draw_circle(center, radius, n=24, **kwargs):
       unit = np.append(unit_from_theta(theta), [0])
       vertices.append(center+radius*unit)
   return add_segments(vertices, closed=True, **kwargs)
-
-def get_aabb_vertices(aabb):
-    d = len(aabb[0])
-    return [tuple(aabb[i[k]][k] for k in range(d))
-            for i in product(range(len(aabb)), repeat=d)]
-
-def get_aabb_edges(aabb):
-    d = len(aabb[0])
-    vertices = list(product(range(len(aabb)), repeat=d))
-    lines = []
-    for i1, i2 in combinations(vertices, 2):
-        if sum(i1[k] != i2[k] for k in range(d)) == 1:
-            p1 = [aabb[i1[k]][k] for k in range(d)]
-            p2 = [aabb[i2[k]][k] for k in range(d)]
-            lines.append((p1, p2))
-    return lines
 
 def draw_aabb(aabb, **kwargs):
     return [add_line(p1, p2, **kwargs) for p1, p2 in get_aabb_edges(aabb)]
@@ -3687,7 +3706,7 @@ def sample_edge_pose(polygon, world_from_surface, mesh):
 def convex_hull(points):
     from scipy.spatial import ConvexHull
     # TODO: cKDTree is faster, but KDTree can do all pairs closest
-    hull = ConvexHull(points)
+    hull = ConvexHull(points, incremental=False)
     new_indices = {i: ni for ni, i in enumerate(hull.vertices)}
     vertices = hull.points[hull.vertices, :]
     faces = np.vectorize(lambda i: new_indices[i])(hull.simplices)
@@ -3734,17 +3753,19 @@ def rectangular_mesh(width, length):
 def tform_mesh(affine, mesh):
     return Mesh(apply_affine(affine, mesh.vertices), mesh.faces)
 
-def grow_polygon(vertices, radius, n=8):
-    vertices2d = [vertex[:2] for vertex in vertices]
-    if not vertices2d:
+def grow_polygon(points, radius=0., n=8):
+    points2d = [point[:2] for point in points]
+    if not points2d:
         return []
-    points = []
-    for vertex in convex_hull(vertices2d).vertices:
-        points.append(vertex)
-        if 0 < radius:
-            for theta in np.linspace(0, 2*PI, num=n, endpoint=False):
-                points.append(vertex + radius*unit_from_theta(theta))
-    return convex_hull(points).vertices
+    vertices = convex_hull(points2d).vertices
+    if radius == 0:
+        return vertices
+    grown_points = []
+    for vertex in vertices:
+        grown_points.append(vertex)
+        for theta in np.linspace(0, 2*PI, num=n, endpoint=False):
+            grown_points.append(vertex + radius * unit_from_theta(theta))
+    return convex_hull(grown_points).vertices
 
 #####################################
 
