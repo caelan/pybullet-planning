@@ -1,8 +1,18 @@
 # ss-pybullet
-STRIPStream + pybullet
+
+A repository of PyBullet utility functions for robotic motion planning, manipulation planning, and task and motion planning (TAMP).
+This repository was originally developed for the [PDDLStream](https://github.com/caelan/pddlstream) (previously named [STRIPStream](https://github.com/caelan/stripstream)) approach to TAMP.
 
 <!--![Alt text](images/test.png?raw=true "Title")-->
 <!--img src="images/pr2.png" height="300">&emsp;<img src="images/kuka.png" height="300"-->
+
+## PyBullet Planning
+
+With the help of [Yijiang Huang](https://github.com/yijiangh), a stable and documented fork of [ss-pybullet](https://github.com/caelan/ss-pybullet) named [pybullet_planning](https://github.com/yijiangh/pybullet_planning) is avaliable through [PyPI](https://pypi.org/project/pybullet-planning/).
+
+## Citation
+
+Caelan Reed Garrett. PyBullet Planning. https://pypi.org/project/pybullet-planning/. 2018.
 
 ## Installation
 
@@ -15,6 +25,10 @@ $ git pull --recurse-submodules
 ```
 
 ## IKFast Compilation
+
+IKFast bindings are avaliable for the following robots. 
+
+<!-- https://pypi.org/project/ikfast-pybind/ -->
 
 ### Franka Panda
 
@@ -63,19 +77,22 @@ See the following examples: https://github.com/caelan/pddlstream/tree/master/exa
 [<img src="https://img.youtube.com/vi/3HJrkgIGK7c/0.jpg" height="200">](https://www.youtube.com/watch?v=3HJrkgIGK7c)
 [<img src="https://img.youtube.com/vi/oWr6m12nXcM/0.jpg" height="200">](https://www.youtube.com/watch?v=oWr6m12nXcM)
 
+## Gallery
+
+* PDDLStream for TAMP - https://github.com/caelan/pddlstream
+* Online TAMP - https://github.com/caelan/SS-Replan
+* Automated Construction - https://github.com/caelan/pb-construction
+* Learning + TAMP (LTAMP) - https://github.com/caelan/LTAMP
+
 ## PyBullet Resources
-* pip - https://pypi.python.org/pypi/pybullet
+
+* PyPI - https://pypi.python.org/pypi/pybullet
 * Quickstart - https://docs.google.com/document/d/10sXEhzFRSnvFcl3XxNGhnD4N2SedqwdAvK3dsihxVUA/
 * Forum - https://pybullet.org/Bullet/phpBB3/
 * Wordpress - https://pybullet.org/wordpress/
 * Examples - https://github.com/bulletphysics/bullet3/tree/master/examples/pybullet/examples
 * Bindings - https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/pybullet.c
-* PyBullet Planning - https://github.com/yijiangh/pybullet_planning
-* PyPI - https://pypi.org/project/pybullet-planning/
 
 ## Bullet Resources
-* Github - https://github.com/bulletphysics/bullet3
 
-## Citation
-
-Caelan Reed Garrett. PyBullet Planning. https://pypi.org/project/pybullet-planning/. 2018.
+* GitHub - https://github.com/bulletphysics/bullet3
