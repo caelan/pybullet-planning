@@ -68,10 +68,10 @@ RACECAR_URDF = 'racecar/racecar.urdf' # racecar_differential.urdf
 PR2_GRIPPER = 'pr2_gripper.urdf'
 WSG_GRIPPER = 'gripper/wsg50_one_motor_gripper.sdf' # wsg50_one_motor_gripper | wsg50_one_motor_gripper_new
 
-# Pybullet Objects
+# PyBullet Objects
 KIVA_SHELF_SDF = "kiva_shelf/model.sdf"
 FLOOR_URDF = 'plane.urdf'
-TABLE_URDF = 'table'
+TABLE_URDF = 'table/table.urdf'
 
 # Objects
 SMALL_BLOCK_URDF = "models/drake/objects/block_for_pick_and_place.urdf"

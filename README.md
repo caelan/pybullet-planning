@@ -8,7 +8,8 @@ This repository was originally developed for the [PDDLStream](https://github.com
 
 ## PyBullet Planning
 
-With the help of [Yijiang Huang](https://github.com/yijiangh), a stable and documented fork of [ss-pybullet](https://github.com/caelan/ss-pybullet) named [pybullet_planning](https://github.com/yijiangh/pybullet_planning) is avaliable through [PyPI](https://pypi.org/project/pybullet-planning/).
+With the help of [Yijiang Huang](https://github.com/yijiangh), a stable and documented fork of [ss-pybullet](https://github.com/caelan/ss-pybullet) named [pybullet_planning](https://github.com/yijiangh/pybullet_planning) is available through [PyPI](https://pypi.org/project/pybullet-planning/).
+However, new features will continue to be introduced first through **ss-pybullet**. 
 
 ## Citation
 
@@ -26,7 +27,9 @@ $ git pull --recurse-submodules
 
 ## IKFast Compilation
 
-IKFast bindings are avaliable for the following robots. 
+We recommend using [IKFast](http://openrave.org/docs/0.8.2/openravepy/ikfast/), an analytical inverse kinematics solver, instead of PyBullet's damped least squares method solver.
+IKFast bindings are included for the following robots.
+To create IKFast bindings for a new robot, following the instructions in [ikfast_pybind](https://github.com/yijiangh/ikfast_pybind). 
 
 <!-- https://pypi.org/project/ikfast-pybind/ -->
 
