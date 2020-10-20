@@ -186,12 +186,12 @@ class VoxelGrid(object):
         remove_body(box)
     def remove_body(self, body, **kwargs):
         self.remove_bodies([body], **kwargs)
-    def remove_bodies(self, bodies, threshold=1e-2):
+    def remove_bodies(self, bodies, **kwargs):
         # TODO: could also just iterate over the voxels directly
         check_voxels = self.get_affected(bodies, occupied=True)
         box = self.create_box()
         for voxel, pairs in check_voxels.items():
-            if self.check_collision(box, voxel, pairs, threshold=threshold):
+            if self.check_collision(box, voxel, pairs, **kwargs):
                 self.set_free(voxel)
         remove_body(box)
 
@@ -212,7 +212,8 @@ class VoxelGrid(object):
             size = np.min(self.resolutions) / 2
             handles = []
             for voxel in sorted(self.occupied):
-                handles.extend(draw_point(self.center_from_voxel(voxel), size=size, color=self.color[:3]))
+                point_world = self.to_world(self.center_from_voxel(voxel))
+                handles.extend(draw_point(point_world, size=size, color=self.color[:3]))
             return handles
 
     def create_voxel_bodies1(self):
@@ -273,9 +274,37 @@ class VoxelGrid(object):
             #return self.create_voxel_bodies2()
             #return self.create_voxel_bodies3()
 
+    def create_intervals(self):
+        voxel_heights = {}
+        for i, j, k in self.occupied:
+            voxel_heights.setdefault((i, j), set()).add(k)
+        voxel_intervals = []
+        for i, j in voxel_heights:
+            heights = sorted(voxel_heights[i, j])
+            start = last = heights[0]
+            for k in heights[1:]:
+                if k == last + 1:
+                    last = k
+                else:
+                    interval = (start, last)
+                    voxel_intervals.append((i, j, interval))
+                    start = last = k
+            interval = (start, last)
+            voxel_intervals.append((i, j, interval))
+        return voxel_intervals
+    def draw_intervals(self):
+        with LockRenderer():
+            handles = []
+            for (i, j, (k1, k2)) in self.create_intervals():
+                voxels = [(i, j, k1), (i, j, k2)]
+                aabb = aabb_from_points([extrema for voxel in voxels for extrema in self.aabb_from_voxel(voxel)])
+                handles.extend(draw_oobb(OOBB(aabb, self.world_from_grid), color=self.color[:3]))
+            return handles
+
     def project2d(self):
         # TODO: combine adjacent voxels into larger lines
         # TODO: greedy algorithm that combines lines/boxes
+        # TODO: combine intervals
         tallest_voxel = {}
         for i, j, k in self.occupied:
             tallest_voxel[i, j] = max(k, tallest_voxel.get((i, j), k))

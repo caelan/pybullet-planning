@@ -850,7 +850,8 @@ def set_camera_pose2(world_from_camera, distance=2):
     #p.resetDebugVisualizerCamera(cameraDistance=distance, cameraYaw=math.degrees(yaw), cameraPitch=math.degrees(-pitch),
     #                             cameraTargetPosition=target_world, physicsClientId=CLIENT)
 
-CameraImage = namedtuple('CameraImage', ['rgbPixels', 'depthPixels', 'segmentationMaskBuffer'])
+CameraImage = namedtuple('CameraImage', ['rgbPixels', 'depthPixels', 'segmentationMaskBuffer', 'camera_pose'])
+#CameraImage = namedtuple('CameraImage', ['rgb', 'depth', 'segmentation', 'camera_pose'])
 
 def demask_pixel(pixel):
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/segmask_linkindex.py
@@ -952,20 +953,6 @@ def extract_segmented(seg_image):
             segmented[r, c, :] = demask_pixel(pixel)
     return segmented
 
-def take_picture():
-    # TODO: use get_image
-    camera_info = get_camera()
-    image = CameraImage(*p.getCameraImage(camera_info.width, camera_info.height,
-                                          #viewMatrix=camera_info.viewMatrix,
-                                          #projectionMatrix=camera_info.projectionMatrix,
-                                          shadow=True,
-                                          flags=get_image_flags(segment=False),
-                                          renderer=p.ER_BULLET_HARDWARE_OPENGL, # p.ER_TINY_RENDERER
-                                          physicsClientId=CLIENT)[2:])
-    #p.resetDebugVisualizerCamera(camera_info.dist, camera_info.yaw, camera_info.pitch,
-    #                             camera_info.target, physicsClientId=CLIENT)
-    return image.rgbPixels
-
 def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, near=0.02, far=5.0,
               tiny=False, segment=False, **kwargs):
     # computeViewMatrixFromYawPitchRoll
@@ -973,23 +960,31 @@ def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, 
     view_matrix = p.computeViewMatrix(cameraEyePosition=camera_pos, cameraTargetPosition=target_pos,
                                       cameraUpVector=up_vector, physicsClientId=CLIENT)
     projection_matrix = get_projection_matrix(width, height, vertical_fov, near, far)
+    #print(np.reshape(projection_matrix, [4, 4]))
 
     flags = get_image_flags(segment=segment, **kwargs)
     # DIRECT mode has no OpenGL, so it requires ER_TINY_RENDERER
     renderer = p.ER_TINY_RENDERER if tiny else p.ER_BULLET_HARDWARE_OPENGL
-    image = CameraImage(*p.getCameraImage(width, height, viewMatrix=view_matrix,
-                                          projectionMatrix=projection_matrix,
-                                          shadow=False, # only applies to ER_TINY_RENDERER
-                                          flags=flags,
-                                          renderer=renderer,
-                                          physicsClientId=CLIENT)[2:])
-    depth = far * near / (far - (far - near) * image.depthPixels)
+    rgb, d, seg = p.getCameraImage(width, height,
+                                   viewMatrix=view_matrix,
+                                   projectionMatrix=projection_matrix,
+                                   shadow=False, # only applies to ER_TINY_RENDERER
+                                   flags=flags,
+                                   renderer=renderer,
+                                   physicsClientId=CLIENT)[2:]
+    
+    depth = far * near / (far - (far - near) * d)
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/pointCloudFromCameraImage.py
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/getCameraImageTest.py
     segmented = None
     if segment:
-        segmented = extract_segmented(image.segmentationMaskBuffer)
-    return CameraImage(image.rgbPixels, depth, segmented)
+        segmented = extract_segmented(seg)
+        
+    camera_tform = np.reshape(view_matrix, [4, 4])
+    camera_tform[:3, 3] = camera_pos
+    view_pose = multiply(pose_from_tform(camera_tform), Pose(euler=Euler(roll=PI)))
+
+    return CameraImage(rgb, depth, segmented, view_pose)
 
 def set_default_camera():
     set_camera(160, -35, 2.5, Point())
@@ -2445,8 +2440,7 @@ def contact_collision():
     return len(p.getContactPoints(physicsClientId=CLIENT)) != 0
 
 ContactResult = namedtuple('ContactResult', ['contactFlag', 'bodyUniqueIdA', 'bodyUniqueIdB',
-                                         'linkIndexA', 'linkIndexB', 'positionOnA', 'positionOnB',
-                                         'contactNormalOnB', 'contactDistance', 'normalForce'])
+                                             'linkIndexA', 'linkIndexB', 'positionOnA', 'positionOnB', 'contactNormalOnB', 'contactDistance', 'normalForce'])
 
 def pairwise_link_collision(body1, link1, body2, link2=BASE_LINK, max_distance=MAX_DISTANCE): # 10000
     return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
