@@ -141,6 +141,9 @@ def safe_zip(sequence1, sequence2):
 def get_pairs(sequence):
     return list(safe_zip(sequence[:-1], sequence[1:]))
 
+def get_wrapped_pairs(sequence):
+    return list(safe_zip(sequence, sequence[1:] + sequence[:1]))
+
 def clip(value, min_value=-INF, max_value=+INF):
     return min(max(min_value, value), max_value)
 
@@ -2616,7 +2619,7 @@ def get_refine_fn(body, joints, num_steps=0):
 def refine_path(body, joints, waypoints, num_steps):
     refine_fn = get_refine_fn(body, joints, num_steps)
     refined_path = []
-    for v1, v2 in zip(waypoints, waypoints[1:]):
+    for v1, v2 in get_pairs(waypoints):
         refined_path += list(refine_fn(v1, v2))
     return refined_path
 
@@ -2666,7 +2669,7 @@ def waypoints_from_path(path, tolerance=1e-3):
 def adjust_path(robot, joints, path):
     start_positions = get_joint_positions(robot, joints)
     difference_fn = get_difference_fn(robot, joints)
-    differences = [difference_fn(q2, q1) for q1, q2 in zip(path, path[1:])]
+    differences = [difference_fn(q2, q1) for q1, q2 in get_pairs(path)]
     adjusted_path = [np.array(start_positions)]
     for difference in differences:
         adjusted_path.append(adjusted_path[-1] + difference)
@@ -2808,7 +2811,7 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
         return np.append(q[:2], [1e-3])
         #return np.array([1, 1, 0.25])*(q + np.array([0., 0., np.pi]))
     handles = []
-    for q1, q2 in zip(path, path[1:]):
+    for q1, q2 in get_pairs(path):
         handles.append(add_line(draw_fn(q1), draw_fn(q2), color=GREEN))
     for i1, i2 in edges:
         color = (0, 0, 1)
@@ -3565,7 +3568,7 @@ def draw_point(point, size=0.01, **kwargs):
 
 def get_face_edges(face):
     #return list(combinations(face, 2))
-    return list(zip(face, face[1:] + face[:1]))
+    return get_wrapped_pairs(face)
 
 def draw_mesh(mesh, **kwargs):
     verts, faces = mesh
@@ -3630,8 +3633,10 @@ def distance_from_segment(x1, y1, x2, y2, x3, y3): # x3,y3 is the point
 def tform_point(affine, point):
     return point_from_pose(multiply(affine, Pose(point=point)))
 
-def apply_affine(affine, points): # TODO: tform_points
+def apply_affine(affine, points):
     return [tform_point(affine, p) for p in points]
+
+tform_points = apply_affine
 
 def is_mesh_on_surface(polygon, world_from_surface, mesh, world_from_mesh, epsilon=1e-2):
     surface_from_mesh = multiply(invert(world_from_surface), world_from_mesh)
@@ -3726,7 +3731,7 @@ def convex_signed_area(vertices):
     if len(vertices) < 3:
         return 0.
     vertices = [np.array(v[:2]) for v in vertices]
-    segments = safe_zip(vertices, vertices[1:] + vertices[:1])
+    segments = get_wrapped_pairs(vertices)
     return sum(np.cross(v1, v2) for v1, v2 in segments) / 2.
 
 def convex_area(vertices):
@@ -3735,7 +3740,7 @@ def convex_area(vertices):
 def convex_centroid(vertices):
     # TODO: also applies to non-overlapping polygons
     vertices = [np.array(v[:2]) for v in vertices]
-    segments = list(safe_zip(vertices, vertices[1:] + vertices[:1]))
+    segments = get_wrapped_pairs(vertices)
     return sum((v1 + v2)*np.cross(v1, v2) for v1, v2 in segments) \
            / (6.*convex_signed_area(vertices))
 
