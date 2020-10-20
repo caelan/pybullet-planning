@@ -1,4 +1,4 @@
-# ss-pybullet
+# pybullet-planning (ss-pybullet)
 
 A repository of PyBullet utility functions for robotic motion planning, manipulation planning, and task and motion planning (TAMP).
 This repository was originally developed for the [PDDLStream](https://github.com/caelan/pddlstream) (previously named [STRIPStream](https://github.com/caelan/stripstream)) approach to TAMP.
@@ -6,7 +6,7 @@ This repository was originally developed for the [PDDLStream](https://github.com
 <!--![Alt text](images/test.png?raw=true "Title")-->
 <!--img src="images/pr2.png" height="300">&emsp;<img src="images/kuka.png" height="300"-->
 
-## PyBullet Planning
+<!-- ## PyBullet Planning -->
 
 With the help of [Yijiang Huang](https://github.com/yijiangh), a stable and documented fork of [ss-pybullet](https://github.com/caelan/ss-pybullet) named [pybullet_planning](https://github.com/yijiangh/pybullet_planning) is available through [PyPI](https://pypi.org/project/pybullet-planning/).
 However, new features will continue to be introduced first through **ss-pybullet**. 
