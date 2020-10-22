@@ -182,6 +182,10 @@ def get_group_conf(robot, group):
 def set_group_conf(robot, group, positions):
     set_joint_positions(robot, get_group_joints(robot, group), positions)
 
+def set_group_positions(robot, group_positions):
+    for group, positions in group_positions.items():
+        set_group_conf(robot, group, positions)
+
 #####################################
 
 # End-effectors

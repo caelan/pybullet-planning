@@ -961,6 +961,7 @@ def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, 
                                       cameraUpVector=up_vector, physicsClientId=CLIENT)
     projection_matrix = get_projection_matrix(width, height, vertical_fov, near, far)
     #print(np.reshape(projection_matrix, [4, 4]))
+    # TODO: store the projection matrix
 
     flags = get_image_flags(segment=segment, **kwargs)
     # DIRECT mode has no OpenGL, so it requires ER_TINY_RENDERER
@@ -1262,28 +1263,42 @@ def is_rigid_body(body):
 def is_fixed_base(body):
     return get_mass(body) == STATIC_MASS
 
-def dump_body(body, fixed=False):
+def dump_joint(body, joint):
+    print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Lower: {:.3f} | Upper: {:.3f}'.format(
+        joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
+        is_circular(body, joint), *get_joint_limits(body, joint)))
+
+def dump_link(body, link):
+    joint = parent_joint_from_link(link)
+    joint_name = JOINT_TYPES[get_joint_type(body, joint)] if is_fixed(body, joint) else get_joint_name(body, joint)
+    print('Link id: {} | Name: {} | Joint: {} | Parent: {} | Mass: {} | Collision: {} | Visual: {}'.format(
+        link, get_link_name(body, link), joint_name,
+        get_link_name(body, get_link_parent(body, link)), get_mass(body, link),
+        len(get_collision_data(body, link)), NULL_ID))  # len(get_visual_data(body, link))))
+    # print(get_joint_parent_frame(body, link))
+    # print(map(get_data_geometry, get_visual_data(body, link)))
+    # print(map(get_data_geometry, get_collision_data(body, link)))
+
+def dump(*args, **kwargs):
+    load = 'poop'
+    print(load)
+    return load
+
+def dump_body(body, fixed=False, links=True):
     print('Body id: {} | Name: {} | Rigid: {} | Fixed: {}'.format(
         body, get_body_name(body), is_rigid_body(body), is_fixed_base(body)))
     for joint in get_joints(body):
         if fixed or is_movable(body, joint):
-            print('Joint id: {} | Name: {} | Type: {} | Circular: {} | Limits: {}'.format(
-                joint, get_joint_name(body, joint), JOINT_TYPES[get_joint_type(body, joint)],
-                is_circular(body, joint), get_joint_limits(body, joint)))
-    link = NULL_ID
+            dump_joint(body, joint)
+
+    if not links:
+        return
+    base_link = NULL_ID
     print('Link id: {} | Name: {} | Mass: {} | Collision: {} | Visual: {}'.format(
-        link, get_base_name(body), get_mass(body),
-        len(get_collision_data(body, link)), NULL_ID)) # len(get_visual_data(body, link))))
+        base_link, get_base_name(body), get_mass(body),
+        len(get_collision_data(body, base_link)), NULL_ID)) # len(get_visual_data(body, link))))
     for link in get_links(body):
-        joint = parent_joint_from_link(link)
-        joint_name = JOINT_TYPES[get_joint_type(body, joint)] if is_fixed(body, joint) else get_joint_name(body, joint)
-        print('Link id: {} | Name: {} | Joint: {} | Parent: {} | Mass: {} | Collision: {} | Visual: {}'.format(
-            link, get_link_name(body, link), joint_name,
-            get_link_name(body, get_link_parent(body, link)), get_mass(body, link),
-            len(get_collision_data(body, link)), NULL_ID)) # len(get_visual_data(body, link))))
-        #print(get_joint_parent_frame(body, link))
-        #print(map(get_data_geometry, get_visual_data(body, link)))
-        #print(map(get_data_geometry, get_collision_data(body, link)))
+        dump_link(body, link)
 
 def dump_world():
     for body in get_bodies():
@@ -3053,6 +3068,23 @@ def get_fixed_constraints():
             fixed_constraints.append(constraint)
     return fixed_constraints
 
+def add_pose_constraint(body, pose=None, max_force=None):
+    link = BASE_LINK
+    if pose is None:
+        pose = get_pose(body)
+    position, quat = pose
+    constraint = p.createConstraint(body, link, -1, -1,
+                                    jointType=p.JOINT_FIXED,
+                                    jointAxis=[0, 0, 0],
+                                    parentFramePosition=unit_point(),
+                                    childFramePosition=position,
+                                    parentFrameOrientation=unit_quat(),
+                                    childFrameOrientation=quat,
+                                    physicsClientId=CLIENT)
+    if max_force is not None:
+        p.changeConstraint(constraint, maxForce=max_force, physicsClientId=CLIENT)
+    return constraint
+
 def add_fixed_constraint(body, robot, robot_link, max_force=None):
     body_link = BASE_LINK
     body_pose = get_pose(body)
@@ -3191,12 +3223,14 @@ def joint_controller(body, joints, target, tolerance=1e-3):
         yield positions
         positions = get_joint_positions(body, joints)
 
-def joint_controller_hold(body, joints, target, **kwargs):
+def joint_controller_hold(body, joints, target=None, **kwargs):
     """
     Keeps other joints in place
     """
     movable_joints = get_movable_joints(body)
     conf = list(get_joint_positions(body, movable_joints))
+    if target is None:
+        target = list(conf)
     for joint, value in zip(movable_from_joints(body, joints), target):
         conf[joint] = value
     return joint_controller(body, movable_joints, conf, **kwargs)

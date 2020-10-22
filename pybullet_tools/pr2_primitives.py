@@ -374,11 +374,14 @@ def get_stable_gen(problem, collisions=True):
 
 ##################################################
 
-def iterate_approach_path(robot, arm, gripper, pose, grasp, body=None):
+def get_tool_from_root(robot, arm):
     root_link = link_from_name(robot, PR2_GRIPPER_ROOTS[arm])
     tool_link = link_from_name(robot, PR2_TOOL_FRAMES[arm])
-    tool_from_root = multiply(invert(get_link_pose(robot, tool_link)),
-                                    get_link_pose(robot, root_link))
+    return multiply(invert(get_link_pose(robot, tool_link)),
+                    get_link_pose(robot, root_link))
+
+def iterate_approach_path(robot, arm, gripper, pose, grasp, body=None):
+    tool_from_root = get_tool_from_root(robot, arm)
     grasp_pose = multiply(pose.value, invert(grasp.value))
     approach_pose = multiply(pose.value, invert(grasp.approach))
     for tool_pose in interpolate_poses(grasp_pose, approach_pose):
