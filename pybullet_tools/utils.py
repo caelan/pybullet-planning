@@ -20,7 +20,7 @@ from itertools import product, combinations, count, cycle, islice
 from multiprocessing import TimeoutError
 from contextlib import contextmanager
 
-from .transformations import quaternion_from_matrix, unit_vector, euler_from_quaternion
+from .transformations import quaternion_from_matrix, unit_vector, euler_from_quaternion, quaternion_slerp
 
 directory = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(directory, '../motion'))
@@ -1142,15 +1142,21 @@ def pose_from_base_values(base_values, default_pose=unit_pose()):
     roll, pitch, _ = euler_from_quat(quat_from_pose(default_pose))
     return (x, y, z), quat_from_euler([roll, pitch, yaw])
 
-def quat_angle_between(quat0, quat1): # quaternion_slerp
-    #p.computeViewMatrixFromYawPitchRoll()
-    q0 = unit_vector(quat0[:4])
-    q1 = unit_vector(quat1[:4])
-    d = clip(np.dot(q0, q1), min_value=-1., max_value=+1.)
-    angle = math.acos(d)
+def quat_combination(quat1, quat2, fraction=0.5):
+    #return p.getQuaternionSlerp(quat1, quat2, interpolationFraction=fraction)
+    return quaternion_slerp(quat1, quat2, fraction)
+
+def quat_angle_between(quat0, quat1):
+    # #p.computeViewMatrixFromYawPitchRoll()
+    # q0 = unit_vector(quat0[:4])
+    # q1 = unit_vector(quat1[:4])
+    # d = clip(np.dot(q0, q1), min_value=-1., max_value=+1.)
+    # angle = math.acos(d)
+    
     # TODO: angle_between
-    #delta = p.getDifferenceQuaternion(quat0, quat1)
-    #angle = math.acos(delta[-1])
+    delta = p.getDifferenceQuaternion(quat0, quat1)
+    d = clip(delta[-1], min_value=-1., max_value=1.)
+    angle = math.acos(d)
     return angle
 
 def all_between(lower_limits, values, upper_limits):
@@ -1159,7 +1165,7 @@ def all_between(lower_limits, values, upper_limits):
     return np.less_equal(lower_limits, values).all() and \
            np.less_equal(values, upper_limits).all()
 
-def convex_combination(x, y, w):
+def convex_combination(x, y, w=0.5):
     return (1-w)*x + w*y
 
 #####################################
@@ -2486,6 +2492,30 @@ def any_link_pair_collision(body1, links1, body2, links2=None, **kwargs):
             return True
     return False
 
+CollisionInfo = namedtuple('CollisionInfo',
+                           """
+                           contactFlag
+                           bodyUniqueIdA
+                           bodyUniqueIdB
+                           linkIndexA
+                           linkIndexB
+                           positionOnA
+                           positionOnB
+                           contactNormalOnB
+                           contactDistance
+                           normalForce
+                           lateralFriction1
+                           lateralFrictionDir1
+                           lateralFriction2
+                           lateralFrictionDir2
+                           """.split())
+
+def get_closest_points(body1, body2, link1=None, link2=None, max_distance=MAX_DISTANCE):
+    assert (link1 is None) and (link2 is None)
+    return [CollisionInfo(*info) for info in p.getClosestPoints(
+        bodyA=body1, bodyB=body2, #linkIndexA=link1, linkIndexB=link2,
+        distance=max_distance, physicsClientId=CLIENT)]
+
 def body_collision(body1, body2, max_distance=MAX_DISTANCE): # 10000
     # TODO: confirm that this doesn't just check the base link
     return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
@@ -3391,8 +3421,7 @@ def get_quaternion_waypoints(point, start_quat, end_quat, step_size=np.pi/16):
     angle = quat_angle_between(start_quat, end_quat)
     for t in np.arange(0, angle, step_size):
         fraction = t/angle
-        quat = p.getQuaternionSlerp(start_quat, end_quat, interpolationFraction=fraction)
-        #quat = quaternion_slerp(start_quat, end_quat, fraction=fraction)
+        quat = quat_combination(start_quat, end_quat, fraction=fraction)
         yield (point, quat)
     yield (point, end_quat)
 
@@ -3404,8 +3433,7 @@ def interpolate_poses(pose1, pose2, pos_step_size=0.01, ori_step_size=np.pi/16):
     for i in range(num_steps):
         fraction = float(i) / num_steps
         pos = (1-fraction)*np.array(pos1) + fraction*np.array(pos2)
-        quat = p.getQuaternionSlerp(quat1, quat2, interpolationFraction=fraction)
-        #quat = quaternion_slerp(quat1, quat2, fraction=fraction)
+        quat = quat_combination(quat1, quat2, fraction=fraction)
         yield (pos, quat)
     yield pose2
 
