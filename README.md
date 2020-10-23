@@ -8,7 +8,7 @@ This repository was originally developed for the [PDDLStream](https://github.com
 
 <!-- ## PyBullet Planning -->
 
-With the help of [Yijiang Huang](https://github.com/yijiangh), a stable and documented fork of [ss-pybullet](https://github.com/caelan/ss-pybullet) named [pybullet_planning](https://github.com/yijiangh/pybullet_planning) is available through [PyPI](https://pypi.org/project/pybullet-planning/).
+With the help of [Yijiang Huang](https://github.com/yijiangh), a stable and documented fork of **ss-pybullet** named [pybullet_planning](https://github.com/yijiangh/pybullet_planning) is available through [PyPI](https://pypi.org/project/pybullet-planning/).
 However, new features will continue to be introduced first through **ss-pybullet**. 
 
 ## Citation
