@@ -24,18 +24,28 @@ class VoxelGrid(object):
     # TODO: can always display the grid in RVIZ after filtering
     # TODO: compute the maximum sized cuboid (rectangle) in a grid (matrix)
 
-    def __init__(self, resolutions, world_from_grid=unit_pose(), aabb=None, color=(1, 0, 0, 0.5)):
+    def __init__(self, resolutions, default=False, world_from_grid=unit_pose(), aabb=None, color=(1, 0, 0, 0.5),):
     #def __init__(self, sizes, centers, pose=unit_pose()):
         #assert len(sizes) == len(centers)
         self.resolutions = resolutions
-        self.occupied = set()
+        self.default = default
+        self.value_from_voxel = {}
         self.world_from_grid = world_from_grid
         self.aabb = aabb # TODO: apply
         self.color = color
         #self.bodies = None
         # TODO: store voxels more intelligently spatially
+    @property
+    def occupied(self):
+        return sorted(self.value_from_voxel)
+    def __iter__(self):
+        return iter(self.value_from_voxel)
     def __len__(self):
-        return len(self.occupied)
+        return len(self.value_from_voxel)
+    def copy(self): # TODO: deepcopy
+        new_grid = VoxelGrid(self.resolutions, self.default, self.world_from_grid, self.aabb, self.color)
+        new_grid.value_from_voxel = dict(self.value_from_voxel)
+        return new_grid
 
     def to_grid(self, point_world):
         return tform_point(invert(self.world_from_grid), point_world)
@@ -101,16 +111,18 @@ class VoxelGrid(object):
         return list(map(self.to_world, get_aabb_vertices(self.aabb_from_voxel(voxel))))
 
     def is_occupied(self, voxel):
-        return voxel in self.occupied
+        return voxel in self.value_from_voxel
+    def get_value(self, voxel):
+        return self.value_from_voxel.get(voxel, self.default)
     def set_occupied(self, voxel):
         if self.is_occupied(voxel):
             return False
-        self.occupied.add(voxel)
+        self.value_from_voxel[voxel] = True
         return True
     def set_free(self, voxel):
         if not self.is_occupied(voxel):
             return False
-        self.occupied.remove(voxel)
+        self.value_from_voxel.pop(voxel) # TODO: return instead?
         return True
 
     def get_neighbors(self, index):
@@ -119,10 +131,9 @@ class VoxelGrid(object):
             for n in (-1, +1):
                 direction[i] = n
                 yield tuple(np.array(index) + direction)
-
     def get_clusters(self, voxels=None):
         if voxels is None:
-            voxels = self.occupied
+            voxels = list(self.value_from_voxel)
 
         clusters = []
         assigned = set()
@@ -212,7 +223,7 @@ class VoxelGrid(object):
         with LockRenderer():
             size = np.min(self.resolutions) / 2
             handles = []
-            for voxel in sorted(self.occupied):
+            for voxel in self.occupied:
                 point_world = self.to_world(self.center_from_voxel(voxel))
                 handles.extend(draw_point(point_world, size=size, color=self.color[:3]))
             return handles
@@ -222,7 +233,7 @@ class VoxelGrid(object):
         geometry = get_box_geometry(*self.resolutions)
         collision_id, visual_id = create_shape(geometry, color=self.color)
         bodies = []
-        for voxel in sorted(self.occupied):
+        for voxel in self.occupied:
             body = create_body(collision_id, visual_id)
             #scale = self.resolutions[0]
             #body = load_model('models/voxel.urdf', fixed_base=True, scale=scale)
@@ -233,7 +244,7 @@ class VoxelGrid(object):
     def create_voxel_bodies2(self):
         geometry = get_box_geometry(*self.resolutions)
         collision_id, visual_id = create_shape(geometry, color=self.color)
-        ordered_voxels = sorted(self.occupied)
+        ordered_voxels = self.occupied
         bodies = []
         for start in range(0, len(ordered_voxels), MAX_LINKS):
             voxels = ordered_voxels[start:start + MAX_LINKS]
@@ -259,7 +270,7 @@ class VoxelGrid(object):
             bodies.append(body) # 0.0163199263677 / voxel
         return bodies
     def create_voxel_bodies3(self):
-        ordered_voxels = sorted(self.occupied)
+        ordered_voxels = self.occupied
         geoms = [get_box_geometry(*self.resolutions) for _ in ordered_voxels]
         poses = list(map(self.pose_from_voxel, ordered_voxels))
         #colors = [list(self.color) for _ in self.voxels] # TODO: colors don't work

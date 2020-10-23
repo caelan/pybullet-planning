@@ -214,6 +214,9 @@ def load_yaml(path):
         except yaml.YAMLError as exc:
             raise exc
 
+def flatten(iterable_of_iterables):
+    return (item for iterables in iterable_of_iterables for item in iterables)
+
 ##################################################
 
 BYTES_PER_KILOBYTE = math.pow(2, 10)
