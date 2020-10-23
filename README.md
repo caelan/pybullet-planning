@@ -8,7 +8,7 @@ This repository was originally developed for the [PDDLStream](https://github.com
 
 <!-- ## PyBullet Planning -->
 
-With the help of [Yijiang Huang](https://github.com/yijiangh), a stable and documented fork of [ss-pybullet](https://github.com/caelan/ss-pybullet) named [pybullet_planning](https://github.com/yijiangh/pybullet_planning) is available through [PyPI](https://pypi.org/project/pybullet-planning/).
+With the help of [Yijiang Huang](https://github.com/yijiangh), a stable and documented fork of **ss-pybullet** named [pybullet_planning](https://github.com/yijiangh/pybullet_planning) is available through [PyPI](https://pypi.org/project/pybullet-planning/).
 However, new features will continue to be introduced first through **ss-pybullet**. 
 
 ## Citation
@@ -79,6 +79,11 @@ See the following examples: https://github.com/caelan/pddlstream/tree/master/exa
 
 [<img src="https://img.youtube.com/vi/3HJrkgIGK7c/0.jpg" height="200">](https://www.youtube.com/watch?v=3HJrkgIGK7c)
 [<img src="https://img.youtube.com/vi/oWr6m12nXcM/0.jpg" height="200">](https://www.youtube.com/watch?v=oWr6m12nXcM)
+
+## Forks
+
+* https://github.com/yijiangh/pybullet_planning
+* https://github.com/rachelholladay/pb_robot
 
 ## Gallery
 
