@@ -80,6 +80,11 @@ See the following examples: https://github.com/caelan/pddlstream/tree/master/exa
 [<img src="https://img.youtube.com/vi/3HJrkgIGK7c/0.jpg" height="200">](https://www.youtube.com/watch?v=3HJrkgIGK7c)
 [<img src="https://img.youtube.com/vi/oWr6m12nXcM/0.jpg" height="200">](https://www.youtube.com/watch?v=oWr6m12nXcM)
 
+## Forks
+
+* https://github.com/yijiangh/pybullet_planning
+* https://github.com/rachelholladay/pb_robot
+
 ## Gallery
 
 * PDDLStream for TAMP - https://github.com/caelan/pddlstream
