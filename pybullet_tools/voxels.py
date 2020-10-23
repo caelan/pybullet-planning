@@ -16,6 +16,8 @@ MAX_LINKS = 125  # Max links seems to be 126
 
 ################################################################################
 
+# TODO: different extensions
+
 class VoxelGrid(object):
     # https://github.mit.edu/caelan/ROS/blob/master/sparse_voxel_grid.py
     # https://github.mit.edu/caelan/ROS/blob/master/base_navigation.py
@@ -24,9 +26,11 @@ class VoxelGrid(object):
     # TODO: can always display the grid in RVIZ after filtering
     # TODO: compute the maximum sized cuboid (rectangle) in a grid (matrix)
 
-    def __init__(self, resolutions, default=False, world_from_grid=unit_pose(), aabb=None, color=(1, 0, 0, 0.5),):
+    def __init__(self, resolutions, default=bool, world_from_grid=unit_pose(), aabb=None, color=(1, 0, 0, 0.5),):
     #def __init__(self, sizes, centers, pose=unit_pose()):
+        # TODO: defaultdict
         #assert len(sizes) == len(centers)
+        assert callable(default)
         self.resolutions = resolutions
         self.default = default
         self.value_from_voxel = {}
@@ -36,7 +40,7 @@ class VoxelGrid(object):
         #self.bodies = None
         # TODO: store voxels more intelligently spatially
     @property
-    def occupied(self):
+    def occupied(self): # TODO: get_occupied
         return sorted(self.value_from_voxel)
     def __iter__(self):
         return iter(self.value_from_voxel)
@@ -110,19 +114,28 @@ class VoxelGrid(object):
     def vertices_from_voxel(self, voxel):
         return list(map(self.to_world, get_aabb_vertices(self.aabb_from_voxel(voxel))))
 
-    def is_occupied(self, voxel):
+    def contains(self, voxel): # TODO: operator versions
         return voxel in self.value_from_voxel
     def get_value(self, voxel):
-        return self.value_from_voxel.get(voxel, self.default)
+        assert self.contains(voxel)
+        return self.value_from_voxel[voxel]
+    def set_value(self, voxel, value):
+        # TODO: remove if value == default
+        self.value_from_voxel[voxel] = value
+    def remove_value(self, voxel):
+        if self.contains(voxel):
+            self.value_from_voxel.pop(voxel) # TODO: return instead?
+
+    is_occupied = contains
     def set_occupied(self, voxel):
         if self.is_occupied(voxel):
             return False
-        self.value_from_voxel[voxel] = True
+        self.set_value(voxel, value=self.default())
         return True
     def set_free(self, voxel):
         if not self.is_occupied(voxel):
             return False
-        self.value_from_voxel.pop(voxel) # TODO: return instead?
+        self.remove_value(voxel)
         return True
 
     def get_neighbors(self, index):
@@ -133,8 +146,7 @@ class VoxelGrid(object):
                 yield tuple(np.array(index) + direction)
     def get_clusters(self, voxels=None):
         if voxels is None:
-            voxels = list(self.value_from_voxel)
-
+            voxels = self.occupied
         clusters = []
         assigned = set()
         def dfs(current):
@@ -210,20 +222,26 @@ class VoxelGrid(object):
     def draw_origin(self, scale=1, **kwargs):
         size = scale*np.min(self.resolutions)
         return draw_pose(self.world_from_grid, length=size, **kwargs)
-    def draw_voxel_boxes(self):
+    def draw_voxel(self, voxel):
+        aabb = self.aabb_from_voxel(voxel)
+        return draw_oobb(OOBB(aabb, self.world_from_grid), color=self.color[:3])
+        # handles.extend(draw_aabb(aabb, color=self.color[:3]))
+    def draw_voxel_boxes(self, voxels=None):
+        if voxels is None:
+            voxels = self.occupied
         with LockRenderer():
             handles = []
-            for voxel in sorted(self.occupied):
-                aabb = self.aabb_from_voxel(voxel)
-                handles.extend(draw_oobb(OOBB(aabb, self.world_from_grid), color=self.color[:3]))
-                #handles.extend(draw_aabb(aabb, color=self.color[:3]))
+            for voxel in voxels:
+                handles.extend(self.draw_voxel(voxel))
             return handles
-    def draw_voxel_centers(self):
+    def draw_voxel_centers(self, voxels=None):
         # TODO: could align with grid orientation
+        if voxels is None:
+            voxels = self.occupied
         with LockRenderer():
             size = np.min(self.resolutions) / 2
             handles = []
-            for voxel in self.occupied:
+            for voxel in voxels:
                 point_world = self.to_world(self.center_from_voxel(voxel))
                 handles.extend(draw_point(point_world, size=size, color=self.color[:3]))
             return handles

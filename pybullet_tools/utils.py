@@ -431,8 +431,6 @@ class ConfSaver(Saver):
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.body)
 
-#####################################
-
 class BodySaver(Saver):
     def __init__(self, body): #, pose=None):
         #if pose is None:
@@ -455,8 +453,11 @@ class BodySaver(Saver):
         return '{}({})'.format(self.__class__.__name__, self.body)
 
 class WorldSaver(Saver):
-    def __init__(self):
-        self.body_savers = [BodySaver(body) for body in get_bodies()]
+    def __init__(self, bodies=None):
+        if bodies is None:
+            bodies = get_bodies()
+        self.bodies = bodies
+        self.body_savers = [BodySaver(body) for body in self.bodies]
         # TODO: add/remove new bodies
 
     def restore(self):
