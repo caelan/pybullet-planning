@@ -14,6 +14,7 @@ import random
 import sys
 import time
 import datetime
+import shutil
 
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count, cycle, islice
@@ -125,9 +126,12 @@ def write_json(path, data):
     with open(path, 'w') as f:
         json.dump(data, f, indent=2, sort_keys=True)
 
-def safe_remove(p):
-    if os.path.exists(p):
-        os.remove(p)
+def safe_remove(path):
+    if os.path.exists(path):
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
 
 def ensure_dir(f):
     d = os.path.dirname(f)
@@ -315,6 +319,38 @@ class HideOutput(object):
         sys.stdout.flush()
         os.dup2(self._oldstdout_fno, 1)
         os.close(self._oldstdout_fno) # Added
+
+#####################################
+
+# Colors
+
+RED = (1, 0, 0, 1)
+GREEN = (0, 1, 0, 1)
+BLUE = (0, 0, 1, 1)
+BLACK = (0, 0, 0, 1)
+WHITE = (1, 1, 1, 1)
+BROWN = (0.396, 0.263, 0.129, 1)
+TAN = (0.824, 0.706, 0.549, 1)
+GREY = (0.5, 0.5, 0.5, 1)
+YELLOW = (1, 1, 0, 1)
+TRANSPARENT = (0, 0, 0, 0)
+
+COLOR_FROM_NAME = {
+    'red': RED,
+    'green': GREEN,
+    'blue': BLUE,
+    'white': WHITE,
+    'grey': GREY,
+    'black': BLACK,
+}
+
+def apply_alpha(color, alpha=1.0):
+    if color is None:
+        return None
+    return tuple(color[:3]) + (alpha,)
+
+def spaced_colors(n, s=1, v=1):
+    return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]
 
 #####################################
 
@@ -815,6 +851,40 @@ def reset_simulation():
 
 #####################################
 
+def get_camera_matrix(width, height, fx, fy=None):
+    if fy is None:
+        fy = fx
+    #cx, cy = width / 2., height / 2.
+    cx, cy = (width - 1) / 2., (height - 1) / 2.
+    return np.array([[fx, 0, cx],
+                     [0, fy, cy],
+                     [0, 0, 1]])
+
+def clip_pixel(pixel, width, height):
+    x, y = pixel
+    return clip(x, 0, width-1), clip(y, 0, height-1)
+
+def ray_from_pixel(camera_matrix, pixel):
+    return np.linalg.inv(camera_matrix).dot(np.append(pixel, 1))
+
+def pixel_from_ray(camera_matrix, ray):
+    return camera_matrix.dot(np.array(ray) / ray[2])[:2]
+
+def dimensions_from_camera_matrix(camera_matrix):
+    cx, cy = np.array(camera_matrix)[:2, 2]
+    width, height = (2*cx + 1), (2*cy + 1)
+    return width, height
+
+def get_field_of_view(camera_matrix):
+    dimensions = np.array(dimensions_from_camera_matrix(camera_matrix))
+    focal_lengths = np.array([camera_matrix[i, i] for i in range(2)])
+    return 2*np.arctan(np.divide(dimensions, 2*focal_lengths))
+
+def get_focal_lengths(dims, fovs):
+    return np.divide(dims, np.tan(fovs / 2)) / 2
+
+#####################################
+
 CameraInfo = namedtuple('CameraInfo', ['width', 'height', 'viewMatrix', 'projectionMatrix', 'cameraUp', 'cameraForward',
                                        'horizontal', 'vertical', 'yaw', 'pitch', 'dist', 'target'])
 
@@ -850,7 +920,8 @@ def set_camera_pose2(world_from_camera, distance=2):
     #p.resetDebugVisualizerCamera(cameraDistance=distance, cameraYaw=math.degrees(yaw), cameraPitch=math.degrees(-pitch),
     #                             cameraTargetPosition=target_world, physicsClientId=CLIENT)
 
-CameraImage = namedtuple('CameraImage', ['rgbPixels', 'depthPixels', 'segmentationMaskBuffer', 'camera_pose'])
+CameraImage = namedtuple('CameraImage', ['rgbPixels', 'depthPixels', 'segmentationMaskBuffer',
+                                         'camera_pose', 'camera_matrix'])
 #CameraImage = namedtuple('CameraImage', ['rgb', 'depth', 'segmentation', 'camera_pose'])
 
 def demask_pixel(pixel):
@@ -886,6 +957,7 @@ def get_projection_matrix(width, height, vertical_fov, near, far):
     :param far: 
     :return: 
     """
+    # http://ksimek.github.io/2013/08/13/intrinsic/
     # http://www.songho.ca/opengl/gl_projectionmatrix.html
     # http://www.songho.ca/opengl/gl_transform.html#matrix
     # https://www.edmundoptics.fr/resources/application-notes/imaging/understanding-focal-length-and-field-of-view/
@@ -895,37 +967,10 @@ def get_projection_matrix(width, height, vertical_fov, near, far):
     fov_degrees = math.degrees(vertical_fov)
     projection_matrix = p.computeProjectionMatrixFOV(fov=fov_degrees, aspect=aspect,
                                                      nearVal=near, farVal=far, physicsClientId=CLIENT)
-    # projection_matrix = p.computeProjectionMatrix(0, width, height, 0, near, far, physicsClientId=CLIENT)
+    #projection_matrix = p.computeProjectionMatrix(left=0, right=width, top=height, bottom=0,
+    #                                              near=near, far=far, physicsClientId=CLIENT)
     return projection_matrix
     #return np.reshape(projection_matrix, [4, 4])
-
-RED = (1, 0, 0, 1)
-GREEN = (0, 1, 0, 1)
-BLUE = (0, 0, 1, 1)
-BLACK = (0, 0, 0, 1)
-WHITE = (1, 1, 1, 1)
-BROWN = (0.396, 0.263, 0.129, 1)
-TAN = (0.824, 0.706, 0.549, 1)
-GREY = (0.5, 0.5, 0.5, 1)
-YELLOW = (1, 1, 0, 1)
-TRANSPARENT = (0, 0, 0, 0)
-
-COLOR_FROM_NAME = {
-    'red': RED,
-    'green': GREEN,
-    'blue': BLUE,
-    'white': WHITE,
-    'grey': GREY,
-    'black': BLACK,
-}
-
-def apply_alpha(color, alpha=1.0):
-    if color is None:
-        return None
-    return tuple(color[:3]) + (alpha,)
-
-def spaced_colors(n, s=1, v=1):
-    return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]
 
 def image_from_segmented(segmented, color_from_body=None):
     if color_from_body is None:
@@ -960,8 +1005,6 @@ def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, 
     view_matrix = p.computeViewMatrix(cameraEyePosition=camera_pos, cameraTargetPosition=target_pos,
                                       cameraUpVector=up_vector, physicsClientId=CLIENT)
     projection_matrix = get_projection_matrix(width, height, vertical_fov, near, far)
-    #print(np.reshape(projection_matrix, [4, 4]))
-    # TODO: store the projection matrix
 
     flags = get_image_flags(segment=segment, **kwargs)
     # DIRECT mode has no OpenGL, so it requires ER_TINY_RENDERER
@@ -985,9 +1028,21 @@ def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, 
     camera_tform[:3, 3] = camera_pos
     view_pose = multiply(pose_from_tform(camera_tform), Pose(euler=Euler(roll=PI)))
 
-    return CameraImage(rgb, depth, segmented, view_pose)
+    focal_length = get_focal_lengths(height, vertical_fov) # TODO: horizontal_fov
+    camera_matrix = get_camera_matrix(width, height, focal_length)
+    
+    return CameraImage(rgb, depth, segmented, view_pose, camera_matrix)
+
+def get_image_at_pose(camera_pose, camera_matrix, far=5.0, **kwargs):
+    width, height = map(int, dimensions_from_camera_matrix(camera_matrix))
+    _, vertical_fov = get_field_of_view(camera_matrix)
+    camera_point = point_from_pose(camera_pose)
+    target_point = tform_point(camera_pose, np.array([0, 0, far]))
+    return get_image(camera_point, target_point, width=width, height=height,
+                     vertical_fov=vertical_fov, far=far, **kwargs)
 
 def set_default_camera():
+    # TODO: deprecate
     set_camera(160, -35, 2.5, Point())
 
 #####################################
@@ -3591,12 +3646,12 @@ def draw_base_limits(limits, z=1e-2, **kwargs):
     return add_segments(vertices, closed=True, **kwargs)
 
 def draw_circle(center, radius, n=24, **kwargs):
-  vertices = []
-  for i in range(n):
-      theta = i*2*math.pi/n
-      unit = np.append(unit_from_theta(theta), [0])
-      vertices.append(center+radius*unit)
-  return add_segments(vertices, closed=True, **kwargs)
+    vertices = []
+    for i in range(n):
+        theta = i*2*math.pi/n
+        unit = np.append(unit_from_theta(theta), [0])
+        vertices.append(center + radius*unit)
+    return add_segments(vertices, closed=True, **kwargs)
 
 def draw_aabb(aabb, **kwargs):
     return [add_line(p1, p2, **kwargs) for p1, p2 in get_aabb_edges(aabb)]

@@ -18,7 +18,8 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name,\
     draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision, draw_point, get_link_subtree, \
-    clone_body, get_all_links, set_color, pairwise_collision, tform_point
+    clone_body, get_all_links, set_color, pairwise_collision, tform_point, get_camera_matrix, clip_pixel, \
+    ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, get_field_of_view
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -455,29 +456,8 @@ def learned_pose_generator(robot, gripper_pose, arm, grasp_type):
 MAX_VISUAL_DISTANCE = 5.0
 MAX_KINECT_DISTANCE = 2.5
 
-def get_camera_matrix(width, height, fx, fy):
-    # cx, cy = 320.5, 240.5
-    cx, cy = width / 2., height / 2.
-    return np.array([[fx, 0, cx],
-                     [0, fy, cy],
-                     [0, 0, 1]])
-
-def clip_pixel(pixel, width, height):
-    x, y = pixel
-    return clip(x, 0, width-1), clip(y, 0, height-1)
-
-def ray_from_pixel(camera_matrix, pixel):
-    return np.linalg.inv(camera_matrix).dot(np.append(pixel, 1))
-
-def pixel_from_ray(camera_matrix, ray):
-    return camera_matrix.dot(np.array(ray) / ray[2])[:2]
-
 PR2_CAMERA_MATRIX = get_camera_matrix(
     width=640, height=480, fx=772.55, fy=772.5)
-
-def dimensions_from_camera_matrix(camera_matrix):
-    width, height = 2 * np.array(camera_matrix)[:2, 2]
-    return width, height
 
 def get_pr2_view_section(z, camera_matrix=None):
     if camera_matrix is None:
@@ -487,6 +467,7 @@ def get_pr2_view_section(z, camera_matrix=None):
     return [z*ray_from_pixel(camera_matrix, p) for p in pixels]
 
 def get_pr2_field_of_view(**kwargs):
+    # TODO: deprecate
     z = 1
     view_lower, view_upper = get_pr2_view_section(z=z, **kwargs)
     horizontal = angle_between([view_lower[0], 0, z],

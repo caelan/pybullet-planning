@@ -24,12 +24,13 @@ class VoxelGrid(object):
     # TODO: can always display the grid in RVIZ after filtering
     # TODO: compute the maximum sized cuboid (rectangle) in a grid (matrix)
 
-    def __init__(self, resolutions, world_from_grid=unit_pose(), color=(1, 0, 0, 0.5)):
+    def __init__(self, resolutions, world_from_grid=unit_pose(), aabb=None, color=(1, 0, 0, 0.5)):
     #def __init__(self, sizes, centers, pose=unit_pose()):
         #assert len(sizes) == len(centers)
         self.resolutions = resolutions
         self.occupied = set()
-        self.world_from_grid = world_from_grid # TODO: finish implementation
+        self.world_from_grid = world_from_grid
+        self.aabb = aabb # TODO: apply
         self.color = color
         #self.bodies = None
         # TODO: store voxels more intelligently spatially
@@ -293,6 +294,7 @@ class VoxelGrid(object):
             voxel_intervals.append((i, j, interval))
         return voxel_intervals
     def draw_intervals(self):
+        # TODO: just draw a vertical line
         with LockRenderer():
             handles = []
             for (i, j, (k1, k2)) in self.create_intervals():
