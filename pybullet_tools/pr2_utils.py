@@ -23,7 +23,9 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
-ARM_NAMES = ('left', 'right')
+LEFT_ARM = 'left'
+RIGHT_ARM = 'right'
+ARM_NAMES = (LEFT_ARM, RIGHT_ARM)
 
 def arm_from_arm(arm): # TODO: rename
     assert (arm in ARM_NAMES)
@@ -38,14 +40,14 @@ PR2_GROUPS = {
     'base': ['x', 'y', 'theta'],
     'torso': ['torso_lift_joint'],
     'head': ['head_pan_joint', 'head_tilt_joint'],
-    arm_from_arm('left'): ['l_shoulder_pan_joint', 'l_shoulder_lift_joint', 'l_upper_arm_roll_joint',
-                 'l_elbow_flex_joint', 'l_forearm_roll_joint', 'l_wrist_flex_joint', 'l_wrist_roll_joint'],
-    arm_from_arm('right'): ['r_shoulder_pan_joint', 'r_shoulder_lift_joint', 'r_upper_arm_roll_joint',
-                  'r_elbow_flex_joint', 'r_forearm_roll_joint', 'r_wrist_flex_joint', 'r_wrist_roll_joint'],
-    gripper_from_arm('left'): ['l_gripper_l_finger_joint', 'l_gripper_r_finger_joint',
-                     'l_gripper_l_finger_tip_joint', 'l_gripper_r_finger_tip_joint'],
-    gripper_from_arm('right'): ['r_gripper_l_finger_joint', 'r_gripper_r_finger_joint',
-                      'r_gripper_l_finger_tip_joint', 'r_gripper_r_finger_tip_joint'],
+    arm_from_arm(LEFT_ARM): ['l_shoulder_pan_joint', 'l_shoulder_lift_joint', 'l_upper_arm_roll_joint',
+                             'l_elbow_flex_joint', 'l_forearm_roll_joint', 'l_wrist_flex_joint', 'l_wrist_roll_joint'],
+    arm_from_arm(RIGHT_ARM): ['r_shoulder_pan_joint', 'r_shoulder_lift_joint', 'r_upper_arm_roll_joint', 
+                              'r_elbow_flex_joint', 'r_forearm_roll_joint', 'r_wrist_flex_joint', 'r_wrist_roll_joint'],
+    gripper_from_arm(LEFT_ARM): ['l_gripper_l_finger_joint', 'l_gripper_r_finger_joint',
+                                 'l_gripper_l_finger_tip_joint', 'l_gripper_r_finger_tip_joint'],
+    gripper_from_arm(RIGHT_ARM): ['r_gripper_l_finger_joint', 'r_gripper_r_finger_joint',
+                                  'r_gripper_l_finger_tip_joint', 'r_gripper_r_finger_tip_joint'],
     # r_gripper_joint & l_gripper_joint are not mimicked
 }
 
@@ -53,14 +55,14 @@ HEAD_LINK_NAME = 'high_def_optical_frame' # high_def_optical_frame | high_def_fr
 # kinect - 'head_mount_kinect_rgb_optical_frame' | 'head_mount_kinect_rgb_link'
 
 PR2_TOOL_FRAMES = {
-    'left': 'l_gripper_tool_frame',  # l_gripper_palm_link | l_gripper_tool_frame
-    'right': 'r_gripper_tool_frame',  # r_gripper_palm_link | r_gripper_tool_frame
+    LEFT_ARM: 'l_gripper_tool_frame',  # l_gripper_palm_link | l_gripper_tool_frame
+    RIGHT_ARM: 'r_gripper_tool_frame',  # r_gripper_palm_link | r_gripper_tool_frame
     'head': HEAD_LINK_NAME,
 }
 
 PR2_GRIPPER_ROOTS = {
-    'left': 'l_gripper_palm_link',
-    'right': 'r_gripper_palm_link',
+    LEFT_ARM: 'l_gripper_palm_link',
+    RIGHT_ARM: 'r_gripper_palm_link',
 }
 
 PR2_BASE_LINK = 'base_footprint'
@@ -121,9 +123,9 @@ def rightarm_from_leftarm(config):
     return config * right_from_left
 
 def arm_conf(arm, left_config):
-    if arm == 'left':
+    if arm == LEFT_ARM:
         return left_config
-    elif arm == 'right':
+    elif arm == RIGHT_ARM:
         return rightarm_from_leftarm(left_config)
     raise ValueError(arm)
 

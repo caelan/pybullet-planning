@@ -146,6 +146,7 @@ def get_pairs(sequence):
     return list(safe_zip(sequence[:-1], sequence[1:]))
 
 def get_wrapped_pairs(sequence):
+    # zip(sequence, sequence[-1:] + sequence[:-1])
     return list(safe_zip(sequence, sequence[1:] + sequence[:1]))
 
 def clip(value, min_value=-INF, max_value=+INF):
@@ -1078,13 +1079,13 @@ def Euler(roll=0., pitch=0., yaw=0.):
 def Pose(point=None, euler=None):
     point = Point() if point is None else point
     euler = Euler() if euler is None else euler
-    return (point, quat_from_euler(euler))
+    return point, quat_from_euler(euler)
 
 #def Pose2d(x=0., y=0., yaw=0.):
 #    return np.array([x, y, yaw])
 
 def invert(pose):
-    (point, quat) = pose
+    point, quat = pose
     return p.invertTransform(point, quat)
 
 def multiply(*poses):
@@ -1153,9 +1154,9 @@ def z_rotation(theta):
 def matrix_from_quat(quat):
     return np.array(p.getMatrixFromQuaternion(quat, physicsClientId=CLIENT)).reshape(3, 3)
 
-def quat_from_matrix(mat):
+def quat_from_matrix(rot):
     matrix = np.eye(4)
-    matrix[:3,:3] = mat
+    matrix[:3, :3] = rot
     return quaternion_from_matrix(matrix)
 
 def point_from_tform(tform):
@@ -3716,6 +3717,7 @@ def create_rectangular_surface(width, length):
     return [np.append(c, 0) * extents for c in unit_corners]
 
 def is_point_in_polygon(point, polygon):
+    # TODO: is_point_in_polytope
     sign = None
     for i in range(len(polygon)):
         v1, v2 = np.array(polygon[i - 1][:2]), np.array(polygon[i][:2])
@@ -3728,13 +3730,13 @@ def is_point_in_polygon(point, polygon):
             return False
     return True
 
-def distance_from_segment(x1, y1, x2, y2, x3, y3): # x3,y3 is the point
+def distance_from_segment(x1, y1, x2, y2, x3, y3): # x3, y3 is the point
     # https://stackoverflow.com/questions/10983872/distance-from-a-point-to-a-polygon
     # https://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment
     px = x2 - x1
     py = y2 - y1
     norm = px*px + py*py
-    u =  ((x3 - x1) * px + (y3 - y1) * py) / float(norm)
+    u = ((x3 - x1) * px + (y3 - y1) * py) / float(norm)
     if u > 1:
         u = 1
     elif u < 0:
@@ -3757,8 +3759,7 @@ def is_mesh_on_surface(polygon, world_from_surface, mesh, world_from_mesh, epsil
     surface_from_mesh = multiply(invert(world_from_surface), world_from_mesh)
     points_surface = apply_affine(surface_from_mesh, mesh.vertices)
     min_z = np.min(points_surface[:, 2])
-    return (abs(min_z) < epsilon) and \
-           all(is_point_in_polygon(p, polygon) for p in points_surface)
+    return (abs(min_z) < epsilon) and all(is_point_in_polygon(point, polygon) for point in points_surface)
 
 def is_point_on_surface(polygon, world_from_surface, point_world):
     [point_surface] = apply_affine(invert(world_from_surface), [point_world])
@@ -3796,7 +3797,7 @@ def sample_categorical(categories):
     return names[bisect(cutoffs, np.random.random())]
 
 def sample_edge_point(polygon, radius):
-    edges = zip(polygon, polygon[-1:] + polygon[:-1])
+    edges = get_wrapped_pairs(polygon)
     edge_weights = {i: max(get_length(v2 - v1) - 2 * radius, 0) for i, (v1, v2) in enumerate(edges)}
     # TODO: fail if no options
     while True:
@@ -3807,7 +3808,7 @@ def sample_edge_point(polygon, radius):
 
 def get_closest_edge_point(polygon, point):
     # TODO: always pick perpendicular to the edge
-    edges = zip(polygon, polygon[-1:] + polygon[:-1])
+    edges = get_wrapped_pairs(polygon)
     best = None
     for v1, v2 in edges:
         proj = (v2 - v1)[:2].dot((point - v1)[:2])
@@ -3856,16 +3857,32 @@ def convex_centroid(vertices):
     # TODO: also applies to non-overlapping polygons
     vertices = [np.array(v[:2]) for v in vertices]
     segments = get_wrapped_pairs(vertices)
-    return sum((v1 + v2)*np.cross(v1, v2) for v1, v2 in segments) \
-           / (6.*convex_signed_area(vertices))
+    return sum((v1 + v2)*np.cross(v1, v2) for v1, v2 in segments) / (6.*convex_signed_area(vertices))
+
+def get_normal(v1, v2, v3):
+    return get_unit_vector(np.cross(np.array(v3) - v1, np.array(v2) - v1))
+
+def get_rotation(v1, v2, v3):
+    import scipy
+    a1 = np.array(v3) - v1
+    a2 = np.array(v2) - v1
+    a3 = np.cross(a2, a1)
+    return scipy.linalg.orth([a1, a2, a3])
+
+def get_mesh_normal(face, interior):
+    assert len(face) == 3
+    normal = get_normal(*face)
+    if normal.dot(interior) > 0:
+        normal *= -1
+    return normal
 
 def mesh_from_points(points):
     vertices, indices = map(np.array, convex_hull(points))
     new_indices = []
     for triplet in indices:
-        centroid = np.average(vertices[triplet], axis=0)
+        centroid = np.average(vertices[triplet], axis=0) # TODO: centroid of all the points
         v1, v2, v3 = vertices[triplet]
-        normal = np.cross(v3 - v1, v2 - v1)
+        normal = get_normal(v1, v2, v3)
         if normal.dot(centroid) > 0:
             # if normal.dot(centroid) < 0:
             triplet = triplet[::-1]

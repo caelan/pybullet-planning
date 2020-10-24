@@ -222,28 +222,32 @@ class VoxelGrid(object):
     def draw_origin(self, scale=1, **kwargs):
         size = scale*np.min(self.resolutions)
         return draw_pose(self.world_from_grid, length=size, **kwargs)
-    def draw_voxel(self, voxel):
+    def draw_voxel(self, voxel, color=None):
+        if color is None:
+            color = self.color
         aabb = self.aabb_from_voxel(voxel)
-        return draw_oobb(OOBB(aabb, self.world_from_grid), color=self.color[:3])
+        return draw_oobb(OOBB(aabb, self.world_from_grid), color=color[:3])
         # handles.extend(draw_aabb(aabb, color=self.color[:3]))
-    def draw_voxel_boxes(self, voxels=None):
+    def draw_voxel_boxes(self, voxels=None, **kwargs):
         if voxels is None:
             voxels = self.occupied
         with LockRenderer():
             handles = []
             for voxel in voxels:
-                handles.extend(self.draw_voxel(voxel))
+                handles.extend(self.draw_voxel(voxel, **kwargs))
             return handles
-    def draw_voxel_centers(self, voxels=None):
+    def draw_voxel_centers(self, voxels=None, color=None):
         # TODO: could align with grid orientation
         if voxels is None:
             voxels = self.occupied
+        if color is None:
+            color = self.color
         with LockRenderer():
             size = np.min(self.resolutions) / 2
             handles = []
             for voxel in voxels:
                 point_world = self.to_world(self.center_from_voxel(voxel))
-                handles.extend(draw_point(point_world, size=size, color=self.color[:3]))
+                handles.extend(draw_point(point_world, size=size, color=color[:3]))
             return handles
 
     def create_voxel_bodies1(self):
