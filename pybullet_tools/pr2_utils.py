@@ -9,7 +9,7 @@ import numpy as np
 
 from .pr2_never_collisions import NEVER_COLLISIONS
 from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, joints_from_names, \
-    set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, set_base_values, \
+    set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, \
     get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, \
     unit_pose, joints_from_names, PoseSaver, get_aabb, get_joint_limits, get_joints, \
     ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, \
@@ -19,7 +19,7 @@ from .utils import multiply, get_link_pose, joint_from_name, set_joint_position,
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name,\
     draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision, draw_point, get_link_subtree, \
     clone_body, get_all_links, set_color, pairwise_collision, tform_point, get_camera_matrix, clip_pixel, \
-    ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, get_field_of_view
+    ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, get_field_of_view, wrap_angle
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -692,15 +692,15 @@ def get_kinect_registrations(pr2, **kwargs):
 
 #####################################
 
-# TODO: base motion with some stochasticity
-def visible_base_generator(robot, target_point, base_range):
-    #base_from_table = point_from_pose(get_pose(robot))[:2]
+# TODO: base motion with stochastic final pose
+
+def visible_base_generator(robot, target_point, base_range=(1., 1.), theta_range=(0., 0.)):
     while True:
-        base_from_table = unit_from_theta(np.random.uniform(0, 2 * np.pi))
+        base_from_target = unit_from_theta(np.random.uniform(0., 2 * np.pi))
         look_distance = np.random.uniform(*base_range)
-        base_xy = target_point[:2] - look_distance * base_from_table
-        base_theta = np.math.atan2(base_from_table[1], base_from_table[0]) # TODO: stochastic orientation?
-        base_q = np.append(base_xy, base_theta)
+        base_xy = target_point[:2] - look_distance * base_from_target
+        base_theta = np.math.atan2(base_from_target[1], base_from_target[0]) + np.random.uniform(*theta_range)
+        base_q = np.append(base_xy, wrap_angle(base_theta))
         yield base_q
 
 

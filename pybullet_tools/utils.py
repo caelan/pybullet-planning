@@ -1633,6 +1633,8 @@ def get_link_state(body, link, kinematics=True, velocity=True):
                                      physicsClientId=CLIENT))
 
 def get_com_pose(body, link): # COM = center of mass
+    if link == BASE_LINK:
+        return get_pose(body)
     link_state = get_link_state(body, link)
     return link_state.linkWorldPosition, link_state.linkWorldOrientation
 
@@ -3175,7 +3177,7 @@ def add_pose_constraint(body, pose=None, max_force=None):
         p.changeConstraint(constraint, maxForce=max_force, physicsClientId=CLIENT)
     return constraint
 
-def add_fixed_constraint(body, robot, robot_link, max_force=None):
+def add_fixed_constraint(body, robot, robot_link=BASE_LINK, max_force=None):
     body_link = BASE_LINK
     body_pose = get_pose(body)
     #body_pose = get_com_pose(body, link=body_link)
@@ -3280,18 +3282,22 @@ def get_grasp_pose(constraint):
 
 # Control
 
-def control_joint(body, joint, value):
+def control_joint(body, joint, position=None, velocity=0.):
+    if position is None:
+        position = get_joint_position(body, joint)
     return p.setJointMotorControl2(bodyUniqueId=body,
                                    jointIndex=joint,
                                    controlMode=p.POSITION_CONTROL,
-                                   targetPosition=value,
-                                   targetVelocity=0.0,
+                                   targetPosition=position,
+                                   targetVelocity=velocity,
                                    maxVelocity=get_max_velocity(body, joint),
                                    force=get_max_force(body, joint),
                                    physicsClientId=CLIENT)
 
-def control_joints(body, joints, positions):
+def control_joints(body, joints, positions=None):
     # TODO: the whole PR2 seems to jitter
+    if positions is None:
+        positions = get_joint_positions(body, joints)
     #kp = 1.0
     #kv = 0.3
     #forces = [get_max_force(body, joint) for joint in joints]
@@ -3309,7 +3315,7 @@ def joint_controller(body, joints, target, tolerance=1e-3):
     assert(len(joints) == len(target))
     positions = get_joint_positions(body, joints)
     while not np.allclose(positions, target, atol=tolerance, rtol=0):
-        control_joints(body, joints, target)
+        control_joints(body, joints, target) # TODO: call just once?
         yield positions
         positions = get_joint_positions(body, joints)
 

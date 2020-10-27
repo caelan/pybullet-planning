@@ -78,6 +78,7 @@ class VoxelGrid(object):
         return AABB(self.lower_from_voxel(voxel), self.upper_from_voxel(voxel))
 
     def ray_trace(self, start_cell, goal_point):
+        # TODO: finish adapting
         if self.is_occupied(start_cell):
             return [], False
         goal_cell = self.get_index(goal_point)
