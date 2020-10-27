@@ -2618,7 +2618,7 @@ def get_ray(ray):
     return np.array(end) - np.array(start)
 
 RayResult = namedtuple('RayResult', ['objectUniqueId', 'linkIndex',
-                                     'hit_fraction', 'hit_position', 'hit_normal'])
+                                     'hit_fraction', 'hit_position', 'hit_normal']) # TODO: store Ray here
 
 def ray_collision(ray):
     # TODO: be careful to disable gravity and set static masses for everything
@@ -3612,8 +3612,9 @@ def remove_debug(debug):
 remove_handle = remove_debug
 
 def remove_handles(handles):
-    for handle in handles:
-        remove_debug(handle)
+    with LockRenderer():
+        for handle in handles:
+            remove_debug(handle)
 
 def remove_all_debug():
     p.removeAllUserDebugItems(physicsClientId=CLIENT)
@@ -3700,13 +3701,20 @@ def draw_mesh(mesh, **kwargs):
             lines.append(add_line(verts[i1], verts[i2], **kwargs))
     return lines
 
+def was_ray_hit(ray_result):
+    if ray_result is None:
+        return False
+    return ray_result.objectUniqueId != NULL_ID
+
+def get_hit_position(ray, ray_result=None):
+    if was_ray_hit(ray_result):
+        return ray_result.hit_position
+    return ray.end
+
 def draw_ray(ray, ray_result=None, visible_color=GREEN, occluded_color=RED, **kwargs):
     if ray_result is None:
         return [add_line(ray.start, ray.end, color=visible_color, **kwargs)]
-    if ray_result.objectUniqueId == NULL_ID:
-        hit_position = ray.end
-    else:
-        hit_position = ray_result.hit_position
+    hit_position = get_hit_position(ray, ray_result)
     return [
         add_line(ray.start, hit_position, color=visible_color, **kwargs),
         add_line(hit_position, ray.end, color=occluded_color, **kwargs),
