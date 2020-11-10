@@ -905,7 +905,7 @@ def get_pitch(point):
     return np.math.atan2(dz, np.sqrt(dx ** 2 + dy ** 2))
 
 def get_yaw(point):
-    dx, dy, dz = point
+    dx, dy = point[:2]
     return np.math.atan2(dy, dx)
 
 def set_camera_pose(camera_point, target_point=np.zeros(3)):
@@ -1138,7 +1138,8 @@ def get_distance(p1, p2, **kwargs):
     return get_length(get_difference(p1, p2), **kwargs)
 
 def angle_between(vec1, vec2):
-    return np.math.acos(np.dot(vec1, vec2) / (get_length(vec1) *  get_length(vec2)))
+    inner_product = np.dot(vec1, vec2) / (get_length(vec1) * get_length(vec2))
+    return math.acos(clip(inner_product, min_value=-1., max_value=+1.))
 
 def get_angle(q1, q2):
     return get_yaw(np.array(q2) - np.array(q1))
@@ -1157,7 +1158,7 @@ def matrix_from_quat(quat):
 
 def quat_from_matrix(rot):
     matrix = np.eye(4)
-    matrix[:3, :3] = rot
+    matrix[:3, :3] = rot[:3, :3]
     return quaternion_from_matrix(matrix)
 
 def point_from_tform(tform):
@@ -1301,9 +1302,9 @@ def set_quat(body, quat):
 def set_euler(body, euler):
     set_quat(body, quat_from_euler(euler))
 
-def pose_from_pose2d(pose2d):
+def pose_from_pose2d(pose2d, z=0.):
     x, y, theta = pose2d
-    return Pose(Point(x=x, y=y), Euler(yaw=theta))
+    return Pose(Point(x=x, y=y, z=z), Euler(yaw=theta))
 
 def set_base_values(body, values):
     _, _, z = get_point(body)
@@ -1428,6 +1429,8 @@ def has_joint(body, name):
 def joints_from_names(body, names):
     return tuple(joint_from_name(body, name) for name in names)
 
+##########
+
 JointState = namedtuple('JointState', ['jointPosition', 'jointVelocity',
                                        'jointReactionForces', 'appliedJointMotorTorque'])
 
@@ -1446,11 +1449,18 @@ def get_joint_reaction_force(body, joint):
 def get_joint_torque(body, joint):
     return get_joint_state(body, joint).appliedJointMotorTorque
 
+##########
+
 def get_joint_positions(body, joints): # joints=None):
     return tuple(get_joint_position(body, joint) for joint in joints)
 
 def get_joint_velocities(body, joints):
     return tuple(get_joint_velocity(body, joint) for joint in joints)
+
+def get_joint_torques(body, joints):
+    return tuple(get_joint_torque(body, joint) for joint in joints)
+
+##########
 
 def set_joint_position(body, joint, value):
     p.resetJointState(body, joint, value, targetVelocity=0, physicsClientId=CLIENT)
@@ -1466,14 +1476,22 @@ def get_configuration(body):
 def set_configuration(body, values):
     set_joint_positions(body, get_movable_joints(body), values)
 
+def modify_configuration(body, joints, positions=None):
+    if positions is None:
+        positions = get_joint_positions(body, joints)
+    configuration = list(get_configuration(body))
+    for joint, value in safe_zip(movable_from_joints(body, joints), positions):
+        configuration[joint] = value
+    return configuration
+
 def get_full_configuration(body):
     # Cannot alter fixed joints
     return get_joint_positions(body, get_joints(body))
 
 def get_labeled_configuration(body):
     movable_joints = get_movable_joints(body)
-    return dict(zip(get_joint_names(body, movable_joints),
-                    get_joint_positions(body, movable_joints)))
+    return dict(safe_zip(get_joint_names(body, movable_joints),
+                         get_joint_positions(body, movable_joints)))
 
 def get_joint_type(body, joint):
     return get_joint_info(body, joint).jointType
@@ -1487,7 +1505,7 @@ def is_movable(body, joint):
 def prune_fixed_joints(body, joints):
     return [joint for joint in joints if is_movable(body, joint)]
 
-def get_movable_joints(body): # 45 / 87 on pr2
+def get_movable_joints(body):
     return prune_fixed_joints(body, get_joints(body))
 
 def joint_from_movable(body, index):
@@ -1526,6 +1544,9 @@ def get_max_limits(body, joints):
 
 def get_max_velocity(body, joint):
     return get_joint_info(body, joint).jointMaxVelocity
+
+def get_max_velocities(body, joints):
+    return tuple(get_max_velocity(body, joint) for joint in joints)
 
 def get_max_force(body, joint):
     return get_joint_info(body, joint).jointMaxForce
@@ -2458,6 +2479,9 @@ def vertices_from_data(data):
         filename, scale = get_data_filename(data), get_data_scale(data)
         if filename == UNKNOWN_FILE:
             raise RuntimeError(filename)
+        # _, ext = os.path.splitext(filename)
+        # if ext != '.obj':
+        #     raise RuntimeError(filename)
         mesh = read_obj(filename, decompose=False)
         vertices = [scale*np.array(vertex) for vertex in mesh.vertices]
         # TODO: could compute AABB here for improved speed at the cost of being conservative
@@ -2574,9 +2598,9 @@ CollisionInfo = namedtuple('CollisionInfo',
                            """.split())
 
 def get_closest_points(body1, body2, link1=None, link2=None, max_distance=MAX_DISTANCE):
-    assert (link1 is None) and (link2 is None)
+    #assert (link1 is None) and (link2 is None)
     return [CollisionInfo(*info) for info in p.getClosestPoints(
-        bodyA=body1, bodyB=body2, #linkIndexA=link1, linkIndexB=link2,
+        bodyA=body1, bodyB=body2, linkIndexA=link1, linkIndexB=link2, # Previously commented out
         distance=max_distance, physicsClientId=CLIENT)]
 
 def body_collision(body1, body2, max_distance=MAX_DISTANCE): # 10000
@@ -3312,6 +3336,10 @@ def control_joints(body, joints, positions=None):
                                         #velocityGains=[kv] * len(joints),)
                                         #forces=forces)
 
+def control_joints_hold(body, joints, positions=None):
+    configuration = modify_configuration(body, joints, positions)
+    return control_joints(body, get_movable_joints(body), configuration)
+
 def joint_controller(body, joints, target, tolerance=1e-3):
     assert(len(joints) == len(target))
     positions = get_joint_positions(body, joints)
@@ -3324,13 +3352,8 @@ def joint_controller_hold(body, joints, target=None, **kwargs):
     """
     Keeps other joints in place
     """
-    movable_joints = get_movable_joints(body)
-    conf = list(get_joint_positions(body, movable_joints))
-    if target is None:
-        target = list(conf)
-    for joint, value in zip(movable_from_joints(body, joints), target):
-        conf[joint] = value
-    return joint_controller(body, movable_joints, conf, **kwargs)
+    configuration = modify_configuration(body, joints, target)
+    return joint_controller(body, get_movable_joints(body), configuration, **kwargs)
 
 def joint_controller_hold2(body, joints, positions, velocities=None,
                            tolerance=1e-2 * np.pi, position_gain=0.05, velocity_gain=0.01):
@@ -3342,13 +3365,14 @@ def joint_controller_hold2(body, joints, positions, velocities=None,
         velocities = [0.] * len(positions)
     movable_joints = get_movable_joints(body)
     target_positions = list(get_joint_positions(body, movable_joints))
-    target_velocities = [0.] * len(movable_joints)
+    #target_velocities = [0.] * len(movable_joints)
     movable_from_original = {o: m for m, o in enumerate(movable_joints)}
     #print(list(positions), list(velocities))
     for joint, position, velocity in zip(joints, positions, velocities):
         target_positions[movable_from_original[joint]] = position
-        target_velocities[movable_from_original[joint]] = velocity
+        #target_velocities[movable_from_original[joint]] = velocity
     # return joint_controller(body, movable_joints, conf)
+
     current_conf = get_joint_positions(body, movable_joints)
     #forces = [get_max_force(body, joint) for joint in movable_joints]
     while not np.allclose(current_conf, target_positions, atol=tolerance, rtol=0):
@@ -3358,6 +3382,7 @@ def joint_controller_hold2(body, joints, positions, velocities=None,
                                     #targetVelocities=target_velocities,
                                     positionGains=[position_gain] * len(movable_joints),
                                     #velocityGains=[velocity_gain] * len(movable_joints),
+                                    #maxVelocities=[0.]*len(movable_joints), # TODO: maxVelocity equivalent?
                                     #forces=forces,
                                     physicsClientId=CLIENT)
         yield current_conf
@@ -3382,9 +3407,9 @@ def velocity_control_joints(body, joints, velocities):
     #kv = 0.3
     return p.setJointMotorControlArray(body, joints, p.VELOCITY_CONTROL,
                                        targetVelocities=velocities,
-                                       physicsClientId=CLIENT) #,
-                                        #velocityGains=[kv] * len(joints),)
-                                        #forces=forces)
+                                       physicsClientId=CLIENT,)
+                                       #velocityGains=[kv] * len(joints),)
+                                       #forces=forces)
 
 #####################################
 
@@ -3616,6 +3641,7 @@ def remove_handles(handles):
     with LockRenderer():
         for handle in handles:
             remove_debug(handle)
+    handles[:] = []
 
 def remove_all_debug():
     p.removeAllUserDebugItems(physicsClientId=CLIENT)
@@ -3642,10 +3668,10 @@ def draw_link_name(body, link=BASE_LINK):
     return add_text(get_link_name(body, link), position=(0, 0.2, 0),
                     parent=body, parent_link=link)
 
-def draw_pose(pose, length=0.1, **kwargs):
+def draw_pose(pose, length=0.1, d=3, **kwargs):
     origin_world = tform_point(pose, np.zeros(3))
     handles = []
-    for k in range(3):
+    for k in range(d):
         axis = np.zeros(3)
         axis[k] = 1
         axis_world = tform_point(pose, length*axis)
@@ -3696,11 +3722,12 @@ def get_face_edges(face):
 
 def draw_mesh(mesh, **kwargs):
     verts, faces = mesh
-    lines = []
-    for face in faces:
-        for i1, i2 in get_face_edges(face):
-            lines.append(add_line(verts[i1], verts[i2], **kwargs))
-    return lines
+    handles = []
+    with LockRenderer():
+        for face in faces:
+            for i1, i2 in get_face_edges(face):
+                handles.append(add_line(verts[i1], verts[i2], **kwargs))
+    return handles
 
 def was_ray_hit(ray_result):
     if ray_result is None:
@@ -3852,7 +3879,7 @@ def sample_edge_pose(polygon, world_from_surface, mesh):
 def convex_hull(points):
     from scipy.spatial import ConvexHull
     # TODO: cKDTree is faster, but KDTree can do all pairs closest
-    hull = ConvexHull(points, incremental=False)
+    hull = ConvexHull(list(points), incremental=False)
     new_indices = {i: ni for ni, i in enumerate(hull.vertices)}
     vertices = hull.points[hull.vertices, :]
     faces = np.vectorize(lambda i: new_indices[i])(hull.simplices)
@@ -3975,6 +4002,7 @@ def get_connected_components(vertices, edges):
             clusters.append(frozenset(cluster))
     return clusters
 
+
 def read_obj(path, decompose=True):
     mesh = Mesh([], [])
     meshes = {}
@@ -3999,6 +4027,8 @@ def read_obj(path, decompose=True):
             mesh.faces.append(face)
     if not decompose:
         return Mesh(vertices, faces)
+
+    # TODO: separate into a standalone method
     #if not meshes:
     #    # TODO: ensure this still works if no objects
     #    meshes[None] = mesh

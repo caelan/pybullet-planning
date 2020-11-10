@@ -176,11 +176,16 @@ def load_srdf_collisions():
 
 #####################################
 
+def get_groups():
+    return sorted(PR2_GROUPS)
+
 def get_group_joints(robot, group):
     return joints_from_names(robot, PR2_GROUPS[group])
 
 def get_group_conf(robot, group):
     return get_joint_positions(robot, get_group_joints(robot, group))
+
+get_group_position = get_group_conf
 
 def set_group_conf(robot, group, positions):
     set_joint_positions(robot, get_group_joints(robot, group), positions)
@@ -188,6 +193,11 @@ def set_group_conf(robot, group, positions):
 def set_group_positions(robot, group_positions):
     for group, positions in group_positions.items():
         set_group_conf(robot, group, positions)
+
+def get_group_positions(robot):
+    return {group: get_group_conf(robot, group) for group in get_groups()}
+
+get_group_confs = get_group_positions
 
 #####################################
 
@@ -733,11 +743,11 @@ def close_until_collision(robot, gripper_joints, bodies=[], open_conf=None, clos
 
 
 def compute_grasp_width(robot, arm, body, grasp_pose, **kwargs):
-    gripper_joints = get_gripper_joints(robot, arm)
-    tool_link = link_from_name(robot, PR2_TOOL_FRAMES[arm])
+    tool_link = get_gripper_link(robot, arm)
     tool_pose = get_link_pose(robot, tool_link)
     body_pose = multiply(tool_pose, grasp_pose)
     set_pose(body, body_pose)
+    gripper_joints = get_gripper_joints(robot, arm)
     return close_until_collision(robot, gripper_joints, bodies=[body], **kwargs)
 
 

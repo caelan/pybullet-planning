@@ -1,8 +1,8 @@
 import math
 import numpy as np
 
-from pybullet_tools.utils import get_distance_fn, get_joint_name, clip, get_max_velocity, get_difference_fn, INF, \
-    waypoints_from_path, adjust_path, get_difference, get_pairs
+from pybullet_tools.utils import clip, get_max_velocity, get_difference_fn, INF, \
+    waypoints_from_path, adjust_path, get_difference, get_pairs, get_max_velocities
 
 #ARM_SPEED = 0.15*np.pi # radians / sec
 ARM_SPEED = 0.2 # percent
@@ -12,7 +12,7 @@ DEFAULT_SPEED_FRACTION = 0.3
 
 def get_duration_fn(body, joints, velocities=None, norm=INF):
     if velocities is None:
-        velocities = np.array([get_max_velocity(body, joint) for joint in joints])
+        velocities = np.array(get_max_velocities(body, joints))
     difference_fn = get_difference_fn(body, joints)
     def fn(q1, q2):
         distance = np.array(difference_fn(q2, q1))
@@ -50,8 +50,7 @@ def decompose_into_paths(joints, path):
 # TODO: retain based on the end effector velocity
 
 def instantaneous_retime_path(robot, joints, path, speed=ARM_SPEED):
-    #duration_fn = get_distance_fn(robot, joints)
-    duration_fn = get_duration_fn(robot, joints)
+    duration_fn = get_duration_fn(robot, joints) # get_distance_fn
     mid_durations = [duration_fn(*pair) for pair in get_pairs(path)]
     durations = [0.] + mid_durations
     time_from_starts = np.cumsum(durations) / speed
@@ -197,6 +196,5 @@ def interpolate_path(robot, joints, path):
     # Waypoints are followed perfectly, twice continuously differentiable
     path, time_from_starts = retime_trajectory(robot, joints, path, sample_step=None)
     # positions_curve = interp1d(time_from_starts, path, kind='linear', axis=0, assume_sorted=True)
-    positions_curve = CubicSpline(time_from_starts, path, bc_type='clamped',  # clamped | natural
-                                  extrapolate=False)  # bc_type=((1, 0), (1, 0))
-    return positions_curve
+    return CubicSpline(time_from_starts, path, bc_type='clamped',  # clamped | natural
+                       extrapolate=False)  # bc_type=((1, 0), (1, 0))
