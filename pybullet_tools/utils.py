@@ -254,6 +254,7 @@ def raise_timeout(signum, frame):
 
 @contextmanager
 def timeout(duration):
+    # TODO: function that wraps around
     # https://www.jujens.eu/posts/en/2018/Jun/02/python-timeout-function/
     # https://code-maven.com/python-timeout
     # https://pypi.org/project/func-timeout/
@@ -1409,7 +1410,7 @@ def get_joint_name(body, joint):
     return get_joint_info(body, joint).jointName.decode('UTF-8')
 
 def get_joint_names(body, joints):
-    return [get_joint_name(body, joint) for joint in joints]
+    return [get_joint_name(body, joint) for joint in joints] # .encode('ascii')
 
 def joint_from_name(body, name):
     for joint in get_joints(body):
