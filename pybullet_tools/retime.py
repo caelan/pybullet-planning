@@ -98,7 +98,7 @@ def slow_trajectory(robot, joints, path, min_fraction=0.1, ramp_duration=1.0, **
 
 ################################################################################
 
-def compute_ramp_duration(distance, max_velocity, acceleration, duration):
+def compute_ramp_duration(distance, acceleration, duration):
     discriminant = max(0, math.pow(duration * acceleration, 2) - 4 * distance * acceleration)
     velocity = 0.5 * (duration * acceleration - math.sqrt(discriminant))  # +/-
     #assert velocity <= max_velocity
@@ -117,12 +117,12 @@ def compute_position(ramp_time, max_duration, acceleration, t):
     return 0.5 * acceleration * math.pow(t1, 2) + velocity * t2 + \
            velocity * t3 - 0.5 * acceleration * math.pow(t3, 2)
 
-def add_ramp_waypoints(differences, max_velocities, accelerations, q1, duration, sample_step, waypoints, time_from_starts):
-    dim = len(max_velocities)
+def add_ramp_waypoints(differences, accelerations, q1, duration, sample_step, waypoints, time_from_starts):
+    dim = len(q1)
     distances = np.abs(differences)
     time_from_start = time_from_starts[-1]
 
-    ramp_durations = [compute_ramp_duration(distances[idx], max_velocities[idx], accelerations[idx], duration)
+    ramp_durations = [compute_ramp_duration(distances[idx], accelerations[idx], duration)
                       for idx in range(dim)]
     directions = np.sign(differences)
     for t in np.arange(sample_step, duration, sample_step):
@@ -140,7 +140,11 @@ def compute_min_duration(distance, max_velocity, acceleration):
     if distance == 0:
         return 0
     max_ramp_duration = max_velocity / acceleration
-    ramp_distance = 0.5 * acceleration * math.pow(max_ramp_duration, 2)
+    if acceleration == INF:
+        #return distance / max_velocity
+        ramp_distance = 0.
+    else:
+        ramp_distance = 0.5 * acceleration * math.pow(max_ramp_duration, 2)
     remaining_distance = distance - 2 * ramp_distance
     if 0 <= remaining_distance:  # zero acceleration
         remaining_time = remaining_distance / max_velocity
@@ -150,7 +154,7 @@ def compute_min_duration(distance, max_velocity, acceleration):
         total_time = 2 * half_time
     return total_time
 
-def ramp_retime_path(path, max_velocities, acceleration_fraction=1.5, sample_step=None):
+def ramp_retime_path(path, max_velocities, acceleration_fraction=INF, sample_step=None):
     """
     :param path:
     :param max_velocities:
@@ -175,8 +179,8 @@ def ramp_retime_path(path, max_velocities, acceleration_fraction=1.5, sample_ste
                         for idx in range(dim)] + [0.])
         time_from_start = time_from_starts[-1]
         if sample_step is not None:
-            waypoints, time_from_starts = add_ramp_waypoints(differences, max_velocities, accelerations,
-                                                             q1, duration, sample_step, waypoints, time_from_starts)
+            waypoints, time_from_starts = add_ramp_waypoints(differences, accelerations, q1, duration, sample_step,
+                                                             waypoints, time_from_starts)
         waypoints.append(q2)
         time_from_starts.append(time_from_start + duration)
     return waypoints, time_from_starts
@@ -189,21 +193,62 @@ def retime_trajectory(robot, joints, path, velocity_fraction=DEFAULT_SPEED_FRACT
     :param velocity_fraction: fraction of max_velocity
     :return:
     """
-    path = waypoints_from_path(adjust_path(robot, joints, path))
+    path = adjust_path(robot, joints, path)
+    #path = waypoints_from_path(path)
     max_velocities = velocity_fraction * np.array(get_max_velocities(robot, joints))
     return ramp_retime_path(path, max_velocities, **kwargs)
 
 ################################################################################
 
-def interpolate_path(robot, joints, path):
-    from scipy.interpolate import CubicSpline
-    #from scipy.interpolate import interp1d, CubicHermiteSpline
+def interpolate_path(robot, joints, path, bspline=False, approx=INF, dump=False):
+    from scipy.interpolate import CubicSpline, make_interp_spline, make_lsq_spline
+    #from scipy.interpolate import interp1d, CubicHermiteSpline, KroghInterpolator
+    # https://scikit-learn.org/stable/auto_examples/linear_model/plot_polynomial_interpolation.html
     # TODO: local search to retime by adding or removing waypoints
     # TODO: iteratively increase spacing until velocity / accelerations meets limits
     # https://docs.scipy.org/doc/scipy/reference/tutorial/interpolate.html
     # Waypoints are followed perfectly, twice continuously differentiable
+    # TODO: https://pythonrobotics.readthedocs.io/en/latest/modules/path_tracking.html#mpc-modeling
     path, time_from_starts = retime_trajectory(robot, joints, path, sample_step=None)
     # linear | slinear | quadratic | cubic
-    #return interp1d(time_from_starts, path, kind='zero', axis=0, assume_sorted=True)
-    return CubicSpline(time_from_starts, path, bc_type='clamped',  # clamped | natural
-                       extrapolate=False)  # bc_type=((1, 0), (1, 0))
+    #return interp1d(time_from_starts, path, kind='linear', axis=0, assume_sorted=True)
+    k = 3
+    if bspline:
+        x = time_from_starts
+        if approx == INF:
+            positions = make_interp_spline(time_from_starts, path, k=k, t=None, bc_type='clamped')
+            positions.x = positions.t[positions.k:-positions.k]
+        else:
+            # TODO: approximation near the endpoints
+            # approx = min(approx, len(x) - 2*k)
+            assert approx <= len(x) - 2 * k
+            t = np.r_[(x[0],) * (k + 1),
+                      #np.linspace(x[0]+1e-3, x[-1]-1e-3, num=approx, endpoint=True),
+                      np.linspace(x[0], x[-1], num=2 + approx, endpoint=True)[1:-1],
+                      (x[-1],) * (k + 1)]
+            #t = positions.t # Need to slice
+            #w = np.zeros(...)
+            w = None
+            positions = make_lsq_spline(x, path, t, k=k, w=w)
+            positions.x = positions.t[positions.k:-positions.k]
+    else:
+        positions = CubicSpline(time_from_starts, path, bc_type='clamped',
+                                extrapolate=False)  # bc_type= clamped | natural | ((1, 0), (1, 0))
+    if not dump:
+        return positions
+    velocities = positions.derivative()
+    accelerations = positions.derivative()
+    for i, t in enumerate(positions.x):
+        print(i, round(t, 3), positions(t), velocities(t), accelerations(t))
+    # TODO: compose piecewise functions
+    # TODO: ramp up and ramp down path
+    # TODO: quadratic interpolation between endpoints
+    return positions
+
+
+def iterate_curve(positions_curve, time_step=1e-1):
+    start_time = positions_curve.x[0]
+    end_time = positions_curve.x[-1]
+    times = np.append(np.arange(start_time, end_time, step=time_step), [end_time])
+    for t in times:
+        yield positions_curve(t)

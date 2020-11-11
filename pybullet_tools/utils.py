@@ -139,15 +139,20 @@ def ensure_dir(f):
         os.makedirs(d)
 
 def safe_zip(sequence1, sequence2):
+    sequence1, sequence2 = list(sequence1), list(sequence2)
     assert len(sequence1) == len(sequence2)
-    return zip(sequence1, sequence2)
+    return list(zip(sequence1, sequence2))
 
 def get_pairs(sequence):
-    return list(safe_zip(sequence[:-1], sequence[1:]))
+    # TODO: lazy version
+    sequence = list(sequence)
+    return safe_zip(sequence[:-1], sequence[1:])
 
 def get_wrapped_pairs(sequence):
+    # TODO: lazy version
+    sequence = list(sequence)
     # zip(sequence, sequence[-1:] + sequence[:-1])
-    return list(safe_zip(sequence, sequence[1:] + sequence[:1]))
+    return safe_zip(sequence, sequence[1:] + sequence[:1])
 
 def clip(value, min_value=-INF, max_value=+INF):
     return min(max(min_value, value), max_value)
@@ -2798,7 +2803,8 @@ def adjust_path(robot, joints, path):
     differences = [difference_fn(q2, q1) for q1, q2 in get_pairs(path)]
     adjusted_path = [np.array(start_positions)]
     for difference in differences:
-        adjusted_path.append(adjusted_path[-1] + difference)
+        if not np.array_equal(difference, np.zeros(len(joints))):
+            adjusted_path.append(adjusted_path[-1] + difference)
     return adjusted_path
 
 def get_moving_links(body, joints):
