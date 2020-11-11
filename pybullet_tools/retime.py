@@ -185,7 +185,8 @@ def ramp_retime_path(path, max_velocities, acceleration_fraction=INF, sample_ste
         time_from_starts.append(time_from_start + duration)
     return waypoints, time_from_starts
 
-def retime_trajectory(robot, joints, path, velocity_fraction=DEFAULT_SPEED_FRACTION, **kwargs):
+def retime_trajectory(robot, joints, path, only_waypoints=False,
+                      velocity_fraction=DEFAULT_SPEED_FRACTION, **kwargs):
     """
     :param robot:
     :param joints:
@@ -194,15 +195,37 @@ def retime_trajectory(robot, joints, path, velocity_fraction=DEFAULT_SPEED_FRACT
     :return:
     """
     path = adjust_path(robot, joints, path)
-    #path = waypoints_from_path(path)
+    if only_waypoints:
+        path = waypoints_from_path(path)
     max_velocities = velocity_fraction * np.array(get_max_velocities(robot, joints))
     return ramp_retime_path(path, max_velocities, **kwargs)
 
 ################################################################################
 
-def interpolate_path(robot, joints, path, bspline=False, approx=INF, dump=False):
-    from scipy.interpolate import CubicSpline, make_interp_spline, make_lsq_spline
-    #from scipy.interpolate import interp1d, CubicHermiteSpline, KroghInterpolator
+def approximate_spline(time_from_starts, path, k=3, approx=INF):
+    from scipy.interpolate import make_interp_spline, make_lsq_spline
+    x = time_from_starts
+    if approx == INF:
+        positions = make_interp_spline(time_from_starts, path, k=k, t=None, bc_type='clamped')
+        positions.x = positions.t[positions.k:-positions.k]
+    else:
+        # TODO: approximation near the endpoints
+        # approx = min(approx, len(x) - 2*k)
+        assert approx <= len(x) - 2 * k
+        t = np.r_[(x[0],) * (k + 1),
+                  # np.linspace(x[0]+1e-3, x[-1]-1e-3, num=approx, endpoint=True),
+                  np.linspace(x[0], x[-1], num=2 + approx, endpoint=True)[1:-1],
+                  (x[-1],) * (k + 1)]
+        # t = positions.t # Need to slice
+        # w = np.zeros(...)
+        w = None
+        positions = make_lsq_spline(x, path, t, k=k, w=w)
+    positions.x = positions.t[positions.k:-positions.k]
+    return positions
+
+def interpolate_path(robot, joints, path, k=1, bspline=False, dump=False, **kwargs):
+    from scipy.interpolate import CubicSpline, interp1d
+    #from scipy.interpolate import CubicHermiteSpline, KroghInterpolator
     # https://scikit-learn.org/stable/auto_examples/linear_model/plot_polynomial_interpolation.html
     # TODO: local search to retime by adding or removing waypoints
     # TODO: iteratively increase spacing until velocity / accelerations meets limits
@@ -210,32 +233,19 @@ def interpolate_path(robot, joints, path, bspline=False, approx=INF, dump=False)
     # Waypoints are followed perfectly, twice continuously differentiable
     # TODO: https://pythonrobotics.readthedocs.io/en/latest/modules/path_tracking.html#mpc-modeling
     path, time_from_starts = retime_trajectory(robot, joints, path, sample_step=None)
-    # linear | slinear | quadratic | cubic
-    #return interp1d(time_from_starts, path, kind='linear', axis=0, assume_sorted=True)
-    k = 3
-    if bspline:
-        x = time_from_starts
-        if approx == INF:
-            positions = make_interp_spline(time_from_starts, path, k=k, t=None, bc_type='clamped')
-            positions.x = positions.t[positions.k:-positions.k]
+    if k == 3:
+        if bspline:
+            positions = approximate_spline(time_from_starts, path, k=k, **kwargs)
         else:
-            # TODO: approximation near the endpoints
-            # approx = min(approx, len(x) - 2*k)
-            assert approx <= len(x) - 2 * k
-            t = np.r_[(x[0],) * (k + 1),
-                      #np.linspace(x[0]+1e-3, x[-1]-1e-3, num=approx, endpoint=True),
-                      np.linspace(x[0], x[-1], num=2 + approx, endpoint=True)[1:-1],
-                      (x[-1],) * (k + 1)]
-            #t = positions.t # Need to slice
-            #w = np.zeros(...)
-            w = None
-            positions = make_lsq_spline(x, path, t, k=k, w=w)
-            positions.x = positions.t[positions.k:-positions.k]
+            # bc_type= clamped | natural | ((1, 0), (1, 0))
+            positions = CubicSpline(time_from_starts, path, bc_type='clamped', extrapolate=False)
     else:
-        positions = CubicSpline(time_from_starts, path, bc_type='clamped',
-                                extrapolate=False)  # bc_type= clamped | natural | ((1, 0), (1, 0))
+        kinds = {1: 'linear', 2: 'quadratic', 3: 'cubic'} # slinear
+        positions = interp1d(time_from_starts, path, kind=kinds[k], axis=0, assume_sorted=True)
+
     if not dump:
         return positions
+    # TODO: only if CubicSpline
     velocities = positions.derivative()
     accelerations = positions.derivative()
     for i, t in enumerate(positions.x):
@@ -246,9 +256,10 @@ def interpolate_path(robot, joints, path, bspline=False, approx=INF, dump=False)
     return positions
 
 
-def iterate_curve(positions_curve, time_step=1e-1):
+def sample_curve(positions_curve, time_step=1e-2):
     start_time = positions_curve.x[0]
     end_time = positions_curve.x[-1]
     times = np.append(np.arange(start_time, end_time, step=time_step), [end_time])
     for t in times:
-        yield positions_curve(t)
+        q = positions_curve(t)
+        yield t, q

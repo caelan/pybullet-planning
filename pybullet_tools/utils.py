@@ -3321,26 +3321,31 @@ def control_joint(body, joint, position=None, velocity=0.):
                                    controlMode=p.POSITION_CONTROL,
                                    targetPosition=position,
                                    targetVelocity=velocity,
-                                   maxVelocity=get_max_velocity(body, joint),
-                                   force=get_max_force(body, joint),
+                                   #maxVelocity=get_max_velocity(body, joint),
+                                   #force=get_max_force(body, joint),
                                    physicsClientId=CLIENT)
 
-def control_joints(body, joints, positions=None):
-    # TODO: the whole PR2 seems to jitter
+def control_joints(body, joints, positions=None, velocities=None, position_gain=None):
     if positions is None:
         positions = get_joint_positions(body, joints)
-    #kp = 1.0
-    #kv = 0.3
-    #forces = [get_max_force(body, joint) for joint in joints]
-    #forces = [5000]*len(joints)
-    #forces = [20000]*len(joints)
-    return p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL,
-                                       targetPositions=positions,
-                                       targetVelocities=[0.0] * len(joints),
-                                       physicsClientId=CLIENT) #,
-                                        #positionGains=[kp] * len(joints),
-                                        #velocityGains=[kv] * len(joints),)
-                                        #forces=forces)
+    if velocities is None:
+        velocities = [0.0] * len(joints)
+    if position_gain is None:
+        return p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL,
+                                           targetPositions=positions,
+                                           targetVelocities=velocities, # Any change when removed?
+                                           physicsClientId=CLIENT)
+    else:
+        velocity_gain = 0.1*position_gain
+        # forces = [get_max_force(body, joint) for joint in joints]
+        # forces = [5000]*len(joints) # 20000
+        return p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL,
+                                           targetPositions=positions,
+                                           targetVelocities=velocities,
+                                           physicsClientId=CLIENT,
+                                           positionGains=[position_gain] * len(joints),
+                                           velocityGains=[velocity_gain] * len(joints),)
+                                           #forces=forces)
 
 def control_joints_hold(body, joints, positions=None):
     configuration = modify_configuration(body, joints, positions)
