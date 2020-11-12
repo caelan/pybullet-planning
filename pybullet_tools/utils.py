@@ -67,7 +67,8 @@ HUMANOID_MJCF = "mjcf/humanoid.xml"
 HUSKY_URDF = "husky/husky.urdf"
 RACECAR_URDF = 'racecar/racecar.urdf' # racecar_differential.urdf
 PR2_GRIPPER = 'pr2_gripper.urdf'
-WSG_GRIPPER = 'gripper/wsg50_one_motor_gripper.sdf' # wsg50_one_motor_gripper | wsg50_one_motor_gripper_new
+# wsg50_one_motor_gripper | wsg50_one_motor_gripper_free_base | wsg50_one_motor_gripper_new | wsg50_one_motor_gripper_no_finger
+WSG_GRIPPER = 'gripper/wsg50_one_motor_gripper_no_finger.sdf'
 
 # PyBullet Objects
 KIVA_SHELF_SDF = "kiva_shelf/model.sdf"
@@ -1233,7 +1234,7 @@ def all_between(lower_limits, values, upper_limits):
            np.less_equal(values, upper_limits).all()
 
 def convex_combination(x, y, w=0.5):
-    return (1-w)*x + w*y
+    return (1-w)*np.array(x) + w*np.array(y)
 
 #####################################
 
@@ -1877,6 +1878,21 @@ def get_mesh_geometry(path, scale=1.):
         'meshScale': scale*np.ones(3),
     }
 
+def get_geometry(vertices, faces, vertex_textures=None, vertex_normals=None, scale=1.):
+    geometry = {
+        'shapeType': p.GEOM_MESH,
+        'meshScale': scale * np.ones(3),
+        'vertices': vertices,
+        'indices': faces,
+        # 'visualFramePosition': None,
+        # 'collisionFramePosition': None,
+    }
+    if vertex_textures is not None:
+        geometry['uvs'] = vertex_textures
+    if vertex_normals is not None:
+        geometry['normals'] = vertex_normals
+    return geometry
+
 NULL_ID = -1
 
 def create_collision_shape(geometry, pose=unit_pose()):
@@ -2496,7 +2512,7 @@ def vertices_from_data(data):
         raise NotImplementedError(geometry_type)
     return apply_affine(get_data_pose(data), vertices)
 
-def vertices_from_link(body, link):
+def vertices_from_link(body, link=BASE_LINK):
     # In local frame
     vertices = []
     # TODO: requires the viewer to be active
@@ -2735,6 +2751,17 @@ def get_distance_fn(body, joints, weights=None): #, norm=2):
         #return np.linalg.norm(np.multiply(weights * diff), ord=norm)
     return fn
 
+def get_duration_fn(body, joints, velocities=None, norm=INF):
+    # TODO: integrate with get_distance_fn weights
+    if velocities is None:
+        velocities = np.array(get_max_velocities(body, joints))
+    difference_fn = get_difference_fn(body, joints)
+    def fn(q1, q2):
+        distances = np.array(difference_fn(q2, q1))
+        durations = np.divide(distances, np.abs(velocities))
+        return np.linalg.norm(durations, ord=norm)
+    return fn
+
 def get_refine_fn(body, joints, num_steps=0):
     difference_fn = get_difference_fn(body, joints)
     num_steps = num_steps + 1
@@ -2751,7 +2778,7 @@ def refine_path(body, joints, waypoints, num_steps):
     refine_fn = get_refine_fn(body, joints, num_steps)
     refined_path = []
     for v1, v2 in get_pairs(waypoints):
-        refined_path += list(refine_fn(v1, v2))
+        refined_path.extend(refine_fn(v1, v2))
     return refined_path
 
 DEFAULT_RESOLUTION = 0.05
@@ -3351,11 +3378,11 @@ def control_joints_hold(body, joints, positions=None):
     configuration = modify_configuration(body, joints, positions)
     return control_joints(body, get_movable_joints(body), configuration)
 
-def joint_controller(body, joints, target, tolerance=1e-3):
+def joint_controller(body, joints, target, tolerance=1e-3, **kwargs):
     assert(len(joints) == len(target))
+    control_joints(body, joints, target, **kwargs)
     positions = get_joint_positions(body, joints)
     while not np.allclose(positions, target, atol=tolerance, rtol=0):
-        control_joints(body, joints, target) # TODO: call just once?
         yield positions
         positions = get_joint_positions(body, joints)
 
@@ -3535,7 +3562,7 @@ def interpolate_poses(pose1, pose2, pos_step_size=0.01, ori_step_size=np.pi/16):
                                   quat_angle_between(quat1, quat2)/ori_step_size)))
     for i in range(num_steps):
         fraction = float(i) / num_steps
-        pos = (1-fraction)*np.array(pos1) + fraction*np.array(pos2)
+        pos = convex_combination(pos1, pos2, w=fraction)
         quat = quat_combination(quat1, quat2, fraction=fraction)
         yield (pos, quat)
     yield pose2

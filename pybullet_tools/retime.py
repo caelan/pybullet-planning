@@ -1,24 +1,14 @@
 import math
 import numpy as np
 
-from pybullet_tools.utils import clip, get_difference_fn, INF, \
-    waypoints_from_path, adjust_path, get_difference, get_pairs, get_max_velocities
+from pybullet_tools.utils import clip, INF, \
+    waypoints_from_path, adjust_path, get_difference, get_pairs, get_max_velocities, get_duration_fn
 
 #ARM_SPEED = 0.15*np.pi # radians / sec
 ARM_SPEED = 0.2 # percent
 DEFAULT_SPEED_FRACTION = 0.3
 
 ################################################################################
-
-def get_duration_fn(body, joints, velocities=None, norm=INF):
-    if velocities is None:
-        velocities = np.array(get_max_velocities(body, joints))
-    difference_fn = get_difference_fn(body, joints)
-    def fn(q1, q2):
-        distance = np.array(difference_fn(q2, q1))
-        duration = np.divide(distance, velocities)
-        return np.linalg.norm(duration, ord=norm)
-    return fn
 
 def ensure_increasing(path, time_from_starts):
     assert len(path) == len(time_from_starts)
@@ -90,7 +80,7 @@ def slow_trajectory(robot, joints, path, min_fraction=0.1, ramp_duration=1.0, **
 #    # The drawers do actually have velocity limits
 #    fraction = 0.25
 #    duration_fn = get_duration_fn(robot, joints)
-#    max_velocities = speed * np.array([get_max_velocity(robot, joint) for joint in joints])
+#    max_velocities = speed * np.array(get_max_velocities(robot, joints))
 #    max_accelerations = 2*fraction*max_velocities # TODO: fraction
 #    difference_fn = get_difference_fn(robot, joints)
 #    differences1 = [difference_fn(q2, q1) for q1, q2 in zip(path[:-1], path[1:])]
