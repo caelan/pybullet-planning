@@ -58,6 +58,9 @@ def main(group=SE3):
     #print(initial_point, get_link_pose(robot, body_link))
     #set_pose(robot, Pose(point=-1.*np.ones(3)))
 
+    # TODO: sample orientation uniformly at random
+    # http://planning.cs.uiuc.edu/node198.html
+    #from pybullet_tools.transformations import random_quaternion
     path = plan_joint_motion(robot, joints, final_conf, obstacles=obstacles,
                              self_collisions=False, custom_limits=custom_limits)
     if path is None:

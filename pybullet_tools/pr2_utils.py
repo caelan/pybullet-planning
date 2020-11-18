@@ -7,19 +7,18 @@ from itertools import combinations
 
 import numpy as np
 
+from pybullet_tools.utils import set_all_color
 from .pr2_never_collisions import NEVER_COLLISIONS
-from .utils import multiply, get_link_pose, joint_from_name, set_joint_position, joints_from_names, \
-    set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, \
-    get_pose, euler_from_quat, link_from_name, has_link, point_from_pose, invert, Pose, \
-    unit_pose, joints_from_names, PoseSaver, get_aabb, get_joint_limits, get_joints, \
-    ConfSaver, get_bodies, create_mesh, remove_body, single_collision, unit_from_theta, angle_between, violates_limit, \
+from .utils import multiply, get_link_pose, set_joint_position, set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, \
+    get_pose, euler_from_quat, link_from_name, point_from_pose, invert, Pose, \
+    unit_pose, joints_from_names, PoseSaver, get_aabb, get_joint_limits, ConfSaver, get_bodies, create_mesh, remove_body, \
+    unit_from_theta, violates_limit, \
     violates_limits, add_line, get_body_name, get_num_joints, approximate_as_cylinder, \
-    approximate_as_prism, unit_quat, unit_point, clip, get_joint_info, tform_point, get_yaw, \
-    get_pitch, wait_for_user, quat_angle_between, angle_between, quat_from_pose, compute_jacobian, \
-    movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name,\
-    draw_point, draw_pose, get_extend_fn, get_moving_links, link_pairs_collision, draw_point, get_link_subtree, \
-    clone_body, get_all_links, set_color, pairwise_collision, tform_point, get_camera_matrix, clip_pixel, \
-    ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, get_field_of_view, wrap_angle
+    approximate_as_prism, unit_quat, unit_point, angle_between, quat_from_pose, compute_jacobian, \
+    movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
+    get_extend_fn, get_moving_links, link_pairs_collision, get_link_subtree, \
+    clone_body, get_all_links, pairwise_collision, tform_point, get_camera_matrix, ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, \
+    wrap_angle, TRANSPARENT
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -27,7 +26,12 @@ LEFT_ARM = 'left'
 RIGHT_ARM = 'right'
 ARM_NAMES = (LEFT_ARM, RIGHT_ARM)
 
-def arm_from_arm(arm): # TODO: rename
+def side_from_arm(arm): # side_from_gripper
+    side = arm.split('_')[0]
+    assert side in ARM_NAMES
+    return side
+
+def arm_from_arm(arm): # TODO: rename to arm_from_side
     assert (arm in ARM_NAMES)
     return '{}_arm'.format(arm)
 
@@ -185,7 +189,7 @@ def get_group_joints(robot, group):
 def get_group_conf(robot, group):
     return get_joint_positions(robot, get_group_joints(robot, group))
 
-get_group_position = get_group_conf
+#get_group_position = get_group_conf
 
 def set_group_conf(robot, group, positions):
     set_joint_positions(robot, get_group_joints(robot, group), positions)
@@ -197,7 +201,7 @@ def set_group_positions(robot, group_positions):
 def get_group_positions(robot):
     return {group: get_group_conf(robot, group) for group in get_groups()}
 
-get_group_confs = get_group_positions
+#get_group_confs = get_group_positions
 
 #####################################
 
@@ -759,6 +763,5 @@ def create_gripper(robot, arm, visual=True):
     links = get_link_subtree(robot, link_from_name(robot, link_name))
     gripper = clone_body(robot, links=links, visual=False, collision=True)  # TODO: joint limits
     if not visual:
-        for link in get_all_links(gripper):
-            set_color(gripper, np.zeros(4), link)
+        set_all_color(robot, TRANSPARENT)
     return gripper

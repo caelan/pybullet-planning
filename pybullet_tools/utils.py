@@ -224,6 +224,12 @@ def load_yaml(path):
 def flatten(iterable_of_iterables):
     return (item for iterables in iterable_of_iterables for item in iterables)
 
+def find(test, sequence):
+    for item in sequence:
+        if test(item):
+            return item
+    return None
+
 ##################################################
 
 BYTES_PER_KILOBYTE = math.pow(2, 10)
@@ -1878,12 +1884,19 @@ def get_mesh_geometry(path, scale=1.):
         'meshScale': scale*np.ones(3),
     }
 
-def get_geometry(vertices, faces, vertex_textures=None, vertex_normals=None, scale=1.):
+def get_faces_geometry(mesh, vertex_textures=None, vertex_normals=None, scale=1.):
+    # TODO: p.createCollisionShape(p.GEOM_MESH, vertices=[], indices=[])
+    # https://github.com/bulletphysics/bullet3/blob/ddc47f932888a6ea3b4e11bd5ce73e8deba0c9a1/examples/pybullet/examples/createMesh.py
+    vertices, faces = mesh
+    indices = []
+    for face in faces:
+        assert len(face) == 3
+        indices.extend(face)
     geometry = {
         'shapeType': p.GEOM_MESH,
         'meshScale': scale * np.ones(3),
         'vertices': vertices,
-        'indices': faces,
+        'indices': indices,
         # 'visualFramePosition': None,
         # 'collisionFramePosition': None,
     }
@@ -2062,7 +2075,6 @@ def create_obj(path, scale=1., mass=STATIC_MASS, collision=True, color=GREY):
     INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, path, fixed_base, scale) # TODO: store geometry info instead?
     return body
 
-
 Mesh = namedtuple('Mesh', ['vertices', 'faces'])
 mesh_count = count()
 TEMP_DIR = 'temp/'
@@ -2076,6 +2088,14 @@ def create_mesh(mesh, under=True, **kwargs):
     write(path, obj_file_from_mesh(mesh, under=under))
     return create_obj(path, **kwargs)
     #safe_remove(path) # TODO: removing might delete mesh?
+
+def create_faces(mesh, scale=1., mass=STATIC_MASS, collision=True, color=GREY, **kwargs):
+    # TODO: rename to create_mesh
+    collision_id, visual_id = create_shape(get_faces_geometry(mesh, scale=scale, **kwargs), collision=collision, color=color)
+    body = create_body(collision_id, visual_id, mass=mass)
+    # fixed_base = (mass == STATIC_MASS)
+    # INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, None, fixed_base, scale)
+    return body
 
 #####################################
 
@@ -2236,6 +2256,11 @@ def clone_world(client=None, exclude=[]):
 
 #####################################
 
+def get_mesh_data(obj, link=BASE_LINK, shape_index=0, visual=True):
+    flags = 0 if visual else p.MESH_DATA_SIMULATION_MESH
+    #collisionShapeIndex = shape_index
+    return Mesh(*p.getMeshData(obj, linkIndex=link, flags=flags, physicsClientId=CLIENT))
+
 def get_collision_data(body, link=BASE_LINK):
     # TODO: try catch
     return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link, physicsClientId=CLIENT)]
@@ -2350,6 +2375,10 @@ def set_color(body, color, link=BASE_LINK, shape_index=NULL_ID):
     return p.changeVisualShape(body, link, shapeIndex=shape_index, rgbaColor=color,
                                #textureUniqueId=None, specularColor=None,
                                physicsClientId=CLIENT)
+
+def set_all_color(body, color):
+    for link in get_all_links(body):
+        set_color(body, color, link)
 
 def set_texture(body, texture=None, link=BASE_LINK, shape_index=NULL_ID):
     if texture is None:
@@ -3378,13 +3407,17 @@ def control_joints_hold(body, joints, positions=None):
     configuration = modify_configuration(body, joints, positions)
     return control_joints(body, get_movable_joints(body), configuration)
 
-def joint_controller(body, joints, target, tolerance=1e-3, **kwargs):
+def joint_controller(body, joints, target, tolerance=1e-3, timeout=INF, **kwargs):
     assert(len(joints) == len(target))
+    dt = get_time_step()
+    time_elapsed = 0.
     control_joints(body, joints, target, **kwargs)
     positions = get_joint_positions(body, joints)
-    while not np.allclose(positions, target, atol=tolerance, rtol=0):
+    while not np.allclose(positions, target, atol=tolerance, rtol=0) and (time_elapsed < timeout):
         yield positions
+        time_elapsed += dt
         positions = get_joint_positions(body, joints)
+        # TODO: return timeout (or throw error)
 
 def joint_controller_hold(body, joints, target=None, **kwargs):
     """
@@ -3555,11 +3588,17 @@ def get_quaternion_waypoints(point, start_quat, end_quat, step_size=np.pi/16):
         yield (point, quat)
     yield (point, end_quat)
 
+def get_pose_distance(pose1, pose2):
+    pos1, quat1 = pose1
+    pos2, quat2 = pose2
+    pos_distance = get_distance(pos1, pos2)
+    ori_distance = quat_angle_between(quat1, quat2)
+    return pos_distance, ori_distance
+
 def interpolate_poses(pose1, pose2, pos_step_size=0.01, ori_step_size=np.pi/16):
     pos1, quat1 = pose1
     pos2, quat2 = pose2
-    num_steps = int(math.ceil(max(get_distance(pos1, pos2)/pos_step_size,
-                                  quat_angle_between(quat1, quat2)/ori_step_size)))
+    num_steps = int(math.ceil(max(np.divide(get_pose_distance(pose1, pose2), [pos_step_size, ori_step_size]))))
     for i in range(num_steps):
         fraction = float(i) / num_steps
         pos = convex_combination(pos1, pos2, w=fraction)
@@ -3956,18 +3995,22 @@ def get_mesh_normal(face, interior):
         normal *= -1
     return normal
 
-def mesh_from_points(points):
-    vertices, indices = map(np.array, convex_hull(points))
-    new_indices = []
-    for triplet in indices:
-        centroid = np.average(vertices[triplet], axis=0) # TODO: centroid of all the points
-        v1, v2, v3 = vertices[triplet]
-        normal = get_normal(v1, v2, v3)
-        if normal.dot(centroid) > 0:
-            # if normal.dot(centroid) < 0:
-            triplet = triplet[::-1]
-        new_indices.append(tuple(triplet))
-    return Mesh(vertices.tolist(), new_indices)
+def orient_face(vertices, face, point=None):
+    if point is None:
+        point = np.average(vertices, axis=0)
+    v1, v2, v3 = vertices[face]
+    normal = get_normal(v1, v2, v3)
+    if normal.dot(point - v1) < 0:
+        face = face[::-1]
+    return tuple(face)
+
+def mesh_from_points(points, under=True):
+    vertices, faces = map(np.array, convex_hull(points))
+    centroid = np.average(vertices, axis=0)
+    new_faces = [orient_face(vertices, face, point=centroid) for face in faces]
+    if under:
+        new_faces.extend(map(tuple, map(reversed, list(new_faces))))
+    return Mesh(vertices.tolist(), new_faces)
 
 def rectangular_mesh(width, length):
     # TODO: 2.5d polygon
