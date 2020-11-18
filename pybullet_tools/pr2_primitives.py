@@ -24,7 +24,7 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_place
     add_segments, get_max_limit, link_from_name, BodySaver, get_aabb, Attachment, interpolate_poses, \
     plan_direct_joint_motion, has_gui, create_attachment, wait_for_duration, get_extend_fn, set_renderer, \
     get_custom_limits, all_between, get_unit_vector, wait_for_user, \
-    set_base_values, euler_from_quat, INF, elapsed_time, get_moving_links, flatten_links
+    set_base_values, euler_from_quat, INF, elapsed_time, get_moving_links, flatten_links, get_relative_pose
 
 BASE_EXTENT = 3.5 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
@@ -377,8 +377,7 @@ def get_stable_gen(problem, collisions=True):
 def get_tool_from_root(robot, arm):
     root_link = link_from_name(robot, PR2_GRIPPER_ROOTS[arm])
     tool_link = link_from_name(robot, PR2_TOOL_FRAMES[arm])
-    return multiply(invert(get_link_pose(robot, tool_link)),
-                    get_link_pose(robot, root_link))
+    return get_relative_pose(robot, root_link, tool_link)
 
 def iterate_approach_path(robot, arm, gripper, pose, grasp, body=None):
     tool_from_root = get_tool_from_root(robot, arm)

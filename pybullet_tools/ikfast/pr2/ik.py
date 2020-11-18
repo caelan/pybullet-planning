@@ -102,3 +102,7 @@ def pr2_inverse_kinematics(robot, arm, gripper_pose, obstacles=[], custom_limits
     if any(pairwise_collision(robot, b) for b in obstacles):
         return None
     return get_joint_positions(robot, arm_joints)
+
+#####################################
+
+# TODO: deprecate

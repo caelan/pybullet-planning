@@ -2600,11 +2600,6 @@ def contact_collision():
 ContactResult = namedtuple('ContactResult', ['contactFlag', 'bodyUniqueIdA', 'bodyUniqueIdB',
                                              'linkIndexA', 'linkIndexB', 'positionOnA', 'positionOnB', 'contactNormalOnB', 'contactDistance', 'normalForce'])
 
-def pairwise_link_collision(body1, link1, body2, link2=BASE_LINK, max_distance=MAX_DISTANCE): # 10000
-    return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
-                                  linkIndexA=link1, linkIndexB=link2,
-                                  physicsClientId=CLIENT)) != 0 # getContactPoints
-
 def flatten_links(body, links=None):
     if links is None:
         links = get_all_links(body)
@@ -2615,19 +2610,6 @@ def expand_links(body):
     if links is None:
         links = get_all_links(body)
     return body, links
-
-def any_link_pair_collision(body1, links1, body2, links2=None, **kwargs):
-    # TODO: this likely isn't needed anymore
-    if links1 is None:
-        links1 = get_all_links(body1)
-    if links2 is None:
-        links2 = get_all_links(body2)
-    for link1, link2 in product(links1, links2):
-        if (body1 == body2) and (link1 == link2):
-            continue
-        if pairwise_link_collision(body1, link1, body2, link2, **kwargs):
-            return True
-    return False
 
 CollisionInfo = namedtuple('CollisionInfo',
                            """
@@ -2648,15 +2630,37 @@ CollisionInfo = namedtuple('CollisionInfo',
                            """.split())
 
 def get_closest_points(body1, body2, link1=None, link2=None, max_distance=MAX_DISTANCE):
-    #assert (link1 is None) and (link2 is None)
-    return [CollisionInfo(*info) for info in p.getClosestPoints(
-        bodyA=body1, bodyB=body2, linkIndexA=link1, linkIndexB=link2, # Previously commented out
-        distance=max_distance, physicsClientId=CLIENT)]
+    if (link1 is None) and (link2 is None):
+        results = p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance, physicsClientId=CLIENT)
+    elif link2 is None:
+        results = p.getClosestPoints(bodyA=body1, bodyB=body2, linkIndexA=link1,
+                                     distance=max_distance, physicsClientId=CLIENT)
+    elif link1 is None:
+        results = p.getClosestPoints(bodyA=body1, bodyB=body2, linkIndexB=link2,
+                                     distance=max_distance, physicsClientId=CLIENT)
+    else:
+        results = p.getClosestPoints(bodyA=body1, bodyB=body2, linkIndexA=link1, linkIndexB=link2,
+                                     distance=max_distance, physicsClientId=CLIENT)
+    return [CollisionInfo(*info) for info in results]
 
-def body_collision(body1, body2, max_distance=MAX_DISTANCE): # 10000
-    # TODO: confirm that this doesn't just check the base link
-    return len(p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance,
-                                  physicsClientId=CLIENT)) != 0 # getContactPoints`
+def pairwise_link_collision(body1, link1, body2, link2=BASE_LINK, **kwargs):
+    return len(get_closest_points(body1, body2, link1=link1, link2=link2, **kwargs)) != 0
+
+def any_link_pair_collision(body1, links1, body2, links2=None, **kwargs):
+    # TODO: this likely isn't needed anymore
+    if links1 is None:
+        links1 = get_all_links(body1)
+    if links2 is None:
+        links2 = get_all_links(body2)
+    for link1, link2 in product(links1, links2):
+        if (body1 == body2) and (link1 == link2):
+            continue
+        if pairwise_link_collision(body1, link1, body2, link2, **kwargs):
+            return True
+    return False
+
+def body_collision(body1, body2, **kwargs):
+    return len(get_closest_points(body1, body2, **kwargs)) != 0
 
 def pairwise_collision(body1, body2, **kwargs):
     if isinstance(body1, tuple) or isinstance(body2, tuple):
@@ -2665,14 +2669,15 @@ def pairwise_collision(body1, body2, **kwargs):
         return any_link_pair_collision(body1, links1, body2, links2, **kwargs)
     return body_collision(body1, body2, **kwargs)
 
+def pairwise_collisions(body, obstacles, link=None, **kwargs):
+    return any(pairwise_collision(body1=body, body2=other, link1=link, **kwargs)
+               for other in obstacles if body != other)
+
 #def single_collision(body, max_distance=1e-3):
 #    return len(p.getClosestPoints(body, max_distance=max_distance)) != 0
 
-def single_collision(body1, **kwargs):
-    for body2 in get_bodies():
-        if (body1 != body2) and pairwise_collision(body1, body2, **kwargs):
-            return True
-    return False
+def single_collision(body, **kwargs):
+    return pairwise_collisions(body, get_bodies(), **kwargs)
 
 def link_pairs_collision(body1, links1, body2, links2=None, **kwargs):
     if links2 is None:
@@ -3526,10 +3531,8 @@ def inverse_kinematics_helper(robot, link, target_pose, null_space=None):
     if null_space is not None:
         assert target_quat is not None
         lower, upper, ranges, rest = null_space
-
-        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point,
-                                                      lowerLimits=lower, upperLimits=upper, jointRanges=ranges, restPoses=rest,
-                                                      physicsClientId=CLIENT)
+        kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, lowerLimits=lower, upperLimits=upper,
+                                                      jointRanges=ranges, restPoses=rest, physicsClientId=CLIENT)
     elif target_quat is None:
         #ikSolver = p.IK_DLS or p.IK_SDLS
         kinematic_conf = p.calculateInverseKinematics(robot, link, target_point,
@@ -3631,6 +3634,28 @@ def get_null_space(robot, joints, custom_limits={}):
     joint_ranges = 10*np.ones(len(joints))
     return NullSpace(list(lower), list(upper), list(joint_ranges), list(rest_positions))
 
+def create_sub_robot(robot, first_joint, target_link):
+    selected_links = get_link_subtree(robot, first_joint) # TODO: child_link_from_joint?
+    selected_joints = prune_fixed_joints(robot, selected_links)
+    assert(target_link in selected_links)
+    sub_target_link = selected_links.index(target_link)
+    sub_robot = clone_body(robot, links=selected_links, visual=False, collision=False) # TODO: joint limits
+    return sub_robot, selected_joints, sub_target_link
+
+def closet_kinematic_solution(robot, first_joint, target_link, target_pose, max_iterations=200):
+    # TODO: gradient descent using collision_info
+    sub_robot, selected_joints, sub_target_link = create_sub_robot(robot, first_joint, target_link)
+    sub_joints = get_movable_joints(sub_robot)
+    for iteration in range(max_iterations):
+        # TODO: convergence
+        sub_kinematic_conf = inverse_kinematics_helper(sub_robot, sub_target_link, target_pose)
+        if sub_kinematic_conf is None:
+            break
+        set_joint_positions(sub_robot, sub_joints, sub_kinematic_conf)
+    set_joint_positions(robot, selected_joints, get_joint_positions(sub_robot, sub_joints))
+    remove_body(sub_robot)
+    return get_configuration(robot)
+
 def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
                           max_iterations=200, custom_limits={}, **kwargs):
     # TODO: fix stationary joints
@@ -3641,25 +3666,21 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
     # TODO: plan a path without needing to following intermediate waypoints
 
     lower_limits, upper_limits = get_custom_limits(robot, get_movable_joints(robot), custom_limits)
-    selected_links = get_link_subtree(robot, first_joint) # TODO: child_link_from_joint?
-    selected_movable_joints = prune_fixed_joints(robot, selected_links)
-    assert(target_link in selected_links)
-    selected_target_link = selected_links.index(target_link)
-    sub_robot = clone_body(robot, links=selected_links, visual=False, collision=False) # TODO: joint limits
-    sub_movable_joints = get_movable_joints(sub_robot)
-    #null_space = get_null_space(robot, selected_movable_joints, custom_limits=custom_limits)
+    sub_robot, selected_joints, sub_target_link = create_sub_robot(robot, first_joint, target_link)
+    sub_joints = get_movable_joints(sub_robot)
+    #null_space = get_null_space(robot, selected_joints, custom_limits=custom_limits)
     null_space = None
 
     solutions = []
     for target_pose in waypoint_poses:
         for iteration in range(max_iterations):
-            sub_kinematic_conf = inverse_kinematics_helper(sub_robot, selected_target_link, target_pose, null_space=null_space)
+            sub_kinematic_conf = inverse_kinematics_helper(sub_robot, sub_target_link, target_pose, null_space=null_space)
             if sub_kinematic_conf is None:
                 remove_body(sub_robot)
                 return None
-            set_joint_positions(sub_robot, sub_movable_joints, sub_kinematic_conf)
-            if is_pose_close(get_link_pose(sub_robot, selected_target_link), target_pose, **kwargs):
-                set_joint_positions(robot, selected_movable_joints, sub_kinematic_conf)
+            set_joint_positions(sub_robot, sub_joints, sub_kinematic_conf)
+            if is_pose_close(get_link_pose(sub_robot, sub_target_link), target_pose, **kwargs):
+                set_joint_positions(robot, selected_joints, sub_kinematic_conf)
                 kinematic_conf = get_configuration(robot)
                 if not all_between(lower_limits, kinematic_conf, upper_limits):
                     #movable_joints = get_movable_joints(robot)

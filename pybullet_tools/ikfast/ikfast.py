@@ -11,7 +11,7 @@ from .utils import compute_inverse_kinematics
 from ..utils import get_link_pose, link_from_name, multiply, invert, get_link_ancestors, \
     parent_joint_from_link, parent_link_from_joint, prune_fixed_joints, joints_from_names, INF, get_difference_fn, \
     get_joint_positions, get_min_limits, get_max_limits, interval_generator, elapsed_time, randomize, violates_limits, \
-    get_length
+    get_length, get_relative_pose
 
 # TODO: forward kinematics
 
@@ -33,12 +33,10 @@ def is_ik_compiled(ikfast_info):
 
 
 def get_base_from_ee(robot, ikfast_info, tool_link, world_from_target):
+    ee_link = link_from_name(robot, ikfast_info.ee_link)
+    tool_from_ee = get_relative_pose(robot, ee_link, tool_link)
     world_from_base = get_link_pose(robot, link_from_name(robot, ikfast_info.base_link))
-    world_from_ee = get_link_pose(robot, link_from_name(robot, ikfast_info.ee_link))
-    world_from_tool = get_link_pose(robot, tool_link)
-    tool_from_ee = multiply(invert(world_from_tool), world_from_ee)
-    base_from_ee = multiply(invert(world_from_base), world_from_target, tool_from_ee)
-    return base_from_ee
+    return multiply(invert(world_from_base), world_from_target, tool_from_ee)
 
 
 def get_ordered_ancestors(robot, link):

@@ -26,19 +26,28 @@ LEFT_ARM = 'left'
 RIGHT_ARM = 'right'
 ARM_NAMES = (LEFT_ARM, RIGHT_ARM)
 
-def side_from_arm(arm): # side_from_gripper
+def side_from_arm(arm):
     side = arm.split('_')[0]
     assert side in ARM_NAMES
     return side
 
-def arm_from_arm(arm): # TODO: rename to arm_from_side
-    assert (arm in ARM_NAMES)
-    return '{}_arm'.format(arm)
+side_from_gripper = side_from_arm
 
-def gripper_from_arm(arm):
-    assert (arm in ARM_NAMES)
-    return '{}_gripper'.format(arm)
+def arm_from_arm(arm): # TODO: deprecate
+    side = side_from_arm(arm)
+    assert (side in ARM_NAMES)
+    return '{}_arm'.format(side)
 
+arm_from_side = arm_from_arm
+
+def gripper_from_arm(arm): # TODO: deprecate
+    side = side_from_arm(arm)
+    assert (side in ARM_NAMES)
+    return '{}_gripper'.format(side)
+
+gripper_from_side = gripper_from_arm
+
+#####################################
 
 PR2_GROUPS = {
     'base': ['x', 'y', 'theta'],
@@ -64,6 +73,7 @@ PR2_TOOL_FRAMES = {
     'head': HEAD_LINK_NAME,
 }
 
+# TODO: deprecate to use the parent of the gripper joints
 PR2_GRIPPER_ROOTS = {
     LEFT_ARM: 'l_gripper_palm_link',
     RIGHT_ARM: 'r_gripper_palm_link',
