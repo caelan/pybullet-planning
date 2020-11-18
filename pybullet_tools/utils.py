@@ -3601,13 +3601,21 @@ def get_pose_distance(pose1, pose2):
 def interpolate_poses(pose1, pose2, pos_step_size=0.01, ori_step_size=np.pi/16):
     pos1, quat1 = pose1
     pos2, quat2 = pose2
-    num_steps = int(math.ceil(max(np.divide(get_pose_distance(pose1, pose2), [pos_step_size, ori_step_size]))))
-    for i in range(num_steps):
-        fraction = float(i) / num_steps
-        pos = convex_combination(pos1, pos2, w=fraction)
-        quat = quat_combination(quat1, quat2, fraction=fraction)
+    num_steps = max(2, int(math.ceil(max(
+        np.divide(get_pose_distance(pose1, pose2), [pos_step_size, ori_step_size])))))
+    yield pose1
+    for w in np.linspace(0, 1, num=num_steps, endpoint=True)[1:-1]:
+        pos = convex_combination(pos1, pos2, w=w)
+        quat = quat_combination(quat1, quat2, fraction=w)
         yield (pos, quat)
     yield pose2
+
+def interpolate(value1, value2, num_steps):
+    num_steps = max(num_steps, 2)
+    yield value1
+    for w in np.linspace(0, 1, num=num_steps, endpoint=True)[1:-1]:
+        yield convex_combination(value1, value2, w=w)
+    yield value2
 
 # def workspace_trajectory(robot, link, start_point, direction, quat, **kwargs):
 #     # TODO: pushing example

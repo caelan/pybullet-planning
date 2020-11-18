@@ -90,13 +90,13 @@ def ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
             break
         for conf in randomize(compute_inverse_kinematics(ikfast.get_ik, base_from_ee, free_positions)):
             difference = difference_fn(current_conf, conf)
-            if not violates_limits(robot, ik_joints, conf) and get_length(difference, norm=norm):
+            if not violates_limits(robot, ik_joints, conf) and (get_length(difference, norm=norm) <= max_distance):
                 #set_joint_positions(robot, ik_joints, conf)
                 yield conf
 
 
 def closest_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
-                               max_candidates=INF, norm=INF, **kwargs):
+                               max_candidates=INF, norm=INF, verbose=True, **kwargs):
     start_time = time.time()
     ik_joints = get_ik_joints(robot, ikfast_info, tool_link)
     current_conf = get_joint_positions(robot, ik_joints)
@@ -104,9 +104,12 @@ def closest_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
     if max_candidates < INF:
         generator = islice(generator, max_candidates)
     solutions = list(generator)
-    #print('Identified {} IK solutions in {:.3f} seconds'.format(len(solutions), elapsed_time(start_time)))
     # TODO: relative to joint limits
-    difference_fn = get_difference_fn(robot, ik_joints)
-    #distance_fn = get_distance_fn(robot, ik_joints)
+    difference_fn = get_difference_fn(robot, ik_joints) # get_distance_fn
     #set_joint_positions(robot, ik_joints, closest_conf)
-    return iter(sorted(solutions, key=lambda q: get_length(difference_fn(q, current_conf), norm=norm)))
+    solutions = sorted(solutions, key=lambda q: get_length(difference_fn(q, current_conf), norm=norm))
+    if verbose:
+        min_distance = min([INF] + [get_length(difference_fn(q, current_conf), norm=norm) for q in solutions])
+        print('Identified {} IK solutions with minimum distance of {:.3f} in {:.3f} seconds'.format(
+            len(solutions), min_distance, elapsed_time(start_time)))
+    return iter(solutions)
