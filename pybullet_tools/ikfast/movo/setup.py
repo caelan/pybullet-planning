@@ -15,7 +15,6 @@ from pybullet_tools.ikfast.compile import compile_ikfast
 ARMS = ['left', 'right']
 
 def main():
-    # TODO: doesn't currently work with python3
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--arm', choices=ARMS, required=True,
                         help='Which arm to compile')

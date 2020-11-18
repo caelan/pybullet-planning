@@ -13070,12 +13070,16 @@ static PyObject *left_arm_fk(PyObject *self, PyObject *args) {
 }
 
 static PyMethodDef ikLeftMethods[] = {
+    {"get_ik", left_arm_ik, METH_VARARGS, "Compute ik solutions using ikfast."},
+    {"get_fk", left_arm_fk, METH_VARARGS, "Compute fk solutions using ikfast."},
+    // TODO: deprecate
     {"leftIK", left_arm_ik, METH_VARARGS, "Compute IK for the PR2's left arm."},
     {"leftFK", left_arm_fk, METH_VARARGS, "Compute FK for the PR2's left arm."},
     {NULL, NULL, 0, NULL} // Not sure why/if this is needed. It shows up in the examples though(something about Sentinel).
 };
 
-#if PY_MAJOR_VERSION >= 3
+// OLD WAY
+/*#if PY_MAJOR_VERSION >= 3
 
 //// This is the python3.4 version.
 static struct PyModuleDef ikLeftModule = {
@@ -13097,6 +13101,44 @@ PyMODINIT_FUNC initikLeft(void) {
     (void) Py_InitModule("ikLeft", ikLeftMethods);
 }
 
+#endif*/
+
+// NEW WAY
+#if PY_MAJOR_VERSION >= 3
+
+static struct PyModuleDef ikLeftModule = {
+    PyModuleDef_HEAD_INIT,
+    "ikLeft",   /* name of module */
+    NULL, /* module documentation, may be NULL */
+    -1,       /* size of per-interpreter state of the module,
+                 or -1 if the module keeps state in global variables. */
+    ikLeftMethods
+};
+
+#define INITERROR return NULL
+
+PyMODINIT_FUNC
+PyInit_ikLeft(void)
+
+#else // PY_MAJOR_VERSION < 3
+#define INITERROR return
+
+PyMODINIT_FUNC
+initikLeft(void)
 #endif
+{
+#if PY_MAJOR_VERSION >= 3
+    PyObject *module = PyModule_Create(&ikLeftModule);
+#else
+    PyObject *module = Py_InitModule("ikLeft", ikLeftMethods);
+#endif
+
+if (module == NULL)
+    INITERROR;
+
+#if PY_MAJOR_VERSION >= 3
+    return module;
+#endif
+}
 
 //// END

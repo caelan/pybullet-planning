@@ -6,6 +6,9 @@ from ...pr2_utils import PR2_TOOL_FRAMES, get_torso_arm_joints, get_gripper_link
 from ...utils import multiply, get_link_pose, link_from_name, get_joint_positions, \
     joint_from_name, invert, get_custom_limits, all_between, sub_inverse_kinematics, set_joint_positions, \
     get_joint_positions, pairwise_collision, wait_for_user
+from ...ikfast.utils import IKFastInfo
+
+# TODO: deprecate
 
 IK_FRAME = {
     'left': 'l_gripper_tool_frame',
@@ -105,4 +108,11 @@ def pr2_inverse_kinematics(robot, arm, gripper_pose, obstacles=[], custom_limits
 
 #####################################
 
-# TODO: deprecate
+PR2_URDF = "models/pr2_description/pr2.urdf" # 87 joints
+#PR2_URDF = "models/pr2_description/pr2_hpn.urdf"
+#PR2_URDF = "models/pr2_description/pr2_kinect.urdf"
+DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
+
+
+PR2_INFOS = {arm: IKFastInfo(module_name='pr2.ik{}'.format(arm.capitalize()), base_link=BASE_FRAME,
+                             ee_link=IK_FRAME[arm], free_joints=[TORSO_JOINT, UPPER_JOINT[arm]]) for arm in IK_FRAME}

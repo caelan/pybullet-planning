@@ -23,8 +23,8 @@ def main():
     sys.argv[:] = sys.argv[:1] + ['build']
 
     arm = args.arm
-    compile_ikfast(module_name='{}_arm_ik'.format(arm),
-                   cpp_filename='{}_arm_ik.cpp'.format(arm))
+    compile_ikfast(module_name='ik{}'.format(arm.capitalize()), # TODO: {}_arm_ik
+                   cpp_filename='{}_arm_ik.cpp'.format(arm)) # TODO: {}_arm.cpp
 
 if __name__ == '__main__':
     main()
