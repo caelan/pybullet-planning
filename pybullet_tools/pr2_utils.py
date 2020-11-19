@@ -18,7 +18,7 @@ from .utils import multiply, get_link_pose, set_joint_position, set_joint_positi
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
     get_extend_fn, get_moving_links, link_pairs_collision, get_link_subtree, \
     clone_body, get_all_links, pairwise_collision, tform_point, get_camera_matrix, ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, \
-    wrap_angle, TRANSPARENT
+    wrap_angle, TRANSPARENT, PI
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -97,7 +97,11 @@ WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -
                  -1.6531320011389408, -2.978586584568441]
 CENTER_LEFT_ARM = [-0.07133691252641006, -0.052973836083405494, 1.5741805775919033, -1.4481146328076862,
                    1.571782540186805, -1.4891468812835686, -9.413338322697955]
-# WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296, -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
+STRAIGHT_LEFT_ARM = np.zeros(7)
+COMPACT_LEFT_ARM = [PI/4, 0., PI/2, -5*PI/8, PI/2, -PI/2, 5*PI/8] # TODO: generate programmatically
+CLEAR_LEFT_ARM = [PI/2, 0., PI/2, -PI/2, PI/2, -PI/2, 0.]
+# WIDE_RIGHT_ARM = [-1.3175723551150083, -0.09536552225976803, -1.396727055561703, -1.4433371993320296,
+#                   -1.5334243909312468, -1.7298129320065025, 6.230244924007009]
 
 PR2_LEFT_CARRY_CONFS = {
     'top': TOP_HOLDING_LEFT_ARM,
@@ -137,11 +141,12 @@ def rightarm_from_leftarm(config):
     return config * right_from_left
 
 def arm_conf(arm, left_config):
-    if arm == LEFT_ARM:
+    side = side_from_arm(arm)
+    if side == LEFT_ARM:
         return left_config
-    elif arm == RIGHT_ARM:
+    elif side == RIGHT_ARM:
         return rightarm_from_leftarm(left_config)
-    raise ValueError(arm)
+    raise ValueError(side)
 
 def get_carry_conf(arm, grasp_type):
     return arm_conf(arm, PR2_LEFT_CARRY_CONFS[grasp_type])
