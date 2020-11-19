@@ -182,6 +182,44 @@
        (e.g., base_link).  The included origin block is also an argument to the macro.  By convention,
        the origin block defines where the component is w.r.t its parent (in this case the parent
        is the world frame). For more, see http://www.ros.org/wiki/xacro -->
+
+  <!-- Caelan: adapted from drake/pr2_simplified.urdf -->
+  <link name="world_link"/>
+  <link name="base_link_0"/>
+  <link name="base_link_1"/>
+  <joint name="x" type="prismatic">
+    <limit lower="-5" upper="5"/>
+    <parent link="world_link"/>
+    <child link="base_link_0"/>
+    <axis xyz="1 0 0"/>
+  </joint>
+  <joint name="y" type="prismatic">
+    <limit lower="-5" upper="5"/>
+    <parent link="base_link_0"/>
+    <child link="base_link_1"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+  <joint name="theta" type="continuous">
+    <parent link="base_link_1"/>
+    <child link="base_footprint"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <transmission name="x_transmission" type="SimpleTransmission">
+    <actuator name="x_motor"/>
+    <joint name="x"/>
+    <mechanicalReduction>-70000.0</mechanicalReduction>
+  </transmission>
+  <transmission name="y_transmission" type="SimpleTransmission">
+    <actuator name="y_motor"/>
+    <joint name="y"/>
+    <mechanicalReduction>-70000.0</mechanicalReduction>
+  </transmission>
+  <transmission name="theta_transmission" type="SimpleTransmission">
+    <actuator name="theta_motor"/>
+    <joint name="theta"/>
+    <mechanicalReduction>-70000.0</mechanicalReduction>
+  </transmission>
+
   <link name="base_link">
     <inertial>
       <mass value="116.0"/>
@@ -203,7 +241,7 @@
     </collision>
   </link>
   <!-- base_footprint is a fictitious link(frame) that is on the ground right below base_link origin,
-         navigation stack dedpends on this frame -->
+         navigation stack depends on this frame -->
   <link name="base_footprint">
     <inertial>
       <mass value="1.0"/>
@@ -1585,6 +1623,227 @@
       <projectorTopicName>projector_wg6802418_controller/projector</projectorTopicName>
     </plugin>
   </gazebo>
+
+  <!-- Caelan: adding kinect1 -->
+  <joint name="head_mount_joint" type="fixed">
+    <parent link="head_plate_frame"/>
+    <child link="head_mount_link"/>
+    <origin rpy="0 0 0" xyz="-0.138 0 0.091"/>
+  </joint>
+  <link name="head_mount_link">
+    <inertial>
+      <mass value="0.1"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <!-- TODO(caelan): remove the prosilica -->
+        <mesh filename="meshes/sensors/kinect_prosilica_v0/115x100_swept_back--coarse.STL" scale="0.001 0.001 0.001"/>
+        <!--mesh filename="meshes/sensors/kinect_prosilica_v0/68-04546_Kinect_Sensor--coarse.STL" scale="0.001 0.001 0.001"/-->
+      </geometry>
+      <material name="gray">
+        <color rgba="0.5 0.5 0.5 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.0005"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="head_mount_kinect_ir_joint" type="fixed">
+    <parent link="head_mount_link"/>
+    <child link="head_mount_kinect_ir_link"/>
+    <origin rpy="0 0 0" xyz="-0.032267 0.0125 0.136453"/>
+  </joint>
+  <link name="head_mount_kinect_ir_link">
+    <inertial>
+      <mass value="0.1"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.0005"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.0005"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="head_mount_kinect_ir_optical_frame_joint" type="fixed">
+    <parent link="head_mount_kinect_ir_link"/>
+    <child link="head_mount_kinect_ir_optical_frame"/>
+    <origin rpy="-1.57079632679 0 -1.57079632679" xyz="0 0 0"/>
+  </joint>
+  <link name="head_mount_kinect_ir_optical_frame"/>
+  <gazebo reference="head_mount_kinect_ir_link">
+    <sensor:camera name="head_mount_ir_sensor">
+      <imageFormat>L8</imageFormat>
+      <imageSize>640 480</imageSize>
+      <hfov>57</hfov>
+      <nearClip>0.01</nearClip>
+      <farClip>5</farClip>
+      <updateRate>1.0</updateRate>
+      <baseline>0.2</baseline>
+      <controller:gazebo_ros_openni_kinect name="head_mount_kinect_ir_link_controller" plugin="libgazebo_ros_openni_kinect.so">
+        <alwaysOn>true</alwaysOn>
+        <updateRate>1.0</updateRate>
+        <cameraName>head_mount_kinect_ir</cameraName>
+        <imageTopicName>/head_mount_kinect/depth/image_raw</imageTopicName>
+        <cameraInfoTopicName>/head_mount_kinect/depth/camera_info</cameraInfoTopicName>
+        <depthImageTopicName>/head_mount_kinect/depth/image_raw</depthImageTopicName>
+        <depthImageInfoTopicName>/head_mount_kinect/depth/camera_info</depthImageInfoTopicName>
+        <pointCloudTopicName>/head_mount_kinect/depth/points</pointCloudTopicName>
+        <frameName>head_mount_kinect_ir_optical_frame</frameName>
+        <pointCloudCutoff>0.5</pointCloudCutoff>
+        <distortionK1>0.00000001</distortionK1>
+        <distortionK2>0.00000001</distortionK2>
+        <distortionK3>0.00000001</distortionK3>
+        <distortionT1>0.00000001</distortionT1>
+        <distortionT2>0.00000001</distortionT2>
+      </controller:gazebo_ros_openni_kinect>
+    </sensor:camera>
+    <material value="Gazebo/Red"/>
+  </gazebo>
+  <joint name="head_mount_kinect_rgb_joint" type="fixed">
+    <parent link="head_mount_kinect_ir_link"/>
+    <child link="head_mount_kinect_rgb_link"/>
+    <origin rpy="0.004135698602 -0.011418438943 0.00154585264" xyz="-0.008114967638 -0.023055241899 0.002703111055"/>
+  </joint>
+  <link name="head_mount_kinect_rgb_link">
+    <inertial>
+      <mass value="0.1"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.0005"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.0005"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="head_mount_kinect_rgb_optical_frame_joint" type="fixed">
+    <parent link="head_mount_kinect_rgb_link"/>
+    <child link="head_mount_kinect_rgb_optical_frame"/>
+    <origin rpy="-1.57079632679 0 -1.57079632679" xyz="0 0 0"/>
+  </joint>
+  <link name="head_mount_kinect_rgb_optical_frame"/>
+  <gazebo reference="head_mount_kinect_rgb_link">
+    <sensor:camera name="head_mount_rgb_sensor">
+      <imageFormat>R8G8B8</imageFormat>
+      <imageSize>640 480</imageSize>
+      <hfov>57</hfov>
+      <nearClip>0.01</nearClip>
+      <farClip>5</farClip>
+      <updateRate>1.0</updateRate>
+      <baseline>0.2</baseline>
+      <controller:gazebo_ros_openni_kinect name="head_mount_kinect_rgb_link_controller" plugin="libgazebo_ros_openni_kinect.so">
+        <alwaysOn>true</alwaysOn>
+        <updateRate>1.0</updateRate>
+        <cameraName>head_mount_kinect_rgb</cameraName>
+        <imageTopicName>/head_mount_kinect/rgb/image_raw</imageTopicName>
+        <cameraInfoTopicName>/head_mount_kinect/rgb/camera_info</cameraInfoTopicName>
+        <pointCloudTopicName>/head_mount_kinect/depth_registered/points</pointCloudTopicName>
+        <frameName>head_mount_kinect_rgb_optical_frame</frameName>
+        <pointCloudCutoff>0.5</pointCloudCutoff>
+        <distortionK1>0.00000001</distortionK1>
+        <distortionK2>0.00000001</distortionK2>
+        <distortionK3>0.00000001</distortionK3>
+        <distortionT1>0.00000001</distortionT1>
+        <distortionT2>0.00000001</distortionT2>
+      </controller:gazebo_ros_openni_kinect>
+    </sensor:camera>
+    <material value="Gazebo/Red"/>
+  </gazebo>
+
+  <!-- Caelan: removing prosilica camera -->
+  <joint name="head_mount_prosilica_joint" type="fixed">
+    <parent link="head_mount_link"/>
+    <child link="head_mount_prosilica_link"/>
+    <origin rpy="0 0 0" xyz="-0.046457 0.0125 0.088921"/>
+  </joint>
+  <link name="head_mount_prosilica_link">
+    <inertial>
+      <mass value="0.1"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.0005"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.0005"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="head_mount_prosilica_optical_frame_joint" type="fixed">
+    <parent link="head_mount_prosilica_link"/>
+    <child link="head_mount_prosilica_optical_frame"/>
+    <origin rpy="-1.57079632679 0 -1.57079632679" xyz="0 0 0"/>
+  </joint>
+  <link name="head_mount_prosilica_optical_frame"/>
+  <gazebo reference="head_mount_prosilica_link">
+    <sensor:camera name="head_mount_prosilica_link_sensor">
+      <imageFormat>R8G8B8</imageFormat>
+      <imageSize>320 240</imageSize>
+      <hfov>64.2</hfov>
+      <nearClip>0.1</nearClip>
+      <farClip>100</farClip>
+      <updateRate>1.0</updateRate>
+      <controller:gazebo_ros_prosilica name="head_mount_prosilica_link_controller" plugin="libgazebo_ros_prosilica.so">
+        <alwaysOn>true</alwaysOn>
+        <updateRate>1.0</updateRate>
+        <cameraName>prosilica_camera_1mb</cameraName>
+        <imageTopicName>image_raw</imageTopicName>
+        <cameraInfoTopicName>camera_info</cameraInfoTopicName>
+        <pollServiceName>request_image</pollServiceName>
+        <frameName>head_mount_prosilica_optical_frame</frameName>
+        <distortionK1>0.0</distortionK1>
+        <distortionK2>0.0</distortionK2>
+        <distortionK3>0.0</distortionK3>
+        <distortionT1>0.0</distortionT1>
+        <distortionT2>0.0</distortionT2>
+      </controller:gazebo_ros_prosilica>
+    </sensor:camera>
+    <sensor:camera name="head_mount_prosilica_link_sim_pcd_sensor">
+      <imageFormat>R8G8B8</imageFormat>
+      <imageSize>320 240</imageSize>
+      <hfov>64.2</hfov>
+      <nearClip>0.1</nearClip>
+      <farClip>100</farClip>
+      <updateRate>1.0</updateRate>
+      <controller:gazebo_ros_openni_kinect name="head_mount_prosilica_link_sim_pcd_controller" plugin="libgazebo_ros_openni_kinect.so">
+        <alwaysOn>true</alwaysOn>
+        <updateRate>1.0</updateRate>
+        <cameraName>prosilica_camera_1mb_sim_pcd</cameraName>
+        <imageTopicName>image_raw</imageTopicName>
+        <cameraInfoTopicName>camera_info</cameraInfoTopicName>
+        <frameName>head_mount_prosilica_optical_frame</frameName>
+      </controller:gazebo_ros_openni_kinect>
+    </sensor:camera>
+    <material value="Gazebo/Red"/>
+  </gazebo>
+
   <joint name="laser_tilt_mount_joint" type="revolute">
     <axis xyz="0 1 0"/>
     <limit effort="0.65" lower="-0.7854" upper="1.48353" velocity="10.0"/>
