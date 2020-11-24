@@ -1663,7 +1663,9 @@ LinkState = namedtuple('LinkState', ['linkWorldPosition', 'linkWorldOrientation'
 def get_link_state(body, link, kinematics=True, velocity=True):
     # TODO: the defaults are set to False?
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/pybullet.c
-    return LinkState(*p.getLinkState(body, link, #computeLinkVelocity=velocity, computeForwardKinematics=kinematics,
+    return LinkState(*p.getLinkState(body, link,
+                                     #computeForwardKinematics=kinematics,
+                                     #computeLinkVelocity=velocity,
                                      physicsClientId=CLIENT))
 
 def get_com_pose(body, link): # COM = center of mass
@@ -2502,6 +2504,10 @@ def oobb_from_points(points): # Not necessarily minimal volume
     tform[:d, 3] = mu.T
     return OOBB(aabb, pose_from_tform(tform))
 
+def tform_oobb(affine, oobb):
+    aabb, pose = oobb
+    return OOBB(aabb, multiply(affine, pose))
+
 #####################################
 
 # AABB approximation
@@ -2539,17 +2545,23 @@ def vertices_from_data(data):
     #   parameters = [get_data_extents(data)]
     else:
         raise NotImplementedError(geometry_type)
-    return apply_affine(get_data_pose(data), vertices)
+    return vertices
+
+def oobb_from_data(data):
+    link_from_data = get_data_pose(data)
+    vertices_data = vertices_from_data(data)
+    return OOBB(aabb_from_points(vertices_data), link_from_data)
 
 def vertices_from_link(body, link=BASE_LINK):
+    # TODO: get_mesh_data(body, link=link)
     # In local frame
     vertices = []
-    # TODO: requires the viewer to be active
-    #for data in get_visual_data(body, link):
+    #for data in get_visual_data(body, link): # TODO: requires the viewer to be active
     #    vertices.extend(vertices_from_data(data))
-    # Pybullet creates multiple collision elements (with unknown_file) when noncovex
-    for data in get_collision_data(body, link):
-        vertices.extend(vertices_from_data(data))
+    # PyBullet creates multiple collision elements (with unknown_file) when nonconvex
+    for data in get_collision_data(body, link): # get_visual_data | get_collision_data
+        # TODO: apply the inertial frame?
+        vertices.extend(apply_affine(get_data_pose(data), vertices_from_data(data)))
     return vertices
 
 OBJ_MESH_CACHE = {}
@@ -3898,10 +3910,10 @@ def distance_from_segment(x1, y1, x2, y2, x3, y3): # x3, y3 is the point
 def tform_point(affine, point):
     return point_from_pose(multiply(affine, Pose(point=point)))
 
-def apply_affine(affine, points):
+def tform_points(affine, points):
     return [tform_point(affine, p) for p in points]
 
-tform_points = apply_affine
+apply_affine = tform_points
 
 def is_mesh_on_surface(polygon, world_from_surface, mesh, world_from_mesh, epsilon=1e-2):
     surface_from_mesh = multiply(invert(world_from_surface), world_from_mesh)
