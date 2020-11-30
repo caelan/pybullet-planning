@@ -2509,6 +2509,10 @@ def tform_oobb(affine, oobb):
     aabb, pose = oobb
     return OOBB(aabb, multiply(affine, pose))
 
+def aabb_from_oobb(oobb):
+    aabb, pose = oobb
+    return aabb_from_points(tform_points(pose, get_aabb_vertices(aabb)))
+
 #####################################
 
 # AABB approximation
