@@ -1144,6 +1144,7 @@ def get_length(vec, norm=2):
     return np.linalg.norm(vec, ord=norm)
 
 def get_difference(p1, p2):
+    assert len(p1) == len(p2)
     return np.array(p2) - np.array(p1)
 
 def get_distance(p1, p2, **kwargs):
@@ -3435,6 +3436,26 @@ def joint_controller(body, joints, target, tolerance=1e-3, timeout=INF, **kwargs
         time_elapsed += dt
         positions = get_joint_positions(body, joints)
         # TODO: return timeout (or throw error)
+
+def waypoint_joint_controller(body, joints, target, tolerance=1e-3, time_step=0.1, timeout=INF, **kwargs):
+    # TODO: leading instead of waypoint?
+    assert(len(joints) == len(target))
+    # TODO: calculateInverseDynamics
+    duration_fn = get_duration_fn(body, joints)
+    dt = get_time_step() # TODO: use dt instead of time_step?
+    time_elapsed = 0.
+    #print(duration_fn(get_joint_positions(body, joints), target)) # TODO: compute waypoint from velocity
+    while time_elapsed < timeout: # TODO: timeout based on the distance
+        positions = get_joint_positions(body, joints)
+        remaining = duration_fn(positions, target)
+        if np.allclose(positions, target, atol=tolerance, rtol=0):
+            break
+        #print(np.divide(get_joint_velocities(body, joints), get_max_velocities(body, joints)))
+        w = min(remaining, time_step) / remaining
+        waypoint = convex_combination(positions, target, w=w) # Important to not include wrap around
+        control_joints(body, joints, waypoint, **kwargs)
+        yield positions
+        time_elapsed += dt
 
 def joint_controller_hold(body, joints, target=None, **kwargs):
     """
