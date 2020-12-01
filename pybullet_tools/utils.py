@@ -139,7 +139,7 @@ def ensure_dir(f):
     if not os.path.exists(d):
         os.makedirs(d)
 
-def safe_zip(sequence1, sequence2):
+def safe_zip(sequence1, sequence2): # TODO: *args
     sequence1, sequence2 = list(sequence1), list(sequence2)
     assert len(sequence1) == len(sequence2)
     return list(zip(sequence1, sequence2))
@@ -432,28 +432,38 @@ class PoseSaver(Saver):
         return '{}({})'.format(self.__class__.__name__, self.body)
 
 class ConfSaver(Saver):
-    def __init__(self, body): #, joints):
+    def __init__(self, body, joints=None):
         self.body = body
-        self.conf = get_configuration(body)
+        if joints is None:
+            joints = get_movable_joints(self.body)
+        self.joints = joints
+        self.positions = get_joint_positions(self.body, self.joints)
+        self.velocities = get_joint_velocities(self.body, self.joints)
+
+    @property
+    def conf(self):
+        return self.positions
 
     def apply_mapping(self, mapping):
         self.body = mapping.get(self.body, self.body)
 
     def restore(self):
-        set_configuration(self.body, self.conf)
+        #set_configuration(self.body, self.conf)
+        #set_joint_positions(self.body, self.joints, self.positions)
+        set_joint_states(self.body, self.joints, self.positions, self.velocities)
+        #set_joint_velocities(self.body, self.joints, self.velocities)
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.body)
 
 class BodySaver(Saver):
-    def __init__(self, body): #, pose=None):
+    def __init__(self, body, **kwargs): #, pose=None):
         #if pose is None:
         #    pose = get_pose(body)
         self.body = body
         self.pose_saver = PoseSaver(body)
-        self.conf_saver = ConfSaver(body)
+        self.conf_saver = ConfSaver(body, **kwargs)
         self.savers = [self.pose_saver, self.conf_saver]
-        # TODO: store velocities
 
     def apply_mapping(self, mapping):
         for saver in self.savers:
@@ -1475,13 +1485,29 @@ def get_joint_torques(body, joints):
 
 ##########
 
+def set_joint_state(body, joint, position, velocity):
+    p.resetJointState(body, joint, targetValue=position, targetVelocity=velocity, physicsClientId=CLIENT)
+
 def set_joint_position(body, joint, value):
-    p.resetJointState(body, joint, value, targetVelocity=0, physicsClientId=CLIENT)
+    # TODO: remove targetVelocity=0
+    p.resetJointState(body, joint, targetValue=value, targetVelocity=0, physicsClientId=CLIENT)
+
+# def set_joint_velocity(body, joint, velocity):
+#     p.resetJointState(body, joint, targetVelocity=velocity, physicsClientId=CLIENT) # TODO: targetValue required
+
+def set_joint_states(body, joints, positions, velocities):
+    assert len(joints) == len(positions) == len(velocities)
+    for joint, position, velocity in zip(joints, positions, velocities):
+        set_joint_state(body, joint, position, velocity)
 
 def set_joint_positions(body, joints, values):
-    assert len(joints) == len(values)
-    for joint, value in zip(joints, values):
+    for joint, value in safe_zip(joints, values):
         set_joint_position(body, joint, value)
+
+# def set_joint_velocities(body, joints, velocities):
+#     assert len(joints) == len(velocities)
+#     for joint, velocity in zip(joints, velocities):
+#         set_joint_velocity(body, joint, velocity)
 
 def get_configuration(body):
     return get_joint_positions(body, get_movable_joints(body))
@@ -1673,6 +1699,7 @@ def get_com_pose(body, link): # COM = center of mass
     if link == BASE_LINK:
         return get_pose(body)
     link_state = get_link_state(body, link)
+    # urdfLinkFrame = comLinkFrame * localInertialFrame.inverse()
     return link_state.linkWorldPosition, link_state.linkWorldOrientation
 
 def get_link_inertial_pose(body, link):
@@ -1790,7 +1817,7 @@ def get_dynamics_info(body, link=BASE_LINK):
 
 get_link_info = get_dynamics_info
 
-def get_mass(body, link=BASE_LINK):
+def get_mass(body, link=BASE_LINK): # mass in kg
     # TODO: get full mass
     return get_dynamics_info(body, link).mass
 
@@ -1798,7 +1825,7 @@ def set_dynamics(body, link=BASE_LINK, **kwargs):
     # TODO: iterate over all links
     p.changeDynamics(body, link, physicsClientId=CLIENT, **kwargs)
 
-def set_mass(body, mass, link=BASE_LINK):
+def set_mass(body, mass, link=BASE_LINK): # mass in kg
     set_dynamics(body, link=link, mass=mass)
 
 def set_static(body):
@@ -2615,7 +2642,8 @@ def contact_collision():
     return len(p.getContactPoints(physicsClientId=CLIENT)) != 0
 
 ContactResult = namedtuple('ContactResult', ['contactFlag', 'bodyUniqueIdA', 'bodyUniqueIdB',
-                                             'linkIndexA', 'linkIndexB', 'positionOnA', 'positionOnB', 'contactNormalOnB', 'contactDistance', 'normalForce'])
+                                             'linkIndexA', 'linkIndexB', 'positionOnA', 'positionOnB',
+                                             'contactNormalOnB', 'contactDistance', 'normalForce'])
 
 def flatten_links(body, links=None):
     if links is None:
@@ -2676,6 +2704,8 @@ def any_link_pair_collision(body1, links1, body2, links2=None, **kwargs):
             return True
     return False
 
+link_pairs_collision = any_link_pair_collision
+
 def body_collision(body1, body2, **kwargs):
     return len(get_closest_points(body1, body2, **kwargs)) != 0
 
@@ -2695,16 +2725,6 @@ def pairwise_collisions(body, obstacles, link=None, **kwargs):
 
 def single_collision(body, **kwargs):
     return pairwise_collisions(body, get_bodies(), **kwargs)
-
-def link_pairs_collision(body1, links1, body2, links2=None, **kwargs):
-    if links2 is None:
-        links2 = get_all_links(body2)
-    for link1, link2 in product(links1, links2):
-        if (body1 == body2) and (link1 == link2):
-            continue
-        if pairwise_link_collision(body1, link1, body2, link2, **kwargs):
-            return True
-    return False
 
 #####################################
 
