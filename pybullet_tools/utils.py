@@ -1062,6 +1062,7 @@ def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, 
     return CameraImage(rgb, depth, segmented, view_pose, camera_matrix)
 
 def get_image_at_pose(camera_pose, camera_matrix, far=5.0, **kwargs):
+    # far is the maximum depth value
     width, height = map(int, dimensions_from_camera_matrix(camera_matrix))
     _, vertical_fov = get_field_of_view(camera_matrix)
     camera_point = point_from_pose(camera_pose)
@@ -3411,43 +3412,70 @@ def get_grasp_pose(constraint):
 
 # Control
 
-def control_joint(body, joint, position=None, velocity=0.):
+def control_joint(body, joint, position=None, velocity=0., position_gain=None, max_velocity=None, max_force=None):
     if position is None:
         position = get_joint_position(body, joint)
-    return p.setJointMotorControl2(bodyUniqueId=body,
+    kwargs = {}
+    if position_gain is not None:
+        velocity_gain = 0.1*position_gain
+        kwargs.update({
+            'positionGain': position_gain,
+            'velocityGain': velocity_gain,
+        })
+    if max_velocity is not None:
+        #max_velocity = get_max_velocity(body, joint)
+        kwargs.update({
+            'maxVelocity': max_velocity,
+        })
+    if max_force is not None:
+        #max_force = get_max_force(body, joint)
+        kwargs.update({
+            'force': max_force,
+        })
+    return p.setJointMotorControl2(bodyIndex=body, # bodyUniqueId
                                    jointIndex=joint,
                                    controlMode=p.POSITION_CONTROL,
                                    targetPosition=position,
                                    targetVelocity=velocity,
-                                   #maxVelocity=get_max_velocity(body, joint),
-                                   #force=get_max_force(body, joint),
-                                   physicsClientId=CLIENT)
+                                   physicsClientId=CLIENT, **kwargs)
 
-def control_joints(body, joints, positions=None, velocities=None, position_gain=None):
+def control_joints(body, joints, positions=None, velocities=None, position_gain=None, max_velocity=None, max_force=None):
     if positions is None:
         positions = get_joint_positions(body, joints)
     if velocities is None:
         velocities = [0.0] * len(joints)
-    if position_gain is None:
-        return p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL,
-                                           targetPositions=positions,
-                                           targetVelocities=velocities, # Any change when removed?
-                                           physicsClientId=CLIENT)
-    else:
-        velocity_gain = 0.1*position_gain
-        # forces = [get_max_force(body, joint) for joint in joints]
-        # forces = [5000]*len(joints) # 20000
-        return p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL,
-                                           targetPositions=positions,
-                                           targetVelocities=velocities,
-                                           physicsClientId=CLIENT,
-                                           positionGains=[position_gain] * len(joints),
-                                           velocityGains=[velocity_gain] * len(joints),)
-                                           #forces=forces)
 
-def control_joints_hold(body, joints, positions=None):
+    if max_velocity is not None:
+        for i, joint in enumerate(joints):
+            control_joint(body, joint, position=positions[i], velocity=velocities[i],
+                          position_gain=position_gain, max_velocity=max_velocity, max_force=max_force)
+        return None
+
+    kwargs = {}
+    if position_gain is not None:
+        velocity_gain = 0.1*position_gain
+        kwargs.update({
+            'positionGains': [position_gain] * len(joints),
+            'velocityGains': [velocity_gain] * len(joints),
+        })
+    if max_force is not None:
+        #max_forces = [get_max_force(body, joint) for joint in joints]
+        max_forces = [max_force] * len(joints)
+        # max_forces = [5000]*len(joints) # 20000
+        #print(max_forces)
+        kwargs.update({
+            'forces': max_forces,
+        })
+    return p.setJointMotorControlArray(bodyUniqueId=body,
+                                       jointIndices=joints,
+                                       controlMode=p.POSITION_CONTROL,
+                                       targetPositions=positions,
+                                       targetVelocities=velocities,
+                                       physicsClientId=CLIENT, **kwargs)
+
+def control_joints_hold(body, joints, positions=None, **kwargs):
     configuration = modify_configuration(body, joints, positions)
-    return control_joints(body, get_movable_joints(body), configuration)
+    return control_joints(body, get_movable_joints(body), configuration, **kwargs)
 
 def joint_controller(body, joints, target, tolerance=1e-3, timeout=INF, **kwargs):
     assert(len(joints) == len(target))
