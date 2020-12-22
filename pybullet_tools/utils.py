@@ -148,6 +148,8 @@ def ensure_dir(f):
     if not os.path.exists(d):
         os.makedirs(d)
 
+##################################################
+
 def safe_zip(sequence1, sequence2): # TODO: *args
     sequence1, sequence2 = list(sequence1), list(sequence2)
     assert len(sequence1) == len(sequence2)
@@ -238,6 +240,13 @@ def find(test, sequence):
         if test(item):
             return item
     return None
+
+def merge_dicts(*args):
+    result = {}
+    for d in args:
+        result.update(d)
+    return result
+    # return dict(reduce(operator.add, [d.items() for d in args]))
 
 ##################################################
 
@@ -361,14 +370,19 @@ GREY = (0.5, 0.5, 0.5, 1)
 YELLOW = (1, 1, 0, 1)
 TRANSPARENT = (0, 0, 0, 0)
 
-COLOR_FROM_NAME = {
-    'red': RED,
-    'green': GREEN,
-    'blue': BLUE,
+ACHROMATIC_COLORS = {
     'white': WHITE,
     'grey': GREY,
     'black': BLACK,
 }
+
+CHROMATIC_COLORS = {
+    'red': RED,
+    'green': GREEN,
+    'blue': BLUE,
+}
+
+COLOR_FROM_NAME = merge_dicts(ACHROMATIC_COLORS, CHROMATIC_COLORS)
 
 def apply_alpha(color, alpha=1.0):
     if color is None:
