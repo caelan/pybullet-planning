@@ -57,7 +57,7 @@ WSG_50_URDF = 'models/drake/wsg_50_description/urdf/wsg_50_mesh_visual.urdf' # w
 PANDA_HAND_URDF = "models/franka_description/robots/hand.urdf"
 PANDA_ARM_URDF = "models/franka_description/robots/panda_arm_hand.urdf"
 
-# Pybullet Robots
+# PyBullet Robots
 #PYBULLET_DIRECTORY = add_data_path()
 KUKA_IIWA_URDF = "kuka_iiwa/model.urdf"
 KUKA_IIWA_GRIPPER_SDF = "kuka_iiwa/kuka_with_gripper.sdf"
@@ -67,8 +67,17 @@ HUMANOID_MJCF = "mjcf/humanoid.xml"
 HUSKY_URDF = "husky/husky.urdf"
 RACECAR_URDF = 'racecar/racecar.urdf' # racecar_differential.urdf
 PR2_GRIPPER = 'pr2_gripper.urdf'
-# wsg50_one_motor_gripper | wsg50_one_motor_gripper_free_base | wsg50_one_motor_gripper_new | wsg50_one_motor_gripper_no_finger
-WSG_GRIPPER = 'gripper/wsg50_one_motor_gripper_no_finger.sdf'
+PANDA_URDF = 'franka_panda/panda.urdf'
+
+# PyBullet wsg50 robots
+# wsg50_one_motor_gripper.sdf - no visual
+# wsg50_one_motor_gripper_free_base.sdf - seg fault
+# wsg50_one_motor_gripper_left_finger.urdf - no fingers
+# wsg50_one_motor_gripper_new.sdf - no visual
+# wsg50_one_motor_gripper_new_free_base.sdf - octopus
+# wsg50_one_motor_gripper_no_finger.sdf - no visual
+# wsg50_one_motor_gripper_right_finger.urdf - no fingers
+WSG_GRIPPER = 'gripper/wsg50_one_motor_gripper_new.sdf'
 
 # PyBullet Objects
 KIVA_SHELF_SDF = "kiva_shelf/model.sdf"
@@ -2593,6 +2602,7 @@ def vertices_from_link(body, link=BASE_LINK):
     #    vertices.extend(vertices_from_data(data))
     # PyBullet creates multiple collision elements (with unknown_file) when nonconvex
     for data in get_collision_data(body, link): # get_visual_data | get_collision_data
+        # TODO: get_visual_data usually has a valid mesh file unlike get_collision_data
         # TODO: apply the inertial frame?
         vertices.extend(apply_affine(get_data_pose(data), vertices_from_data(data)))
     return vertices
@@ -3412,7 +3422,7 @@ def get_grasp_pose(constraint):
 
 # Control
 
-def control_joint(body, joint, position=None, velocity=0., position_gain=None, max_velocity=None, max_force=None):
+def control_joint(body, joint, position=None, velocity=0., position_gain=None, velocity_scale=None, max_force=None):
     if position is None:
         position = get_joint_position(body, joint)
     kwargs = {}
@@ -3422,8 +3432,8 @@ def control_joint(body, joint, position=None, velocity=0., position_gain=None, m
             'positionGain': position_gain,
             'velocityGain': velocity_gain,
         })
-    if max_velocity is not None:
-        #max_velocity = get_max_velocity(body, joint)
+    if velocity_scale is not None:
+        max_velocity = velocity_scale*get_max_velocity(body, joint)
         kwargs.update({
             'maxVelocity': max_velocity,
         })
@@ -3439,16 +3449,16 @@ def control_joint(body, joint, position=None, velocity=0., position_gain=None, m
                                    targetVelocity=velocity,
                                    physicsClientId=CLIENT, **kwargs)
 
-def control_joints(body, joints, positions=None, velocities=None, position_gain=None, max_velocity=None, max_force=None):
+def control_joints(body, joints, positions=None, velocities=None, position_gain=None, velocity_scale=None, max_force=None):
     if positions is None:
         positions = get_joint_positions(body, joints)
     if velocities is None:
         velocities = [0.0] * len(joints)
 
-    if max_velocity is not None:
+    if velocity_scale is not None:
         for i, joint in enumerate(joints):
             control_joint(body, joint, position=positions[i], velocity=velocities[i],
-                          position_gain=position_gain, max_velocity=max_velocity, max_force=max_force)
+                          position_gain=position_gain, velocity_scale=velocity_scale, max_force=max_force)
         return None
 
     kwargs = {}
