@@ -2183,6 +2183,7 @@ def visual_shape_from_data(data, client=None):
                                physicsClientId=client)
 
 def get_visual_data(body, link=BASE_LINK):
+    # TODO: might require the viewer to be active
     visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body, physicsClientId=CLIENT)]
     return list(filter(lambda d: d.linkIndex == link, visual_data))
 
@@ -2608,16 +2609,15 @@ def oobb_from_data(data):
     vertices_data = vertices_from_data(data)
     return OOBB(aabb_from_points(vertices_data), link_from_data)
 
-def vertices_from_link(body, link=BASE_LINK):
+def vertices_from_link(body, link=BASE_LINK, collision=True):
     # TODO: get_mesh_data(body, link=link)
     # In local frame
     vertices = []
-    #for data in get_visual_data(body, link): # TODO: requires the viewer to be active
-    #    vertices.extend(vertices_from_data(data))
     # PyBullet creates multiple collision elements (with unknown_file) when nonconvex
-    for data in get_collision_data(body, link): # get_visual_data | get_collision_data
+    get_data = get_collision_data if collision else get_visual_data
+    for data in get_data(body, link):
         # TODO: get_visual_data usually has a valid mesh file unlike get_collision_data
-        # TODO: apply the inertial frame?
+        # TODO: apply the inertial frame
         vertices.extend(apply_affine(get_data_pose(data), vertices_from_data(data)))
     return vertices
 
