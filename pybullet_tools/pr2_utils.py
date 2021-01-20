@@ -18,7 +18,7 @@ from .utils import multiply, get_link_pose, set_joint_position, set_joint_positi
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
     get_extend_fn, get_moving_links, link_pairs_collision, get_link_subtree, \
     clone_body, get_all_links, pairwise_collision, tform_point, get_camera_matrix, ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, \
-    wrap_angle, TRANSPARENT, PI
+    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -511,9 +511,8 @@ def is_visible_point(camera_matrix, depth, point_world, camera_pose=unit_pose())
     point_camera = tform_point(invert(camera_pose), point_world)
     if not (0 <= point_camera[2] < depth):
         return False
-    px, py = pixel_from_ray(camera_matrix, point_camera)
-    width, height = dimensions_from_camera_matrix(camera_matrix)
-    return (0 <= px < width) and (0 <= py < height)
+    pixel = pixel_from_point(camera_matrix, point_camera)
+    return pixel is not None
 
 def is_visible_aabb(aabb, **kwargs):
     # TODO: do intersect as well for identifying new obstacles
@@ -526,10 +525,11 @@ def is_visible_aabb(aabb, **kwargs):
     return not (np.any(body_lower[:2] < view_lower[:2]) or
                 np.any(view_upper[:2] < body_upper[:2]))
 
-def support_from_aabb(aabb):
+def support_from_aabb(aabb, near=True):
     lower, upper = aabb
-    min_x, min_y, z = lower
-    max_x, max_y, _ = upper
+    min_x, min_y, min_z = lower
+    max_x, max_y, max_z = upper
+    z = min_z if near else max_z
     return [(min_x, min_y, z), (min_x, max_y, z),
             (max_x, max_y, z), (max_x, min_y, z)]
 
@@ -679,6 +679,9 @@ def get_view_aabb(body, view_pose, **kwargs):
         body_view = multiply(invert(view_pose), get_pose(body))
         set_pose(body, body_view)
         return get_aabb(body, **kwargs)
+
+def get_view_oobb(body, view_pose, **kwargs):
+    return OOBB(get_view_aabb(body, view_pose, **kwargs), view_pose)
 
 def get_detection_cone(pr2, body, camera_link=HEAD_LINK_NAME, depth=MAX_VISUAL_DISTANCE, **kwargs):
     head_link = link_from_name(pr2, camera_link)

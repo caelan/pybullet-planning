@@ -719,16 +719,21 @@ def wait_for_interrupt(max_time=np.inf):
     finally:
         print()
 
-def disable_viewer():
-    p.configureDebugVisualizer(p.COV_ENABLE_GUI, False, physicsClientId=CLIENT)
-    p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, False, physicsClientId=CLIENT)
-    p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, False, physicsClientId=CLIENT)
-    p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, False, physicsClientId=CLIENT)
+def set_preview(enable):
+    p.configureDebugVisualizer(p.COV_ENABLE_GUI, enable, physicsClientId=CLIENT)
+    p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, enable, physicsClientId=CLIENT)
+    p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, enable, physicsClientId=CLIENT)
+    p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, enable, physicsClientId=CLIENT)
     #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, False, physicsClientId=CLIENT)
     #p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING, True, physicsClientId=CLIENT)
     #p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, False, physicsClientId=CLIENT)
     #p.configureDebugVisualizer(p.COV_ENABLE_WIREFRAME, True, physicsClientId=CLIENT)
-    #p.COV_ENABLE_MOUSE_PICKING, p.COV_ENABLE_KEYBOARD_SHORTCUTS
+
+def enable_preview():
+    set_preview(enable=True)
+
+def disable_preview():
+    set_preview(enable=False)
 
 def set_renderer(enable):
     client = CLIENT
@@ -773,6 +778,7 @@ def connect(use_gui=True, shadows=True, color=None, width=None, height=None):
             options += '--height={}'.format(height)
         sim_id = p.connect(method, options=options) # key=None,
         #sim_id = p.connect(p.GUI, options="--opengl2") if use_gui else p.connect(p.DIRECT)
+
     assert 0 <= sim_id
     #sim_id2 = p.connect(p.SHARED_MEMORY)
     #print(sim_id, sim_id2)
@@ -780,12 +786,11 @@ def connect(use_gui=True, shadows=True, color=None, width=None, height=None):
     if use_gui:
         # p.COV_ENABLE_PLANAR_REFLECTION
         # p.COV_ENABLE_SINGLE_STEP_RENDERING
-        p.configureDebugVisualizer(p.COV_ENABLE_GUI, False, physicsClientId=sim_id)
-        p.configureDebugVisualizer(p.COV_ENABLE_TINY_RENDERER, False, physicsClientId=sim_id)
-        p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, False, physicsClientId=sim_id)
-        p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, False, physicsClientId=sim_id)
-        p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, False, physicsClientId=sim_id)
+        disable_preview()
+        p.configureDebugVisualizer(p.COV_ENABLE_TINY_RENDERER, False, physicsClientId=sim_id) # TODO: does this matter?
         p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, shadows, physicsClientId=sim_id)
+        p.configureDebugVisualizer(p.COV_ENABLE_MOUSE_PICKING, False, physicsClientId=sim_id) # mouse moves meshes
+        p.configureDebugVisualizer(p.COV_ENABLE_KEYBOARD_SHORTCUTS, False, physicsClientId=sim_id)
 
     # you can also use GUI mode, for faster OpenGL rendering (instead of TinyRender CPU)
     #visualizer_options = {
@@ -902,6 +907,8 @@ def reset_simulation():
 
 #####################################
 
+Pixel = namedtuple('Pixel', ['row', 'column'])
+
 def get_camera_matrix(width, height, fx, fy=None):
     if fy is None:
         fy = fx
@@ -912,7 +919,7 @@ def get_camera_matrix(width, height, fx, fy=None):
                      [0, 0, 1]])
 
 def clip_pixel(pixel, width, height):
-    x, y = pixel
+    x, y = pixel # TODO: row, column instead?
     return clip(x, 0, width-1), clip(y, 0, height-1)
 
 def ray_from_pixel(camera_matrix, pixel):
@@ -933,6 +940,51 @@ def get_field_of_view(camera_matrix):
 
 def get_focal_lengths(dims, fovs):
     return np.divide(dims, np.tan(fovs / 2)) / 2
+
+def pixel_from_point(camera_matrix, point_camera):
+    px, py = pixel_from_ray(camera_matrix, point_camera)
+    width, height = dimensions_from_camera_matrix(camera_matrix)
+    if (0 <= px < width) and (0 <= py < height):
+        r, c = np.floor([py, px]).astype(int)
+        return Pixel(r, c)
+    return None
+
+def get_image_aabb(camera_matrix):
+    upper = np.array(dimensions_from_camera_matrix(camera_matrix))
+    lower = np.zeros(upper.shape)
+    return AABB(lower, upper)
+
+def get_visible_aabb(camera_matrix, rays):
+    image_aabb = get_image_aabb(camera_matrix)
+    rays_aabb = aabb_from_points([pixel_from_ray(camera_matrix, ray) for ray in rays])
+    intersection = aabb_intersection(image_aabb, rays_aabb)
+    if intersection is None:
+        return intersection
+    return AABB(*np.array(intersection).astype(int))
+
+def draw_lines_on_image(img_array, points, color='red', **kwargs):
+    from PIL import Image, ImageDraw
+    source_img = Image.fromarray(img_array)
+    draw = ImageDraw.Draw(source_img)
+    draw.line(list(map(tuple, points)), fill=color, **kwargs)
+    return np.array(source_img)
+
+def draw_box_on_image(img_array, aabb, color='red', **kwargs):
+    # https://github.com/caelan/ROS-Labeler/blob/master/main.py
+    # https://github.mit.edu/caelan/rl-plan/blob/master/planar_ml/rect_cnn.py
+    # https://pillow.readthedocs.io/en/stable/reference/ImageDraw.html
+    # TODO: annotate boxes with text
+    from PIL import Image, ImageDraw
+    source_img = Image.fromarray(img_array)
+    draw = ImageDraw.Draw(source_img)
+    #box = list(np.array(aabb).astype(int).flatten())
+    box = list(map(tuple, aabb))
+    draw.rectangle(box, fill=None, outline=color, **kwargs)
+    return np.array(source_img)
+
+def extract_box_from_image(img_array, box):
+    (x1, y1), (x2, y2) = np.array(box).astype(int)
+    return img_array[y1:y2+1, x1:x2+1, ...]
 
 #####################################
 
@@ -2459,6 +2511,20 @@ def aabb_overlap(aabb1, aabb2):
     return np.less_equal(lower1, upper2).all() and \
            np.less_equal(lower2, upper1).all()
 
+def aabb_empty(aabb):
+    lower, upper = aabb
+    return np.less(upper, lower).any()
+
+def aabb_intersection(*aabbs):
+    # https://github.mit.edu/caelan/lis-openrave/blob/master/manipulation/bodies/bounding_volumes.py
+    lower = np.max([lower for lower, _ in aabbs], axis=0)
+    upper = np.min([upper for _, upper in aabbs], axis=0)
+    aabb = AABB(lower, upper)
+    print(aabb)
+    if aabb_empty(aabb):
+        return None
+    return aabb
+
 def get_subtree_aabb(body, root_link=BASE_LINK):
     return aabb_union(get_aabb(body, link) for link in get_link_subtree(body, root_link))
 
@@ -2494,7 +2560,7 @@ def get_center_extent(body, **kwargs):
 
 def aabb2d_from_aabb(aabb):
     (lower, upper) = aabb
-    return lower[:2], upper[:2]
+    return AABB(lower[:2], upper[:2])
 
 def aabb_contains_aabb(contained, container):
     lower1, upper1 = contained
@@ -2508,6 +2574,10 @@ def aabb_contains_point(point, container):
     return np.less_equal(lower, point).all() and \
            np.less_equal(point, upper).all()
     #return np.all(lower <= point) and np.all(point <= upper)
+
+def sample_aabb(aabb):
+    lower, upper = aabb
+    return np.random.uniform(lower, upper)
 
 def get_bodies_in_region(aabb):
     (lower, upper) = aabb
@@ -2536,6 +2606,8 @@ def get_aabb_edges(aabb):
             p2 = [aabb[i2[k]][k] for k in range(d)]
             lines.append((p1, p2))
     return lines
+
+# TODO: scale / buffer AABB
 
 #####################################
 
@@ -3246,9 +3318,10 @@ def sample_placement_on_aabb(top_body, bottom_aabb, top_pose=unit_pose(),
         center, extent = get_center_extent(top_body)
         lower = (np.array(bottom_aabb[0]) + percent*extent/2)[:2]
         upper = (np.array(bottom_aabb[1]) - percent*extent/2)[:2]
-        if np.less(upper, lower).any():
+        aabb = AABB(lower, upper)
+        if aabb_empty(aabb):
             continue
-        x, y = np.random.uniform(lower, upper)
+        x, y = sample_aabb(aabb)
         z = (bottom_aabb[1] + extent/2.)[2] + epsilon
         point = np.array([x, y, z]) + (get_point(top_body) - center)
         pose = multiply(Pose(point, rotation), top_pose)
@@ -3829,12 +3902,24 @@ def get_lifetime(lifetime):
         return 0
     return lifetime
 
-def add_debug_parameter():
+def add_parameter(name, lower=0., upper=1., initial=0.):
     # TODO: make a slider that controls the step in the trajectory
     # TODO: could store a list of savers
-    #targetVelocitySlider = p.addUserDebugParameter("wheelVelocity", -10, 10, 0)
-    #maxForce = p.readUserDebugParameter(maxForceSlider)
-    raise NotImplementedError()
+    return p.addUserDebugParameter(name, lower, upper, initial, physicsClientId=CLIENT)
+
+def add_button(name, initial=False):
+    # If Minimum value > maximum value a button instead of slider will appear
+    # For a button, the value of getUserDebugParameter for a button increases 1 at each button press
+    return add_parameter(name, lower=True, upper=False, initial=initial)
+
+def read_parameter(debug):
+    return p.readUserDebugParameter(debug, physicsClientId=CLIENT)
+
+def read_counter(debug):
+    return int(read_parameter(debug))
+
+def read_button(debug):
+    return read_counter(debug) % 2 == 1
 
 def add_text(text, position=(0, 0, 0), color=BLACK, lifetime=None, parent=NULL_ID, parent_link=BASE_LINK):
     return p.addUserDebugText(str(text), textPosition=position, textColorRGB=color[:3], # textSize=1,
