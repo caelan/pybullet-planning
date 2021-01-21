@@ -950,7 +950,7 @@ def pixel_from_point(camera_matrix, point_camera):
     return None
 
 def get_image_aabb(camera_matrix):
-    upper = np.array(dimensions_from_camera_matrix(camera_matrix))
+    upper = np.array(dimensions_from_camera_matrix(camera_matrix)) - 1
     lower = np.zeros(upper.shape)
     return AABB(lower, upper)
 
@@ -1090,7 +1090,7 @@ def get_image_flags(segment=False, segment_links=False):
     if segment:
         if segment_links:
             return p.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX
-        return 0
+        return 0 # TODO: adjust output dimension when not segmenting links
     return p.ER_NO_SEGMENTATION_MASK
 
 def extract_segmented(seg_image):
@@ -2520,7 +2520,6 @@ def aabb_intersection(*aabbs):
     lower = np.max([lower for lower, _ in aabbs], axis=0)
     upper = np.min([upper for _, upper in aabbs], axis=0)
     aabb = AABB(lower, upper)
-    print(aabb)
     if aabb_empty(aabb):
         return None
     return aabb
@@ -2539,10 +2538,8 @@ def get_aabb(body, link=None):
     # AABBs are extended by this number. Defaults to 0.02 in Bullet 2.x
     #p.setPhysicsEngineParameter(contactBreakingThreshold=0.0, physicsClientId=CLIENT)
     if link is None:
-        aabb = aabb_union(get_aabbs(body))
-    else:
-        aabb = p.getAABB(body, linkIndex=link, physicsClientId=CLIENT)
-    return aabb
+        return aabb_union(get_aabbs(body))
+    return AABB(*p.getAABB(body, linkIndex=link, physicsClientId=CLIENT))
 
 get_lower_upper = get_aabb
 
@@ -2607,7 +2604,28 @@ def get_aabb_edges(aabb):
             lines.append((p1, p2))
     return lines
 
-# TODO: scale / buffer AABB
+def aabb_from_extent_center(extent, center=None):
+    if center is None:
+        center = np.zeros(len(extent))
+    lower = np.array(center) - np.array(extent) / 2.
+    upper = np.array(center) + np.array(extent) / 2.
+    return AABB(lower, upper)
+
+def scale_aabb(aabb, scale):
+    center = get_aabb_center(aabb)
+    extent = get_aabb_extent(aabb)
+    if np.isscalar(scale):
+        scale = scale * np.ones(len(extent))
+    new_extent = np.multiply(scale, extent)
+    return aabb_from_extent_center(new_extent, center)
+
+def buffer_aabb(aabb, buffer):
+    center = get_aabb_center(aabb)
+    extent = get_aabb_extent(aabb)
+    if np.isscalar(buffer):
+        buffer = buffer * np.ones(len(extent))
+    new_extent = np.add(2*buffer, extent)
+    return aabb_from_extent_center(new_extent, center)
 
 #####################################
 
@@ -2629,6 +2647,10 @@ def oobb_from_points(points): # Not necessarily minimal volume
     tform[:d, 3] = mu.T
     return OOBB(aabb, pose_from_tform(tform))
 
+def oobb_contains_point(point, container):
+    aabb, pose = container
+    return aabb_contains_point(tform_point(invert(pose), point), aabb)
+
 def tform_oobb(affine, oobb):
     aabb, pose = oobb
     return OOBB(aabb, multiply(affine, pose))
@@ -2647,18 +2669,18 @@ def vertices_from_data(data):
     #    parameters = [get_data_radius(data)]
     if geometry_type == p.GEOM_BOX:
         extents = np.array(get_data_extents(data))
-        aabb = AABB(-extents/2., +extents/2.)
+        aabb = aabb_from_extent_center(extents)
         vertices = get_aabb_vertices(aabb)
     elif geometry_type in (p.GEOM_CYLINDER, p.GEOM_CAPSULE):
         # TODO: p.URDF_USE_IMPLICIT_CYLINDER
         radius, height = get_data_radius(data), get_data_height(data)
         extents = np.array([2*radius, 2*radius, height])
-        aabb = AABB(-extents/2., +extents/2.)
+        aabb = aabb_from_extent_center(extents)
         vertices = get_aabb_vertices(aabb)
     elif geometry_type == p.GEOM_SPHERE:
         radius = get_data_radius(data)
-        half_extents = radius*np.ones(3)
-        aabb = AABB(-half_extents, +half_extents)
+        extents = 2*radius*np.ones(3)
+        aabb = aabb_from_extent_center(extents)
         vertices = get_aabb_vertices(aabb)
     elif geometry_type == p.GEOM_MESH:
         filename, scale = get_data_filename(data), get_data_scale(data)
@@ -3316,7 +3338,7 @@ def sample_placement_on_aabb(top_body, bottom_aabb, top_pose=unit_pose(),
         rotation = Euler(yaw=theta)
         set_pose(top_body, multiply(Pose(euler=rotation), top_pose))
         center, extent = get_center_extent(top_body)
-        lower = (np.array(bottom_aabb[0]) + percent*extent/2)[:2]
+        lower = (np.array(bottom_aabb[0]) + percent*extent/2)[:2] # TODO: scale_aabb
         upper = (np.array(bottom_aabb[1]) - percent*extent/2)[:2]
         aabb = AABB(lower, upper)
         if aabb_empty(aabb):
@@ -3998,6 +4020,7 @@ def draw_aabb(aabb, **kwargs):
 def draw_oobb(oobb, **kwargs):
     aabb, pose = oobb
     handles = []
+    #handles.extend(draw_pose(pose, **kwargs))
     for edge in get_aabb_edges(aabb):
         p1, p2 = apply_affine(pose, edge)
         handles.append(add_line(p1, p2, **kwargs))
