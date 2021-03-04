@@ -384,6 +384,9 @@ CHROMATIC_COLORS = {
 
 COLOR_FROM_NAME = merge_dicts(ACHROMATIC_COLORS, CHROMATIC_COLORS)
 
+def remove_alpha(color):
+    return color[:3]
+
 def apply_alpha(color, alpha=1.0):
     if color is None:
         return None
@@ -1282,8 +1285,24 @@ def tform_from_pose(pose):
 def pose_from_tform(tform):
     return point_from_tform(tform), quat_from_matrix(matrix_from_tform(tform))
 
-def wrap_angle(theta, lower=-np.pi): # [-np.pi, np.pi)
-    return (theta - lower) % (2 * np.pi) + lower
+def wrap_interval(value, interval=(0., 1.)):
+    lower, upper = interval
+    assert lower <= upper
+    return (value - lower) % (upper - lower) + lower
+
+def interval_distance(value1, value2, interval=(0., 1.)):
+    value1 = wrap_interval(value1, interval)
+    value2 = wrap_interval(value2, interval)
+    if value1 > value2:
+        value1, value2 = value2, value1
+    lower, upper = interval
+    return min(value2 - value1, (value1 - lower) + (upper - value2))
+
+def circular_interval(lower=-np.pi): # [-np.pi, np.pi)
+    return (lower, lower + 2*PI)
+
+def wrap_angle(theta, **kwargs):
+    return wrap_interval(theta, interval=circular_interval(**kwargs))
 
 def circular_difference(theta2, theta1):
     return wrap_angle(theta2 - theta1)
@@ -2515,6 +2534,9 @@ def aabb_empty(aabb):
     lower, upper = aabb
     return np.less(upper, lower).any()
 
+def is_aabb_degenerate(aabb):
+    return get_aabb_volume(aabb) <= 0.
+
 def aabb_intersection(*aabbs):
     # https://github.mit.edu/caelan/lis-openrave/blob/master/manipulation/bodies/bounding_volumes.py
     lower = np.max([lower for lower, _ in aabbs], axis=0)
@@ -2583,10 +2605,12 @@ def get_bodies_in_region(aabb):
     return [] if bodies is None else sorted(bodies)
 
 def get_aabb_volume(aabb):
+    if aabb_empty(aabb):
+        return 0.
     return np.prod(get_aabb_extent(aabb))
 
 def get_aabb_area(aabb):
-    return np.prod(get_aabb_extent(aabb2d_from_aabb(aabb)))
+    return get_aabb_volume(aabb2d_from_aabb(aabb))
 
 def get_aabb_vertices(aabb):
     d = len(aabb[0])
@@ -4017,10 +4041,11 @@ def draw_circle(center, radius, n=24, **kwargs):
 def draw_aabb(aabb, **kwargs):
     return [add_line(p1, p2, **kwargs) for p1, p2 in get_aabb_edges(aabb)]
 
-def draw_oobb(oobb, **kwargs):
+def draw_oobb(oobb, origin=False, **kwargs):
     aabb, pose = oobb
     handles = []
-    #handles.extend(draw_pose(pose, **kwargs))
+    if origin:
+        handles.extend(draw_pose(pose, **kwargs))
     for edge in get_aabb_edges(aabb):
         p1, p2 = apply_affine(pose, edge)
         handles.append(add_line(p1, p2, **kwargs))
@@ -4041,7 +4066,7 @@ def draw_point(point, size=0.01, **kwargs):
 
 def get_face_edges(face):
     #return list(combinations(face, 2))
-    return get_wrapped_pairs(face)
+    return get_wrapped_pairs(face) # TODO: lines versus planes
 
 def draw_mesh(mesh, **kwargs):
     verts, faces = mesh
@@ -4083,6 +4108,7 @@ def create_rectangular_surface(width, length):
 
 def is_point_in_polygon(point, polygon):
     # TODO: is_point_in_polytope
+    # TODO: aabb_contains_point
     sign = None
     for i in range(len(polygon)):
         v1, v2 = np.array(polygon[i - 1][:2]), np.array(polygon[i][:2])

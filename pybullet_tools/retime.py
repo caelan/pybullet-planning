@@ -213,7 +213,8 @@ def approximate_spline(time_from_starts, path, k=3, approx=INF):
     positions.x = positions.t[positions.k:-positions.k]
     return positions
 
-def interpolate_path(robot, joints, path, k=1, bspline=False, dump=False, **kwargs):
+def interpolate_path(robot, joints, path, velocity_fraction=DEFAULT_SPEED_FRACTION,
+                     k=1, bspline=False, dump=False, **kwargs):
     from scipy.interpolate import CubicSpline, interp1d
     #from scipy.interpolate import CubicHermiteSpline, KroghInterpolator
     # https://scikit-learn.org/stable/auto_examples/linear_model/plot_polynomial_interpolation.html
@@ -222,7 +223,7 @@ def interpolate_path(robot, joints, path, k=1, bspline=False, dump=False, **kwar
     # https://docs.scipy.org/doc/scipy/reference/tutorial/interpolate.html
     # Waypoints are followed perfectly, twice continuously differentiable
     # TODO: https://pythonrobotics.readthedocs.io/en/latest/modules/path_tracking.html#mpc-modeling
-    path, time_from_starts = retime_trajectory(robot, joints, path, sample_step=None)
+    path, time_from_starts = retime_trajectory(robot, joints, path, velocity_fraction=velocity_fraction, sample_step=None)
     if k == 3:
         if bspline:
             positions = approximate_spline(time_from_starts, path, k=k, **kwargs)
