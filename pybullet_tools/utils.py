@@ -2934,7 +2934,7 @@ def interval_generator(lower, upper, **kwargs):
     assert np.less_equal(lower, upper).all()
     if np.equal(lower, upper).all():
         return iter([lower])
-    return (weights*lower + (1-weights)*upper for weights in unit_generator(d=len(lower), **kwargs))
+    return (convex_combination(lower, upper, w=weights) for weights in unit_generator(d=len(lower), **kwargs))
 
 def get_sample_fn(body, joints, custom_limits={}, **kwargs):
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits, circular_limits=CIRCULAR_LIMITS)
@@ -3838,7 +3838,7 @@ def interpolate_poses(pose1, pose2, pos_step_size=0.01, ori_step_size=np.pi/16):
         yield (pos, quat)
     yield pose2
 
-def interpolate(value1, value2, num_steps):
+def interpolate(value1, value2, num_steps=2):
     num_steps = max(num_steps, 2)
     yield value1
     for w in np.linspace(0, 1, num=num_steps, endpoint=True)[1:-1]:
@@ -4030,13 +4030,18 @@ def draw_base_limits(limits, z=1e-2, **kwargs):
                 (upper[0], upper[1], z), (upper[0], lower[1], z)]
     return add_segments(vertices, closed=True, **kwargs)
 
-def draw_circle(center, radius, n=24, **kwargs):
+def get_circle_vertices(center, radius, n=24):
     vertices = []
     for i in range(n):
         theta = i*2*math.pi/n
-        unit = np.append(unit_from_theta(theta), [0])
+        unit = unit_from_theta(theta)
+        if len(center) == 3:
+            unit = np.append(unit, [0.])
         vertices.append(center + radius*unit)
-    return add_segments(vertices, closed=True, **kwargs)
+    return vertices
+
+def draw_circle(center, radius, n=24, **kwargs):
+    return add_segments(get_circle_vertices(center, radius, n=n), closed=True, **kwargs)
 
 def draw_aabb(aabb, **kwargs):
     return [add_line(p1, p2, **kwargs) for p1, p2 in get_aabb_edges(aabb)]
