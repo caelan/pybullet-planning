@@ -998,6 +998,7 @@ def get_camera():
     return CameraInfo(*p.getDebugVisualizerCamera(physicsClientId=CLIENT))
 
 def set_camera(yaw, pitch, distance, target_position=np.zeros(3)):
+    # TODO: in degrees
     p.resetDebugVisualizerCamera(distance, yaw, pitch, target_position, physicsClientId=CLIENT)
 
 def get_pitch(point):
