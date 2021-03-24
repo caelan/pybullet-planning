@@ -723,13 +723,12 @@ def wait_for_interrupt(max_time=np.inf):
         print()
 
 def set_preview(enable):
+    # lightPosition, shadowMapResolution, shadowMapWorldSize
     p.configureDebugVisualizer(p.COV_ENABLE_GUI, enable, physicsClientId=CLIENT)
     p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, enable, physicsClientId=CLIENT)
     p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, enable, physicsClientId=CLIENT)
     p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, enable, physicsClientId=CLIENT)
-    #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, False, physicsClientId=CLIENT)
     #p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING, True, physicsClientId=CLIENT)
-    #p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, False, physicsClientId=CLIENT)
     #p.configureDebugVisualizer(p.COV_ENABLE_WIREFRAME, True, physicsClientId=CLIENT)
 
 def enable_preview():
@@ -851,6 +850,7 @@ def disconnect():
         return p.disconnect(physicsClientId=CLIENT)
 
 def is_connected():
+    #return p.isConnected(physicsClientId=CLIENT)
     return p.getConnectionInfo(physicsClientId=CLIENT)['isConnected']
 
 def get_connection(client=None):
@@ -3039,10 +3039,9 @@ def waypoints_from_path(path, tolerance=1e-3):
     return waypoints
 
 def adjust_path(robot, joints, path):
-    start_positions = get_joint_positions(robot, joints)
     difference_fn = get_difference_fn(robot, joints)
     differences = [difference_fn(q2, q1) for q1, q2 in get_pairs(path)]
-    adjusted_path = [np.array(start_positions)]
+    adjusted_path = [np.array(get_joint_positions(robot, joints))] # Assumed the same as path[0] mod rotation
     for difference in differences:
         if not np.array_equal(difference, np.zeros(len(joints))):
             adjusted_path.append(adjusted_path[-1] + difference)
@@ -3320,6 +3319,8 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
 
 # Placements
 
+# TODO: extend these to oobbs
+
 def stable_z_on_aabb(body, aabb):
     center, extent = get_center_extent(body)
     _, upper = aabb
@@ -3494,7 +3495,7 @@ GraspInfo = namedtuple('GraspInfo', ['get_grasps', 'approach_pose'])
 
 class Attachment(object):
     def __init__(self, parent, parent_link, grasp_pose, child):
-        self.parent = parent
+        self.parent = parent # TODO: support no parent
         self.parent_link = parent_link
         self.grasp_pose = grasp_pose
         self.child = child
@@ -4111,7 +4112,7 @@ def create_rectangular_surface(width, length):
     unit_corners = [(-1, -1), (+1, -1), (+1, +1), (-1, +1)]
     return [np.append(c, 0) * extents for c in unit_corners]
 
-def is_point_in_polygon(point, polygon):
+def is_point_in_polygon(point, polygon): # TODO: rename polygon to path
     # TODO: is_point_in_polytope
     # TODO: aabb_contains_point
     sign = None
