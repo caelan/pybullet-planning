@@ -25,7 +25,9 @@ from .transformations import quaternion_from_matrix, unit_vector, euler_from_qua
 
 directory = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(directory, '../motion'))
-from motion_planners.rrt_connect import birrt, direct_path
+from motion_planners.rrt_connect import birrt
+from motion_planners.meta import direct_path
+
 #from ..motion.motion_planners.rrt_connect import birrt, direct_path
 
 # from future_builtins import map, filter
