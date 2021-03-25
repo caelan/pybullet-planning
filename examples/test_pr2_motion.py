@@ -9,7 +9,7 @@ from pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, PR2_URDF, DRAKE_PR2_U
     SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, get_disabled_collisions, REST_LEFT_ARM, rightarm_from_leftarm
 from pybullet_tools.utils import set_base_values, joint_from_name, quat_from_euler, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, \
-    joint_controller, dump_body, load_model, joints_from_names, user_input, disconnect, get_joint_positions, \
+    joint_controller, dump_body, load_model, joints_from_names, wait_if_gui, disconnect, get_joint_positions, \
     get_link_pose, link_from_name, HideOutput, get_pose, wait_if_gui, load_pybullet, set_quat, Euler, PI, RED, add_line
 
 # TODO: consider making this a function
@@ -69,7 +69,7 @@ def test_arm_motion(pr2, left_joints, arm_goal):
     print(len(arm_path))
     for q in arm_path:
         set_joint_positions(pr2, left_joints, q)
-        #user_input('Continue?')
+        #wait_if_gui('Continue?')
         time.sleep(0.01)
 
 def test_arm_control(pr2, left_joints, arm_start):

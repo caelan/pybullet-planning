@@ -13,7 +13,7 @@ from utils import get_joint_type, is_movable, get_joint_limits, create_box, get_
     get_movable_joints, get_joint_name, get_body_name, get_link_pose, joint_from_name, link_from_name, set_joint_position, \
     get_joint_position, \
     get_body_names, get_joint_names, get_colliding_links, self_collision, set_joint_positions, get_joint_positions, \
-    add_data_path, connect, user_input
+    add_data_path, connect, wait_if_gui
 
 
 #REST_LEFT_ARM = [2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]

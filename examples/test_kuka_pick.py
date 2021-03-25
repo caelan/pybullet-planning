@@ -6,7 +6,7 @@ from pybullet_tools.kuka_primitives import BodyPose, BodyConf, Command, get_gras
     get_ik_fn, get_free_motion_gen, get_holding_motion_gen
 from pybullet_tools.utils import WorldSaver, enable_gravity, connect, dump_world, set_pose, \
     Pose, Point, set_default_camera, stable_z, \
-    BLOCK_URDF, load_model, wait_if_gui, disconnect, DRAKE_IIWA_URDF, user_input, update_state, disable_real_time
+    BLOCK_URDF, load_model, wait_if_gui, disconnect, DRAKE_IIWA_URDF, wait_if_gui, update_state, disable_real_time
 
 
 def plan(robot, block, fixed, teleport):
