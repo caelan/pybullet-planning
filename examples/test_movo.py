@@ -11,7 +11,7 @@ from pybullet_tools.ikfast.ikfast import get_ik_joints
 from pybullet_tools.movo_constants import get_closed_positions, get_open_positions, TOOL_LINK, get_gripper_joints, ARMS, \
     MOVO_URDF, MOVO_INFOS, RIGHT, get_arm_joints, MOVO_COLOR, BASE_JOINTS
 from pybullet_tools.pr2_utils import get_side_grasps, close_until_collision
-from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, disconnect, wait_for_user, \
+from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, disconnect, wait_if_gui, \
     get_sample_fn, set_joint_positions, LockRenderer, link_from_name, HideOutput, \
     joints_from_names, set_color, get_links, get_max_limits, get_min_limits, get_extend_fn, get_link_pose, \
     get_joint_names, draw_pose, remove_handles, draw_base_limits, \
@@ -25,7 +25,7 @@ def test_close_gripper(robot, arm):
     for positions in extend_fn(get_open_positions(robot, arm), get_closed_positions(robot, arm)):
         set_joint_positions(robot, gripper_joints, positions)
         print(positions)
-        wait_for_user('Continue?')
+        wait_if_gui('Continue?')
 
 def test_grasps(robot, block):
     for arm in ARMS:
@@ -41,7 +41,7 @@ def test_grasps(robot, block):
             close_until_collision(robot, gripper_joints, bodies=[block], open_conf=get_open_positions(robot, arm),
                                   closed_conf=get_closed_positions(robot, arm))
             handles = draw_pose(block_pose)
-            wait_for_user('Grasp {}'.format(i))
+            wait_if_gui('Grasp {}'.format(i))
             remove_handles(handles)
 
 #####################################
@@ -74,7 +74,7 @@ def main():
 
     arm = RIGHT
     tool_link = link_from_name(robot, TOOL_LINK.format(arm))
-    wait_for_user('Start?')
+    wait_if_gui('Start?')
 
     #joint_names = HEAD_JOINTS
     #joints = joints_from_names(robot, joint_names)
@@ -97,13 +97,13 @@ def main():
         tool_pose = get_link_pose(robot, tool_link)
         remove_handles(handles)
         handles = draw_pose(tool_pose)
-        wait_for_user()
+        wait_if_gui()
 
         #conf = next(ikfast_inverse_kinematics(robot, MOVO_INFOS[arm], tool_link, tool_pose,
         #                                      fixed_joints=fixed_joints, max_time=0.1), None)
         #if conf is not None:
         #    set_joint_positions(robot, ik_joints, conf)
-        #wait_for_user()
+        #wait_if_gui()
         test_retraction(robot, MOVO_INFOS[arm], tool_link,
                         fixed_joints=fixed_joints, max_time=0.1)
     disconnect()

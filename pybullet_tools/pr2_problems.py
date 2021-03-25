@@ -6,7 +6,7 @@ from .pr2_utils import set_arm_conf, REST_LEFT_ARM, open_arm, \
 from .utils import create_box, set_base_values, set_point, set_pose, get_pose, \
     get_bodies, z_rotation, load_model, load_pybullet, HideOutput, create_body, \
     get_box_geometry, get_cylinder_geometry, create_shape_array, unit_pose, Pose, \
-    Point, LockRenderer, FLOOR_URDF, TABLE_URDF, add_data_path, TAN, set_color, BASE_LINK
+    Point, LockRenderer, FLOOR_URDF, TABLE_URDF, add_data_path, TAN, set_color, BASE_LINK, remove_body
 
 LIGHT_GREY = (0.7, 0.7, 0.7, 1.)
 
@@ -36,13 +36,17 @@ class Problem(object):
         all_movable = [self.robot] + list(self.movable)
         self.fixed = list(filter(lambda b: b not in all_movable, get_bodies()))
         self.gripper = None
-    def get_gripper(self, arm='left'):
+    def get_gripper(self, arm='left', visual=True):
         # upper = get_max_limit(problem.robot, get_gripper_joints(problem.robot, 'left')[0])
         # set_configuration(gripper, [0]*4)
         # dump_body(gripper)
         if self.gripper is None:
-            self.gripper = create_gripper(self.robot, arm=arm)
+            self.gripper = create_gripper(self.robot, arm=arm, visual=visual)
         return self.gripper
+    def remove_gripper(self):
+        if self.gripper is not None:
+            remove_body(self.gripper)
+            self.gripper = None
     def __repr__(self):
         return repr(self.__dict__)
 

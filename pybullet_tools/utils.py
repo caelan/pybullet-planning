@@ -509,6 +509,7 @@ class WorldSaver(Saver):
         self.bodies = bodies
         self.body_savers = [BodySaver(body) for body in self.bodies]
         # TODO: add/remove new bodies
+        # TODO: save the camera pose
 
     def restore(self):
         for body_saver in self.body_savers:
@@ -3193,7 +3194,7 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
         elif not colliding_vertices.get((i1, i2), True):
             color = (0, 0, 0)
         handles.append(add_line(draw_fn(samples[i1]), draw_fn(samples[i2]), color=color))
-    wait_for_user()
+    wait_if_gui()
     return path
 
 #####################################
@@ -3925,7 +3926,7 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
                     #print([(get_joint_name(robot, j), l, v, u) for j, l, v, u in
                     #       zip(movable_joints, lower_limits, kinematic_conf, upper_limits) if not (l <= v <= u)])
                     #print("Limits violated")
-                    #wait_for_user()
+                    #wait_if_gui()
                     remove_body(sub_robot)
                     return None
                 #print("IK iterations:", iteration)

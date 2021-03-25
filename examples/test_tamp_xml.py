@@ -14,7 +14,7 @@ from lxml import etree
 
 from pybullet_tools.pr2_utils import DRAKE_PR2_URDF, set_group_conf
 from pybullet_tools.utils import STATIC_MASS, CLIENT, connect, \
-    disconnect, set_pose, wait_for_user, load_model, HideOutput, base_values_from_pose, create_shape, \
+    disconnect, set_pose, wait_if_gui, load_model, HideOutput, base_values_from_pose, create_shape, \
     get_mesh_geometry
 from pybullet_tools.utils import quaternion_from_matrix
 
@@ -130,7 +130,7 @@ def main():
         parse_object(obj, mesh_directory)
     for robot in xml_data.findall('/robots/robot'):
         parse_robot(robot)
-    wait_for_user()
+    wait_if_gui()
     disconnect()
 
 if __name__ == '__main__':

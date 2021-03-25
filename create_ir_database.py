@@ -10,7 +10,7 @@ from pybullet_tools.pr2_utils import set_arm_conf, get_other_arm, arm_conf, REST
 from pybullet_tools.utils import create_box, disconnect, add_data_path, connect, get_movable_joints, get_joint_positions, \
     sample_placement, set_pose, multiply, invert, set_joint_positions, pairwise_collision, inverse_kinematics, \
     get_link_pose, get_body_name, write_pickle, uniform_pose_generator, set_base_values, \
-    load_pybullet, HideOutput, wait_for_user, draw_point, point_from_pose, has_gui, elapsed_time, \
+    load_pybullet, HideOutput, wait_if_gui, draw_point, point_from_pose, has_gui, elapsed_time, \
     sub_inverse_kinematics, BodySaver
 from pybullet_tools.pr2_problems import create_table
 from pybullet_tools.ikfast.pr2.ik import pr2_inverse_kinematics, is_ik_compiled
@@ -39,7 +39,7 @@ def save_inverse_reachability(robot, arm, grasp_type, tool_link, gripper_from_ba
         handles = []
         for gripper_from_base in gripper_from_base_list:
             handles.extend(draw_point(point_from_pose(gripper_from_base), color=(1, 0, 0)))
-        wait_for_user()
+        wait_if_gui()
     return path
 
 #######################################################
@@ -68,12 +68,11 @@ def create_inverse_reachability(robot, body, table, arm, grasp_type, max_attempt
             if (grasp_conf is None) or pairwise_collision(robot, table):
                 continue
             gripper_from_base = multiply(invert(get_link_pose(robot, tool_link)), get_base_pose(robot))
-            #wait_for_user()
+            #wait_if_gui()
             gripper_from_base_list.append(gripper_from_base)
             print('{} / {} | {} attempts | [{:.3f}]'.format(
                 len(gripper_from_base_list), num_samples, attempt, elapsed_time(start_time)))
-            if has_gui():
-                wait_for_user()
+            wait_if_gui()
             break
         else:
             print('Failed to find a kinematic solution after {} attempts'.format(max_attempts))
@@ -115,8 +114,7 @@ def create_inverse_reachability2(robot, body, table, arm, grasp_type, max_attemp
             gripper_from_base_list.append(gripper_from_base)
             print('{} / {} [{:.3f}]'.format(
                 len(gripper_from_base_list), num_samples, elapsed_time(start_time)))
-            if has_gui():
-                wait_for_user()
+            wait_if_gui()
     return save_inverse_reachability(robot, arm, grasp_type, tool_link, gripper_from_base_list)
 
 #######################################################

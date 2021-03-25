@@ -10,7 +10,7 @@ from pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, PR2_URDF, DRAKE_PR2_U
 from pybullet_tools.utils import set_base_values, joint_from_name, quat_from_euler, set_joint_position, \
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, \
     joint_controller, dump_body, load_model, joints_from_names, user_input, disconnect, get_joint_positions, \
-    get_link_pose, link_from_name, HideOutput, get_pose, wait_for_user, load_pybullet, set_quat, Euler, PI, RED, add_line
+    get_link_pose, link_from_name, HideOutput, get_pose, wait_if_gui, load_pybullet, set_quat, Euler, PI, RED, add_line
 
 # TODO: consider making this a function
 SLEEP = 0.05 # None | 0.05
@@ -19,7 +19,7 @@ SLEEP = 0.05 # None | 0.05
 def test_base_motion(pr2, base_start, base_goal, obstacles=[]):
     #disabled_collisions = get_disabled_collisions(pr2)
     set_base_values(pr2, base_start)
-    wait_for_user('Plan Base?')
+    wait_if_gui('Plan Base?')
     base_limits = ((-2.5, -2.5), (2.5, 2.5))
     base_path = plan_base_motion(pr2, base_goal, base_limits, obstacles=obstacles)
     if base_path is None:
@@ -29,7 +29,7 @@ def test_base_motion(pr2, base_start, base_goal, obstacles=[]):
     for bq in base_path:
         set_base_values(pr2, bq)
         if SLEEP is None:
-            wait_for_user('Continue?')
+            wait_if_gui('Continue?')
         else:
             time.sleep(SLEEP)
 
@@ -43,7 +43,7 @@ def test_drake_base_motion(pr2, base_start, base_goal, obstacles=[]):
     set_joint_positions(pr2, base_joints, base_start)
     base_joints = base_joints[:2]
     base_goal = base_goal[:len(base_joints)]
-    wait_for_user('Plan Base?')
+    wait_if_gui('Plan Base?')
     base_path = plan_joint_motion(pr2, base_joints, base_goal, obstacles=obstacles,
                                   disabled_collisions=disabled_collisions)
     if base_path is None:
@@ -53,7 +53,7 @@ def test_drake_base_motion(pr2, base_start, base_goal, obstacles=[]):
     for bq in base_path:
         set_joint_positions(pr2, base_joints, bq)
         if SLEEP is None:
-            wait_for_user('Continue?')
+            wait_if_gui('Continue?')
         else:
             time.sleep(SLEEP)
 
@@ -61,7 +61,7 @@ def test_drake_base_motion(pr2, base_start, base_goal, obstacles=[]):
 
 def test_arm_motion(pr2, left_joints, arm_goal):
     disabled_collisions = get_disabled_collisions(pr2)
-    wait_for_user('Plan Arm?')
+    wait_if_gui('Plan Arm?')
     arm_path = plan_joint_motion(pr2, left_joints, arm_goal, disabled_collisions=disabled_collisions)
     if arm_path is None:
         print('Unable to find an arm path')
@@ -69,11 +69,11 @@ def test_arm_motion(pr2, left_joints, arm_goal):
     print(len(arm_path))
     for q in arm_path:
         set_joint_positions(pr2, left_joints, q)
-        #raw_input('Continue?')
+        #user_input('Continue?')
         time.sleep(0.01)
 
 def test_arm_control(pr2, left_joints, arm_start):
-    wait_for_user('Control Arm?')
+    wait_if_gui('Control Arm?')
     real_time = False
     enable_gravity()
     p.setRealTimeSimulation(real_time)
@@ -102,7 +102,7 @@ def test_ikfast(pr2):
         print(i, len(solutions))
         for q in solutions:
             set_joint_positions(pr2, torso_left, q)
-            wait_for_user()
+            wait_if_gui()
 
 #####################################
 
@@ -149,7 +149,7 @@ def main(use_pr2_drake=True):
     test_arm_motion(pr2, left_joints, arm_goal)
     # test_arm_control(pr2, left_joints, arm_start)
 
-    wait_for_user('Finish?')
+    wait_if_gui('Finish?')
     disconnect()
 
 if __name__ == '__main__':
