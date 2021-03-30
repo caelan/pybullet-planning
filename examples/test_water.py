@@ -5,8 +5,8 @@ from __future__ import print_function
 import time
 import numpy as np
 
-from pybullet_tools.utils import add_data_path, connect, enable_gravity, user_input, disconnect, create_sphere, set_point, Point, \
-    enable_real_time, dump_world, load_model, wait_for_user, set_camera, stable_z, \
+from pybullet_tools.utils import add_data_path, connect, enable_gravity, wait_if_gui, disconnect, create_sphere, set_point, Point, \
+    enable_real_time, dump_world, load_model, wait_if_gui, set_camera, stable_z, \
     set_color, get_lower_upper, wait_for_duration, simulate_for_duration, load_pybullet
 
 
@@ -52,9 +52,9 @@ def main():
         set_point(droplet, Point(x, y, z+i*(2*radius+1e-3)))
 
     #dump_world()
-    wait_for_user()
+    wait_if_gui()
 
-    #user_input('Start?')
+    #wait_if_gui('Start?')
     enable_gravity()
     simulate_for_duration(5.0)
 
@@ -68,7 +68,7 @@ def main():
     # print()
 
     #time.sleep(1.0)
-    wait_for_user('Finish?')
+    wait_if_gui('Finish?')
     disconnect()
 
 if __name__ == '__main__':

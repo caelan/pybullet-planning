@@ -25,7 +25,9 @@ from .transformations import quaternion_from_matrix, unit_vector, euler_from_qua
 
 directory = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(directory, '../motion'))
-from motion_planners.rrt_connect import birrt, direct_path
+from motion_planners.rrt_connect import birrt
+from motion_planners.meta import direct_path
+
 #from ..motion.motion_planners.rrt_connect import birrt, direct_path
 
 # from future_builtins import map, filter
@@ -540,6 +542,7 @@ class WorldSaver(Saver):
         self.bodies = bodies
         self.body_savers = [BodySaver(body) for body in self.bodies]
         # TODO: add/remove new bodies
+        # TODO: save the camera pose
 
     def restore(self):
         for body_saver in self.body_savers:
@@ -753,13 +756,12 @@ def wait_for_interrupt(max_time=np.inf):
         print()
 
 def set_preview(enable):
+    # lightPosition, shadowMapResolution, shadowMapWorldSize
     p.configureDebugVisualizer(p.COV_ENABLE_GUI, enable, physicsClientId=CLIENT)
     p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, enable, physicsClientId=CLIENT)
     p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, enable, physicsClientId=CLIENT)
     p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, enable, physicsClientId=CLIENT)
-    #p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, False, physicsClientId=CLIENT)
     #p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING, True, physicsClientId=CLIENT)
-    #p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, False, physicsClientId=CLIENT)
     #p.configureDebugVisualizer(p.COV_ENABLE_WIREFRAME, True, physicsClientId=CLIENT)
 
 def enable_preview():
@@ -881,6 +883,7 @@ def disconnect():
         return p.disconnect(physicsClientId=CLIENT)
 
 def is_connected():
+    #return p.isConnected(physicsClientId=CLIENT)
     return p.getConnectionInfo(physicsClientId=CLIENT)['isConnected']
 
 def get_connection(client=None):
@@ -1028,6 +1031,7 @@ def get_camera():
     return CameraInfo(*p.getDebugVisualizerCamera(physicsClientId=CLIENT))
 
 def set_camera(yaw, pitch, distance, target_position=np.zeros(3)):
+    # TODO: in degrees
     p.resetDebugVisualizerCamera(distance, yaw, pitch, target_position, physicsClientId=CLIENT)
 
 def get_pitch(point):
@@ -3079,10 +3083,9 @@ def waypoints_from_path(path, tolerance=1e-3):
     return waypoints
 
 def adjust_path(robot, joints, path):
-    start_positions = get_joint_positions(robot, joints)
     difference_fn = get_difference_fn(robot, joints)
     differences = [difference_fn(q2, q1) for q1, q2 in get_pairs(path)]
-    adjusted_path = [np.array(start_positions)]
+    adjusted_path = [np.array(get_joint_positions(robot, joints))] # Assumed the same as path[0] mod rotation
     for difference in differences:
         if not np.array_equal(difference, np.zeros(len(joints))):
             adjusted_path.append(adjusted_path[-1] + difference)
@@ -3233,7 +3236,7 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
         elif not colliding_vertices.get((i1, i2), True):
             color = (0, 0, 0)
         handles.append(add_line(draw_fn(samples[i1]), draw_fn(samples[i2]), color=color))
-    wait_for_user()
+    wait_if_gui()
     return path
 
 #####################################
@@ -3360,6 +3363,8 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
 #####################################
 
 # Placements
+
+# TODO: extend these to oobbs
 
 def stable_z_on_aabb(body, aabb):
     center, extent = get_center_extent(body)
@@ -3535,7 +3540,7 @@ GraspInfo = namedtuple('GraspInfo', ['get_grasps', 'approach_pose'])
 
 class Attachment(object):
     def __init__(self, parent, parent_link, grasp_pose, child):
-        self.parent = parent
+        self.parent = parent # TODO: support no parent
         self.parent_link = parent_link
         self.grasp_pose = grasp_pose
         self.child = child
@@ -3964,7 +3969,7 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
                     #print([(get_joint_name(robot, j), l, v, u) for j, l, v, u in
                     #       zip(movable_joints, lower_limits, kinematic_conf, upper_limits) if not (l <= v <= u)])
                     #print("Limits violated")
-                    #wait_for_user()
+                    #wait_if_gui()
                     remove_body(sub_robot)
                     return None
                 #print("IK iterations:", iteration)
@@ -4152,7 +4157,7 @@ def create_rectangular_surface(width, length):
     unit_corners = [(-1, -1), (+1, -1), (+1, +1), (-1, +1)]
     return [np.append(c, 0) * extents for c in unit_corners]
 
-def is_point_in_polygon(point, polygon):
+def is_point_in_polygon(point, polygon): # TODO: rename polygon to path
     # TODO: is_point_in_polytope
     # TODO: aabb_contains_point
     sign = None

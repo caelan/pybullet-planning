@@ -96,7 +96,7 @@ def run_thread(pr2):
 	try:
 		print(HELP_MSG)
 		print_velocities(speed, turn)
-		while True:
+		while True: # TODO: getKeyboardEvents
 			key = get_key(settings)  # Waits until a key is read
 			if key in MOVE_BINDINGS:
 				dx, dy, dz, dth = MOVE_BINDINGS[key]

@@ -7,7 +7,6 @@ from itertools import combinations
 
 import numpy as np
 
-from pybullet_tools.utils import set_all_color
 from .pr2_never_collisions import NEVER_COLLISIONS
 from .utils import multiply, get_link_pose, set_joint_position, set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, \
     get_pose, euler_from_quat, link_from_name, point_from_pose, invert, Pose, \
@@ -18,7 +17,7 @@ from .utils import multiply, get_link_pose, set_joint_position, set_joint_positi
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
     get_extend_fn, get_moving_links, link_pairs_collision, get_link_subtree, \
     clone_body, get_all_links, pairwise_collision, tform_point, get_camera_matrix, ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, \
-    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point
+    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -642,7 +641,7 @@ def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME,
                 correction_conf = np.array([np.dot(angular[mj], correction_euler)
                                             for mj in movable_from_joints(pr2, head_joints)])
                 head_conf += correction_conf
-                #wait_for_user()
+                #wait_if_gui()
             else:
                 return None
     if violates_limits(pr2, head_joints, head_conf):
@@ -714,7 +713,7 @@ def get_detections(pr2, p_false_neg=0, camera_link=HEAD_LINK_NAME,
                 and not any(link_pairs_collision(pr2, [link], cone)
                             for link in set(get_all_links(pr2)) - exclude_links):
             detections.append(Detection(body, z))
-        #wait_for_user()
+        #wait_if_gui()
         remove_body(cone)
     return detections
 

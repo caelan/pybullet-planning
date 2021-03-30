@@ -2,7 +2,7 @@ import os
 import pybullet as p
 
 from pybullet_tools.utils import create_mesh, set_point, read_pcd_file, disconnect, \
-    wait_for_user, mesh_from_points, get_links, get_num_links, connect, load_pybullet, \
+    wait_if_gui, mesh_from_points, get_links, get_num_links, connect, load_pybullet, \
     create_obj, WHITE, get_client, NULL_ID, set_color, get_all_links
 
 SODA_CLOUD = 'soda.pcd'
@@ -62,7 +62,7 @@ def test_lis(world):
     #print(mesh_from_body(body))
 
     #set_point(body, (1, 1, 1))
-    wait_for_user()
+    wait_if_gui()
 
 #####################################
 
@@ -106,7 +106,7 @@ def test_ycb(world):
 
     for link in get_all_links(body):
         set_color(body, link=link, color=WHITE)
-    wait_for_user()
+    wait_if_gui()
 
 #####################################
 

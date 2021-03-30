@@ -2,7 +2,7 @@ import math
 import numpy as np
 
 from pybullet_tools.utils import clip, INF, \
-    waypoints_from_path, adjust_path, get_difference, get_pairs, get_max_velocities, get_duration_fn
+    waypoints_from_path, adjust_path, get_difference, get_pairs, get_max_velocities, get_duration_fn, wait_if_gui
 
 #ARM_SPEED = 0.15*np.pi # radians / sec
 ARM_SPEED = 0.2 # percent
@@ -71,7 +71,7 @@ def slow_trajectory(robot, joints, path, min_fraction=0.1, ramp_duration=1.0, **
         new_time_from_starts.append(new_time_from_starts[-1] + new_duration)
     # print(time_from_starts)
     # print(new_time_from_starts)
-    # raw_input('Continue?)
+    # wait_if_gui('Continue?)
     # time_from_starts = new_time_from_starts
     return new_time_from_starts
 

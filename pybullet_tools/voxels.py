@@ -11,7 +11,7 @@ from .utils import unit_pose, safe_zip, multiply, Pose, AABB, create_box, set_po
     get_pose, PoseSaver, get_aabb_vertices, aabb_from_points, apply_affine, OOBB, draw_oobb, get_aabb_center
 
 MAX_TEXTURE_WIDTH = 418 # max square dimension
-MAX_PIXEL_VALUE = 255
+MAX_PIXEL_VALUE = 2**8 - 1
 MAX_LINKS = 125  # Max links seems to be 126
 
 ################################################################################

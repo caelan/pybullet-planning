@@ -4,10 +4,10 @@ import time
 from .pr2_utils import get_top_grasps
 from .utils import get_pose, set_pose, get_movable_joints, \
     set_joint_positions, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
-    enable_gravity, get_refine_fn, user_input, wait_for_duration, link_from_name, get_body_name, sample_placement, \
+    enable_gravity, get_refine_fn, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
     inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
-    step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions, dump_world
+    step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions, dump_world, wait_if_gui
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(), max_width=INF,  grasp_length=0),
@@ -152,7 +152,7 @@ class Command(object):
         for i, body_path in enumerate(self.body_paths):
             for j in body_path.iterator():
                 msg = '{},{}) step?'.format(i, j)
-                user_input(msg)
+                wait_if_gui(msg)
                 #print(msg)
 
     def execute(self, time_step=0.05):
@@ -226,7 +226,7 @@ def get_ik_fn(robot, fixed=[], teleport=False, num_attempts=10):
                 #                                   quat_from_pose(approach_pose))
                 path = plan_direct_joint_motion(robot, conf.joints, q_grasp, obstacles=obstacles)
                 if path is None:
-                    if DEBUG_FAILURE: user_input('Approach motion failed')
+                    if DEBUG_FAILURE: wait_if_gui('Approach motion failed')
                     continue
             command = Command([BodyPath(robot, path),
                                Attach(body, robot, grasp.link),
@@ -260,7 +260,7 @@ def get_free_motion_gen(robot, fixed=[], teleport=False, self_collisions=True):
             obstacles = fixed + assign_fluent_state(fluents)
             path = plan_joint_motion(robot, conf2.joints, conf2.configuration, obstacles=obstacles, self_collisions=self_collisions)
             if path is None:
-                if DEBUG_FAILURE: user_input('Free motion failed')
+                if DEBUG_FAILURE: wait_if_gui('Free motion failed')
                 return None
         command = Command([BodyPath(robot, path, joints=conf2.joints)])
         return (command,)
@@ -278,7 +278,7 @@ def get_holding_motion_gen(robot, fixed=[], teleport=False, self_collisions=True
             path = plan_joint_motion(robot, conf2.joints, conf2.configuration,
                                      obstacles=obstacles, attachments=[grasp.attachment()], self_collisions=self_collisions)
             if path is None:
-                if DEBUG_FAILURE: user_input('Holding motion failed')
+                if DEBUG_FAILURE: wait_if_gui('Holding motion failed')
                 return None
         command = Command([BodyPath(robot, path, joints=conf2.joints, attachments=[grasp])])
         return (command,)
@@ -297,7 +297,7 @@ def get_movable_collision_test():
             for _ in path.iterator():
                 # TODO: could shuffle this
                 if any(pairwise_collision(mov, body) for mov in moving):
-                    if DEBUG_FAILURE: user_input('Movable collision')
+                    if DEBUG_FAILURE: wait_if_gui('Movable collision')
                     return True
         return False
     return test

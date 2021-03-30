@@ -104,7 +104,7 @@ def main():
     parse_path(path)
 
     #connect(use_gui=True)
-    #user_input('Finish?')
+    #wait_if_gui('Finish?')
     #disconnect()
 
 

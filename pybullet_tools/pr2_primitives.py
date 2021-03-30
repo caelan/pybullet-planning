@@ -23,7 +23,7 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_place
     get_min_limit, user_input, step_simulation, get_body_name, get_bodies, BASE_LINK, \
     add_segments, get_max_limit, link_from_name, BodySaver, get_aabb, Attachment, interpolate_poses, \
     plan_direct_joint_motion, has_gui, create_attachment, wait_for_duration, get_extend_fn, set_renderer, \
-    get_custom_limits, all_between, get_unit_vector, wait_for_user, \
+    get_custom_limits, all_between, get_unit_vector, wait_if_gui, \
     set_base_values, euler_from_quat, INF, elapsed_time, get_moving_links, flatten_links, get_relative_pose
 
 BASE_EXTENT = 3.5 # 2.5
@@ -458,14 +458,14 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
             #print('Grasp IK failure', grasp_conf)
             #if grasp_conf is not None:
             #    print(grasp_conf)
-            #    #wait_for_user()
+            #    #wait_if_gui()
             return None
         #approach_conf = pr2_inverse_kinematics(robot, arm, approach_pose, custom_limits=custom_limits,
         #                                       upper_limits=USE_CURRENT, nearby_conf=USE_CURRENT)
         approach_conf = sub_inverse_kinematics(robot, arm_joints[0], arm_link, approach_pose, custom_limits=custom_limits)
         if (approach_conf is None) or any(pairwise_collision(robot, b) for b in obstacles + [obj]):
             #print('Approach IK failure', approach_conf)
-            #wait_for_user()
+            #wait_if_gui()
             return None
         approach_conf = get_joint_positions(robot, arm_joints)
         attachment = grasp.get_attachment(problem.robot, arm)
@@ -548,7 +548,7 @@ def get_motion_gen(problem, custom_limits={}, collisions=True, teleport=False):
                 #set_renderer(True)
                 #for bq in [bq1, bq2]:
                 #    bq.assign()
-                #    wait_for_user()
+                #    wait_if_gui()
                 return None
             path = [Conf(robot, bq2.joints, q) for q in raw_path]
         else:
@@ -631,7 +631,7 @@ def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
 #####################################
 
 def control_commands(commands, **kwargs):
-    user_input('Control?')
+    wait_if_gui('Control?')
     disable_real_time()
     enable_gravity()
     for i, command in enumerate(commands):
@@ -652,7 +652,7 @@ class State(object):
             attachment.assign()
 
 def apply_commands(state, commands, time_step=None, pause=False, **kwargs):
-    #user_input('Apply?')
+    #wait_if_gui('Apply?')
     for i, command in enumerate(commands):
         print(i, command)
         for j, _ in enumerate(command.apply(state, **kwargs)):
@@ -661,11 +661,11 @@ def apply_commands(state, commands, time_step=None, pause=False, **kwargs):
                 continue
             if time_step is None:
                 wait_for_duration(1e-2)
-                user_input('Command {}, Step {}) Next?'.format(i, j))
+                wait_if_gui('Command {}, Step {}) Next?'.format(i, j))
             else:
                 wait_for_duration(time_step)
         if pause:
-            wait_for_user()
+            wait_if_gui()
 
 #####################################
 

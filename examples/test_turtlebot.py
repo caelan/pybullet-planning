@@ -5,7 +5,7 @@ from __future__ import print_function
 import random
 
 import numpy as np
-from pybullet_tools.utils import connect, load_model, disconnect, wait_for_user, create_box, set_point, dump_body, \
+from pybullet_tools.utils import connect, load_model, disconnect, wait_if_gui, create_box, set_point, dump_body, \
     TURTLEBOT_URDF, HideOutput, LockRenderer, joint_from_name, set_euler, get_euler, get_point, \
     set_joint_position, get_joint_positions, pairwise_collision, stable_z, wait_for_duration, get_link_pose, \
     link_from_name, get_pose, euler_from_quat, multiply, invert, draw_pose, unit_point, unit_quat, \
@@ -85,7 +85,7 @@ def main(floor_width=2.0):
         collision = pairwise_collision(robot, obstacle) # Checks whether robot is currently colliding with obstacle
         print('Collision: {}'.format(collision))
         wait_for_duration(1.0) # Like sleep() but also updates the viewer
-    wait_for_user() # Like raw_input() but also updates the viewer
+    wait_if_gui() # Like raw_input() but also updates the viewer
 
     # Destroys the pybullet world
     disconnect()
