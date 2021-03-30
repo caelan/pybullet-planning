@@ -101,6 +101,15 @@ SEPARATOR = '\n' + 50*'-' + '\n'
 
 inf_generator = count
 
+def irange(start, end=None, step=1):
+    if end is None:
+        end = start
+        start = 0
+    n = start
+    while n < end:
+        yield n
+        n += step
+
 def print_separator(n=50):
     print('\n' + n*'-' + '\n')
 
@@ -110,6 +119,9 @@ def is_remote():
 def is_darwin(): # TODO: change loading accordingly
     return platform.system() == 'Darwin' # platform.release()
     #return sys.platform == 'darwin'
+
+def get_python_version():
+    return sys.version_info[0]
 
 def read(filename):
     with open(filename, 'r') as f:
@@ -247,6 +259,25 @@ def merge_dicts(*args):
         result.update(d)
     return result
     # return dict(reduce(operator.add, [d.items() for d in args]))
+
+def str_from_object(obj):  # str_object
+    if type(obj) in [list]: #, np.ndarray):
+        return '[{}]'.format(', '.join(str_from_object(item) for item in obj))
+    if type(obj) in [tuple]:
+        return '({})'.format(', '.join(str_from_object(item) for item in obj))
+    if type(obj) in [set, frozenset]:
+        return '{{{}}}'.format(', '.join(sorted(str_from_object(item) for item in obj)))
+    if type(obj) in [dict, defaultdict]: # isinstance(obj, dict):
+        return '{{{}}}'.format(', '.join('{}: {}'.format(*pair) for pair in sorted(
+            tuple(map(str_from_object, pair)) for pair in obj.items())))
+    #if type(obj) in (float, np.float64):
+    #    obj = round(obj, 3)
+    #    if obj == 0: obj = 0  # NOTE - catches -0.0 bug
+    #    return '%.3f' % obj
+    #if isinstance(obj, types.FunctionType):
+    #    return obj.__name__
+    return str(obj)
+    #return repr(obj)
 
 ##################################################
 
@@ -677,7 +708,6 @@ def enable_separating_axis_test():
     #p.setInternalSimFlags()
     # enableFileCaching: Set to 0 to disable file caching, such as .obj wavefront file loading
     #p.getAPIVersion() # TODO: check that API is up-to-date
-    #p.isNumpyEnabled()
 
 def simulate_for_sim_duration(sim_duration, real_dt=0, frequency=INF):
     t0 = time.time()
@@ -1112,6 +1142,7 @@ def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, 
                                       cameraUpVector=up_vector, physicsClientId=CLIENT)
     projection_matrix = get_projection_matrix(width, height, vertical_fov, near, far)
 
+    # p.isNumpyEnabled() # copying pixels from C/C++ to Python can be really slow for large images, unless you compile PyBullet using NumPy
     flags = get_image_flags(segment=segment, **kwargs)
     # DIRECT mode has no OpenGL, so it requires ER_TINY_RENDERER
     renderer = p.ER_TINY_RENDERER if tiny else p.ER_BULLET_HARDWARE_OPENGL
@@ -2954,10 +2985,15 @@ def get_difference_fn(body, joints):
                      for circular, value2, value1 in zip(circular_joints, q2, q1))
     return fn
 
-def get_distance_fn(body, joints, weights=None): #, norm=2):
+def get_default_weights(body, joints, weights=None):
+    if weights is not None:
+        return weights
+    # TODO: derive from resolutions
     # TODO: use the energy resulting from the mass matrix here?
-    if weights is None:
-        weights = 1*np.ones(len(joints)) # TODO: use velocities here
+    return 1*np.ones(len(joints)) # TODO: use velocities here
+
+def get_distance_fn(body, joints, weights=None): #, norm=2):
+    weights = get_default_weights(body, joints, weights)
     difference_fn = get_difference_fn(body, joints)
     def fn(q1, q2):
         diff = np.array(difference_fn(q2, q1))
@@ -2995,12 +3031,16 @@ def refine_path(body, joints, waypoints, num_steps):
         refined_path.extend(refine_fn(v1, v2))
     return refined_path
 
-DEFAULT_RESOLUTION = 0.05
+DEFAULT_RESOLUTION = math.radians(3) # 0.05
+
+def get_default_resolutions(body, joints, resolutions=None):
+    if resolutions is not None:
+        return resolutions
+    return DEFAULT_RESOLUTION*np.ones(len(joints))
 
 def get_extend_fn(body, joints, resolutions=None, norm=2):
     # norm = 1, 2, INF
-    if resolutions is None:
-        resolutions = DEFAULT_RESOLUTION*np.ones(len(joints))
+    resolutions = get_default_resolutions(body, joints, resolutions)
     difference_fn = get_difference_fn(body, joints)
     def fn(q1, q2):
         #steps = int(np.max(np.abs(np.divide(difference_fn(q2, q1), resolutions))))
@@ -3198,25 +3238,26 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
 
 #####################################
 
-def get_closest_angle_fn(body, joints, linear_weight=1., angular_weight=1., reversible=True):
+def get_closest_angle_fn(body, joints, weights=None, reversible=True):
     assert len(joints) == 3
-    linear_extend_fn = get_distance_fn(body, joints[:2], weights=linear_weight*np.ones(2))
-    angular_extend_fn = get_distance_fn(body, joints[2:], weights=[angular_weight])
+    weights = get_default_weights(body, joints, weights)
+    linear_distance_fn = get_distance_fn(body, joints[:2], weights=weights[:2])
+    angular_distance_fn = get_distance_fn(body, joints[2:], weights=weights[2:])
 
     def closest_fn(q1, q2):
         angle_and_distance = []
         for direction in [0, PI] if reversible else [PI]:
             angle = get_angle(q1[:2], q2[:2]) + direction
-            distance = angular_extend_fn(q1[2:], [angle]) \
-                       + linear_extend_fn(q1[:2], q2[:2]) \
-                       + angular_extend_fn([angle], q2[2:])
+            distance = angular_distance_fn(q1[2:], [angle]) \
+                       + linear_distance_fn(q1[:2], q2[:2]) \
+                       + angular_distance_fn([angle], q2[2:])
             angle_and_distance.append((angle, distance))
         return min(angle_and_distance, key=lambda pair: pair[1])
     return closest_fn
 
-def get_nonholonomic_distance_fn(body, joints, weights=None, **kwargs):
-    assert weights is None
+def get_nonholonomic_distance_fn(body, joints, **kwargs):
     closest_angle_fn = get_closest_angle_fn(body, joints, **kwargs)
+    #distance_fn = get_distance_fn(body, joints, **kwargs) # TODO: close enough threshold
 
     def distance_fn(q1, q2):
         _, distance = closest_angle_fn(q1, q2)
@@ -3224,10 +3265,10 @@ def get_nonholonomic_distance_fn(body, joints, weights=None, **kwargs):
     return distance_fn
 
 def get_nonholonomic_extend_fn(body, joints, resolutions=None, **kwargs):
-    assert resolutions is None
     assert len(joints) == 3
-    linear_extend_fn = get_extend_fn(body, joints[:2])
-    angular_extend_fn = get_extend_fn(body, joints[2:])
+    resolutions = get_default_resolutions(body, joints, resolutions)
+    linear_extend_fn = get_extend_fn(body, joints[:2], resolutions[:2])
+    angular_extend_fn = get_extend_fn(body, joints[2:], resolutions[2:])
     closest_angle_fn = get_closest_angle_fn(body, joints, **kwargs)
 
     def extend_fn(q1, q2):
