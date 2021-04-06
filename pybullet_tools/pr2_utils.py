@@ -541,7 +541,7 @@ def support_from_aabb(aabb, near=True):
 def cone_vertices_from_base(base):
     return [np.zeros(3)] + base
 
-def cone_wires_from_support(support):
+def cone_wires_from_support(support, cone_only=True):
     #vertices = cone_vertices_from_base(support)
     # TODO: could obtain from cone_mesh_from_support
     # TODO: could also just return vertices and indices
@@ -549,13 +549,15 @@ def cone_wires_from_support(support):
     lines = []
     for vertex in support:
         lines.append((apex, vertex))
-    #for i, v2 in enumerate(support):
-    #    v1 = support[i-1]
-    #    lines.append((v1, v2))
-    for v1, v2 in combinations(support, 2):
-        lines.append((v1, v2))
-    center = np.average(support, axis=0)
-    lines.append((apex, center))
+    if cone_only:
+        for i, v2 in enumerate(support):
+           v1 = support[i-1]
+           lines.append((v1, v2))
+    else:
+        for v1, v2 in combinations(support, 2):
+            lines.append((v1, v2))
+        center = np.average(support, axis=0)
+        lines.append((apex, center))
     return lines
 
 def cone_mesh_from_support(support):

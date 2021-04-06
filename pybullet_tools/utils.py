@@ -1218,8 +1218,8 @@ def Pose(point=None, euler=None):
     euler = Euler() if euler is None else euler
     return point, quat_from_euler(euler)
 
-#def Pose2d(x=0., y=0., yaw=0.):
-#    return np.array([x, y, yaw])
+def Pose2d(x=0., y=0., yaw=0.):
+    return np.array([x, y, yaw])
 
 def invert(pose):
     point, quat = pose
@@ -1347,7 +1347,7 @@ def base_values_from_pose(pose, tolerance=1e-3):
     x, y, _ = point
     roll, pitch, yaw = euler_from_quat(quat)
     assert (abs(roll) < tolerance) and (abs(pitch) < tolerance)
-    return (x, y, yaw)
+    return Pose2d(x, y, yaw)
 
 pose2d_from_pose = base_values_from_pose
 
@@ -2099,7 +2099,7 @@ def create_visual_shape(geometry, pose=unit_pose(), color=RED, specular=None):
 
 def create_shape(geometry, pose=unit_pose(), collision=True, **kwargs):
     collision_id = create_collision_shape(geometry, pose=pose) if collision else NULL_ID
-    visual_id = create_visual_shape(geometry, pose=pose, **kwargs)
+    visual_id = create_visual_shape(geometry, pose=pose, **kwargs) # if collision else NULL_ID
     return collision_id, visual_id
 
 def plural(word):
@@ -2202,34 +2202,34 @@ def create_flying_body(group, collision_id=NULL_ID, visual_id=NULL_ID, mass=STAT
         physicsClientId=CLIENT,
     )
 
-def create_box(w, l, h, mass=STATIC_MASS, color=RED):
-    collision_id, visual_id = create_shape(get_box_geometry(w, l, h), color=color)
+def create_box(w, l, h, mass=STATIC_MASS, color=RED, **kwargs):
+    collision_id, visual_id = create_shape(get_box_geometry(w, l, h), color=color, **kwargs)
     return create_body(collision_id, visual_id, mass=mass)
     # basePosition | baseOrientation
     # linkCollisionShapeIndices | linkVisualShapeIndices
 
-def create_cylinder(radius, height, mass=STATIC_MASS, color=BLUE):
-    collision_id, visual_id = create_shape(get_cylinder_geometry(radius, height), color=color)
+def create_cylinder(radius, height, mass=STATIC_MASS, color=BLUE, **kwargs):
+    collision_id, visual_id = create_shape(get_cylinder_geometry(radius, height), color=color, **kwargs)
     return create_body(collision_id, visual_id, mass=mass)
 
-def create_capsule(radius, height, mass=STATIC_MASS, color=BLUE):
-    collision_id, visual_id = create_shape(get_capsule_geometry(radius, height), color=color)
+def create_capsule(radius, height, mass=STATIC_MASS, color=BLUE, **kwargs):
+    collision_id, visual_id = create_shape(get_capsule_geometry(radius, height), color=color, **kwargs)
     return create_body(collision_id, visual_id, mass=mass)
 
-def create_sphere(radius, mass=STATIC_MASS, color=BLUE):
-    collision_id, visual_id = create_shape(get_sphere_geometry(radius), color=color)
+def create_sphere(radius, mass=STATIC_MASS, color=BLUE, **kwargs):
+    collision_id, visual_id = create_shape(get_sphere_geometry(radius), color=color, **kwargs)
     return create_body(collision_id, visual_id, mass=mass)
 
-def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=BLACK):
+def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=BLACK, **kwargs):
     # color seems to be ignored in favor of a texture
-    collision_id, visual_id = create_shape(get_plane_geometry(normal), color=color)
+    collision_id, visual_id = create_shape(get_plane_geometry(normal), color=color, **kwargs)
     body = create_body(collision_id, visual_id, mass=mass)
     set_texture(body, texture=None) # otherwise 'plane.urdf'
     set_color(body, color=color) # must perform after set_texture
     return body
 
-def create_obj(path, scale=1., mass=STATIC_MASS, collision=True, color=GREY):
-    collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), collision=collision, color=color)
+def create_obj(path, scale=1., mass=STATIC_MASS, color=GREY, **kwargs):
+    collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), color=color, **kwargs)
     body = create_body(collision_id, visual_id, mass=mass)
     fixed_base = (mass == STATIC_MASS)
     INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, path, fixed_base, scale) # TODO: store geometry info instead?
@@ -2533,6 +2533,7 @@ def set_color(body, color, link=BASE_LINK, shape_index=NULL_ID):
     :return:
     """
     # specularColor
+    # TODO: if link is None, set_all_color (like AABB)
     return p.changeVisualShape(body, link, shapeIndex=shape_index, rgbaColor=color,
                                #textureUniqueId=None, specularColor=None,
                                physicsClientId=CLIENT)
@@ -3007,6 +3008,7 @@ def get_distance_fn(body, joints, weights=None): #, norm=2):
 
 def get_duration_fn(body, joints, velocities=None, norm=INF):
     # TODO: integrate with get_distance_fn weights
+    # TODO: integrate with get_nonholonomic_distance_fn
     if velocities is None:
         velocities = np.array(get_max_velocities(body, joints))
     difference_fn = get_difference_fn(body, joints)
@@ -3067,7 +3069,7 @@ def waypoints_from_path(path, tolerance=1e-3):
     if len(path) < 2:
         return path
     difference_fn = lambda q2, q1: np.array(q2) - np.array(q1)
-    #difference_fn = get_difference_fn(body, joints)
+    #difference_fn = get_difference_fn(body, joints) # TODO: account for wrap around or use adjust_path
 
     waypoints = [path[0]]
     last_conf = path[1]
@@ -3241,18 +3243,24 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
 
 #####################################
 
-def get_closest_angle_fn(body, joints, weights=None, reversible=True):
+def get_closest_angle_fn(body, joints, weights=None, reversible=True, linear_tol=0., **kwargs):
     assert len(joints) == 3
     weights = get_default_weights(body, joints, weights)
     linear_distance_fn = get_distance_fn(body, joints[:2], weights=weights[:2])
     angular_distance_fn = get_distance_fn(body, joints[2:], weights=weights[2:])
 
     def closest_fn(q1, q2):
+        linear_distance = linear_distance_fn(q1[:2], q2[:2])
+        if linear_distance < linear_tol:
+            angle = None
+            angular_distance = angular_distance_fn(q1[2:], q2[2:])
+            return angle, angular_distance
+
         angle_and_distance = []
-        for direction in [0, PI] if reversible else [PI]:
+        for direction in [0, PI] if reversible else [0]: # TODO: previously was [PI]
             angle = get_angle(q1[:2], q2[:2]) + direction
             distance = angular_distance_fn(q1[2:], [angle]) \
-                       + linear_distance_fn(q1[:2], q2[:2]) \
+                       + linear_distance \
                        + angular_distance_fn([angle], q2[2:])
             angle_and_distance.append((angle, distance))
         return min(angle_and_distance, key=lambda pair: pair[1])
@@ -3267,7 +3275,7 @@ def get_nonholonomic_distance_fn(body, joints, **kwargs):
         return distance
     return distance_fn
 
-def get_nonholonomic_extend_fn(body, joints, resolutions=None, **kwargs):
+def get_nonholonomic_extend_fn(body, joints, resolutions=None, angular_tol=0., **kwargs):
     assert len(joints) == 3
     resolutions = get_default_resolutions(body, joints, resolutions)
     linear_extend_fn = get_extend_fn(body, joints[:2], resolutions[:2])
@@ -3276,13 +3284,14 @@ def get_nonholonomic_extend_fn(body, joints, resolutions=None, **kwargs):
 
     def extend_fn(q1, q2):
         angle, _ = closest_angle_fn(q1, q2)
+        if angle is None:
+            return [np.append(q1[:2], aq) for aq in angular_extend_fn(q1[2:], q2[2:])] # TODO: average?
         path = []
-        for aq in angular_extend_fn(q1[2:], [angle]):
-            path.append(np.append(q1[:2], aq))
-        for lq in linear_extend_fn(q1[:2], q2[:2]):
-            path.append(np.append(lq, [angle]))
-        for aq in angular_extend_fn([angle], q2[2:]):
-            path.append(np.append(q2[:2], aq))
+        if circular_difference(angle, q1[2]) >= angular_tol:
+            path.extend(np.append(q1[:2], aq) for aq in angular_extend_fn(q1[2:], [angle]))
+        path.extend(np.append(lq, [angle]) for lq in linear_extend_fn(q1[:2], q2[:2]))
+        if circular_difference(q2[2], angle) >= angular_tol:
+            path.extend(np.append(q2[:2], aq) for aq in angular_extend_fn([angle], q2[2:]))
         return path
     return extend_fn
 
