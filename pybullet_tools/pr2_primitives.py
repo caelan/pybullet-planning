@@ -534,7 +534,7 @@ def get_motion_gen(problem, custom_limits={}, collisions=True, teleport=False):
     robot = problem.robot
     saver = BodySaver(robot)
     obstacles = problem.fixed if collisions else []
-    def fn(bq1, bq2):
+    def fn(bq1, bq2, fluents=[]):
         saver.restore()
         bq1.assign()
         if teleport:
