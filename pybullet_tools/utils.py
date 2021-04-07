@@ -3904,6 +3904,18 @@ def interpolate(value1, value2, num_steps=2):
         yield convex_combination(value1, value2, w=w)
     yield value2
 
+def interpolate_waypoints(interpolate_fn, waypoints, returns_first=True):
+    if len(waypoints) <= 1:
+        for waypoint in waypoints:
+            yield waypoint
+        return
+    yield waypoints[0]
+    for waypoint1, waypoint2 in get_pairs(waypoints):
+        for i, value in enumerate(interpolate_fn(waypoint1, waypoint2)):
+            if returns_first and (i == 0):
+                continue
+            yield value
+
 # def workspace_trajectory(robot, link, start_point, direction, quat, **kwargs):
 #     # TODO: pushing example
 #     # TODO: just use current configuration?
