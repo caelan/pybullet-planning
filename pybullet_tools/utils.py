@@ -3162,29 +3162,33 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         return False
     return collision_fn
 
+def interpolate_joint_waypoints(body, joints, waypoints, resolutions=None,
+                                collision_fn=lambda *args, **kwargs: False, **kwargs):
+    # TODO: unify with refine_path
+    extend_fn = get_extend_fn(body, joints, resolutions=resolutions, **kwargs)
+    path = waypoints[:1]
+    for waypoint in waypoints[1:]:
+        assert len(joints) == len(waypoint)
+        for q in list(extend_fn(path[-1], waypoint)):
+            if collision_fn(q):
+                return None
+            path.append(q) # TODO: could instead yield
+    return path
+
 def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstacles=[], attachments=[],
                                 self_collisions=True, disabled_collisions=set(),
                                 resolutions=None, custom_limits={}, max_distance=MAX_DISTANCE):
-    extend_fn = get_extend_fn(body, joints, resolutions=resolutions)
-    collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
-                                    custom_limits=custom_limits, max_distance=max_distance)
     if start_conf is None:
         start_conf = get_joint_positions(body, joints)
-    else:
-        assert len(start_conf) == len(joints)
-
-    for i, waypoint in enumerate([start_conf] + list(waypoints)):
+    assert len(start_conf) == len(joints)
+    collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
+                                    custom_limits=custom_limits, max_distance=max_distance)
+    waypoints = [start_conf] + list(waypoints)
+    for i, waypoint in enumerate(waypoints):
         if collision_fn(waypoint):
             #print("Warning: waypoint configuration {}/{} is in collision".format(i, len(waypoints)))
             return None
-    path = [start_conf]
-    for waypoint in waypoints:
-        assert len(joints) == len(waypoint)
-        for q in extend_fn(path[-1], waypoint):
-            if collision_fn(q):
-                return None
-            path.append(q)
-    return path
+    return interpolate_joint_waypoints(body, joints, waypoints, resolutions=resolutions, collision_fn=collision_fn)
 
 def plan_direct_joint_motion(body, joints, end_conf, **kwargs):
     return plan_waypoints_joint_motion(body, joints, [end_conf], **kwargs)
