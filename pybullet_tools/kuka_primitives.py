@@ -1,5 +1,4 @@
 import time
-# dump_body(robot)
 
 from .pr2_utils import get_top_grasps
 from .utils import get_pose, set_pose, get_movable_joints, \
@@ -7,7 +6,9 @@ from .utils import get_pose, set_pose, get_movable_joints, \
     enable_gravity, get_refine_fn, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
     inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
-    step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions, dump_world, wait_if_gui
+    step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions, dump_world, wait_if_gui, flatten
+
+# TODO: deprecate
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(), max_width=INF,  grasp_length=0),
@@ -28,6 +29,9 @@ class BodyPose(object):
             pose = get_pose(body)
         self.body = body
         self.pose = pose
+    @property
+    def value(self):
+        return self.pose
     def assign(self):
         set_pose(self.body, self.pose)
         return self.pose
@@ -42,6 +46,12 @@ class BodyGrasp(object):
         self.approach_pose = approach_pose
         self.robot = robot
         self.link = link
+    @property
+    def value(self):
+        return self.grasp_pose
+    @property
+    def approach(self):
+        return self.approach_pose
     #def constraint(self):
     #    grasp_constraint()
     def attachment(self):
@@ -61,6 +71,9 @@ class BodyConf(object):
         self.body = body
         self.joints = joints
         self.configuration = configuration
+    @property
+    def values(self):
+        return self.configuration
     def assign(self):
         set_joint_positions(self.body, self.joints, self.configuration)
         return self.configuration
@@ -139,7 +152,8 @@ class Detach(ApplyForce):
 class Command(object):
     def __init__(self, body_paths):
         self.body_paths = body_paths
-
+    def bodies(self):
+        return set(flatten(path.bodies() for path in self.body_paths))
     # def full_path(self, q0=None):
     #     if q0 is None:
     #         q0 = Conf(self.tree)
@@ -147,30 +161,24 @@ class Command(object):
     #     for partial_path in self.body_paths:
     #         new_path += partial_path.full_path(new_path[-1])[1:]
     #     return new_path
-
     def step(self):
         for i, body_path in enumerate(self.body_paths):
             for j in body_path.iterator():
                 msg = '{},{}) step?'.format(i, j)
                 wait_if_gui(msg)
                 #print(msg)
-
     def execute(self, time_step=0.05):
         for i, body_path in enumerate(self.body_paths):
             for j in body_path.iterator():
                 #time.sleep(time_step)
                 wait_for_duration(time_step)
-
     def control(self, real_time=False, dt=0): # TODO: real_time
         for body_path in self.body_paths:
             body_path.control(real_time=real_time, dt=dt)
-
     def refine(self, **kwargs):
         return self.__class__([body_path.refine(**kwargs) for body_path in self.body_paths])
-
     def reverse(self):
         return self.__class__([body_path.reverse() for body_path in reversed(self.body_paths)])
-
     def __repr__(self):
         return 'c{}'.format(id(self) % 1000)
 
@@ -288,6 +296,8 @@ def get_holding_motion_gen(robot, fixed=[], teleport=False, self_collisions=True
 
 def get_movable_collision_test():
     def test(command, body, pose):
+        if body in command.bodies():
+            return False
         pose.assign()
         for path in command.body_paths:
             moving = path.bodies()
