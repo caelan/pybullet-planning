@@ -103,6 +103,9 @@ SEPARATOR = '\n' + 50*'-' + '\n'
 
 inf_generator = count
 
+def empty_sequence():
+    return iter([])
+
 def irange(start, end=None, step=1):
     if end is None:
         end = start
@@ -161,6 +164,10 @@ def ensure_dir(f):
     d = os.path.dirname(f)
     if not os.path.exists(d):
         os.makedirs(d)
+
+def list_paths(directory):
+    return sorted(os.path.abspath(os.path.join(directory, filename))
+                  for filename in os.listdir(directory))
 
 ##################################################
 
@@ -281,6 +288,12 @@ def str_from_object(obj):  # str_object
     return str(obj)
     #return repr(obj)
 
+def safe_sample(collection, k=1):
+    collection = list(collection)
+    if len(collection) <= k:
+        return collection
+    return random.sample(collection, k)
+
 ##################################################
 
 BYTES_PER_KILOBYTE = math.pow(2, 10)
@@ -392,16 +405,20 @@ class HideOutput(object):
 
 # Colors
 
-RED = (1, 0, 0, 1)
-GREEN = (0, 1, 0, 1)
-BLUE = (0, 0, 1, 1)
-BLACK = (0, 0, 0, 1)
-WHITE = (1, 1, 1, 1)
-BROWN = (0.396, 0.263, 0.129, 1)
-TAN = (0.824, 0.706, 0.549, 1)
-GREY = (0.5, 0.5, 0.5, 1)
-YELLOW = (1, 1, 0, 1)
-TRANSPARENT = (0, 0, 0, 0)
+RGB = namedtuple('RGB', ['red', 'green', 'blue'])
+RGBA = namedtuple('RGBA', ['red', 'green', 'blue', 'alpha'])
+MAX_RGB = 2**8 - 1
+
+RED = RGBA(1, 0, 0, 1)
+GREEN = RGBA(0, 1, 0, 1)
+BLUE = RGBA(0, 0, 1, 1)
+BLACK = RGBA(0, 0, 0, 1)
+WHITE = RGBA(1, 1, 1, 1)
+BROWN = RGBA(0.396, 0.263, 0.129, 1)
+TAN = RGBA(0.824, 0.706, 0.549, 1)
+GREY = RGBA(0.5, 0.5, 0.5, 1)
+YELLOW = RGBA(1, 1, 0, 1)
+TRANSPARENT = RGBA(0, 0, 0, 0)
 
 ACHROMATIC_COLORS = {
     'white': WHITE,
@@ -418,15 +435,16 @@ CHROMATIC_COLORS = {
 COLOR_FROM_NAME = merge_dicts(ACHROMATIC_COLORS, CHROMATIC_COLORS)
 
 def remove_alpha(color):
-    return color[:3]
+    return RGB(*color[:3])
 
-def apply_alpha(color, alpha=1.0):
+def apply_alpha(color, alpha=1.):
     if color is None:
         return None
-    return tuple(color[:3]) + (alpha,)
+    red, green, blue = color[:3]
+    return RGBA(red, green, blue, alpha)
 
 def spaced_colors(n, s=1, v=1):
-    return [colorsys.hsv_to_rgb(h, s, v) for h in np.linspace(0, 1, n, endpoint=False)]
+    return [RGB(*colorsys.hsv_to_rgb(h, s, v)) for h in np.linspace(0, 1, n, endpoint=False)]
 
 #####################################
 
@@ -2521,6 +2539,14 @@ def get_data_geometry(data):
         raise ValueError(geometry_type)
     return SHAPE_TYPES[geometry_type], parameters
 
+def get_color(body):
+    # TODO: average over texture
+    visual_data = get_visual_data(body)
+    if not visual_data:
+        # TODO: no viewer implies no visual data
+        return None
+    return visual_data[0].rgbaColor
+
 def set_color(body, color, link=BASE_LINK, shape_index=NULL_ID):
     """
     Experimental for internal use, recommended ignore shapeIndex or leave it -1.
@@ -2853,6 +2879,15 @@ CollisionInfo = namedtuple('CollisionInfo',
                            lateralFrictionDir2
                            """.split())
 
+def draw_collision_info(collision_info, **kwargs):
+    point1 = collision_info.positionOnA
+    point2 = collision_info.positionOnB
+    #point1 = point2 + np.array(collision_info.contactNormalOnB)*collision_info.contactDistance
+    handles = [add_line(point1, point2, **kwargs)]
+    for point in [point1, point2]:
+        handles.extend(draw_point(point, **kwargs))
+    return handles
+
 def get_closest_points(body1, body2, link1=None, link2=None, max_distance=MAX_DISTANCE):
     if (link1 is None) and (link2 is None):
         results = p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance, physicsClientId=CLIENT)
@@ -2937,6 +2972,18 @@ def batch_ray_collision(rays, threads=1):
         #parentObjectUniqueId=
         #parentLinkIndex=
         physicsClientId=CLIENT)]
+
+def get_ray_from_to(mouseX, mouseY, farPlane=10000):
+    # https://github.com/bulletphysics/bullet3/blob/afa4fb54505fd071103b8e2e8793c38fd40f6fb6/examples/pybullet/examples/pointCloudFromCameraImage.py
+    # https://github.com/bulletphysics/bullet3/blob/afa4fb54505fd071103b8e2e8793c38fd40f6fb6/examples/pybullet/examples/addPlanarReflection.py
+    width, height, _, _, _, camForward, horizon, vertical, _, _, dist, camTarget = p.getDebugVisualizerCamera()
+    rayFrom = camPos = np.array(camTarget) - dist * np.array(camForward)
+    rayForward = farPlane*get_unit_vector(np.array(camTarget) - rayFrom)
+    dHor = np.array(horizon) / float(width)
+    dVer = np.array(vertical) / float(height)
+    #rayToCenter = rayFrom + rayForward
+    rayTo = rayFrom + rayForward - 0.5*(np.array(horizon) - np.array(vertical)) + (mouseX*dHor - mouseY*dVer)
+    return Ray(rayFrom, rayTo)
 
 #####################################
 
@@ -3459,6 +3506,19 @@ def uniform_pose_generator(robot, gripper_pose, **kwargs):
         yield base_values
         #set_base_values(robot, base_values)
         #yield get_pose(robot)
+
+def custom_limits_from_base_limits(robot, base_limits, yaw_limit=None):
+    # TODO: unify with SS-Replan
+    x_limits, y_limits = zip(*base_limits)
+    custom_limits = {
+        joint_from_name(robot, 'x'): x_limits,
+        joint_from_name(robot, 'y'): y_limits,
+    }
+    if yaw_limit is not None:
+        custom_limits.update({
+            joint_from_name(robot, 'theta'): yaw_limit,
+        })
+    return custom_limits
 
 #####################################
 
