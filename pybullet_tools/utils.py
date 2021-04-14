@@ -3190,9 +3190,10 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
 
     # TODO: maybe prune the link adjacent to the robot
     # TODO: test self collision with the holding
-    def collision_fn(q):
+    def collision_fn(q, verbose=False):
         if not all_between(lower_limits, q, upper_limits):
             #print('Joint limits violated')
+            if verbose: print(lower_limits, q, upper_limits)
             return True
         set_joint_positions(body, joints, q)
         for attachment in attachments:
@@ -3201,10 +3202,12 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
             # Self-collisions should not have the max_distance parameter
             if pairwise_link_collision(body, link1, body, link2): #, **kwargs):
                 #print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
+                if verbose: print(body, link1, body, link2)
                 return True
         for body1, body2 in check_body_pairs:
             if pairwise_collision(body1, body2, **kwargs):
                 #print(get_body_name(body1), get_body_name(body2))
+                if verbose: print(body1, body)
                 return True
         return False
     return collision_fn
@@ -3241,10 +3244,10 @@ def plan_direct_joint_motion(body, joints, end_conf, **kwargs):
     return plan_waypoints_joint_motion(body, joints, [end_conf], **kwargs)
 
 def check_initial_end(start_conf, end_conf, collision_fn):
-    if collision_fn(start_conf):
+    if collision_fn(start_conf, verbose=True):
         print("Warning: initial configuration is in collision")
         return False
-    if collision_fn(end_conf):
+    if collision_fn(end_conf, verbose=True):
         print("Warning: end configuration is in collision")
         return False
     return True
