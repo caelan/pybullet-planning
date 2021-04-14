@@ -3341,10 +3341,10 @@ def get_nonholonomic_extend_fn(body, joints, resolutions=None, angular_tol=0., *
         if angle is None:
             return [np.append(q1[:2], aq) for aq in angular_extend_fn(q1[2:], q2[2:])] # TODO: average?
         path = []
-        if circular_difference(angle, q1[2]) >= angular_tol:
+        if abs(circular_difference(angle, q1[2])) >= angular_tol:
             path.extend(np.append(q1[:2], aq) for aq in angular_extend_fn(q1[2:], [angle]))
         path.extend(np.append(lq, [angle]) for lq in linear_extend_fn(q1[:2], q2[:2]))
-        if circular_difference(q2[2], angle) >= angular_tol:
+        if abs(circular_difference(q2[2], angle)) >= angular_tol:
             path.extend(np.append(q2[:2], aq) for aq in angular_extend_fn([angle], q2[2:]))
         return path
     return extend_fn
