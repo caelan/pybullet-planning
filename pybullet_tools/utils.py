@@ -103,6 +103,9 @@ SEPARATOR = '\n' + 50*'-' + '\n'
 
 inf_generator = count
 
+List = lambda *args: list(args)
+Tuple = lambda *args: tuple(args)
+
 def empty_sequence():
     return iter([])
 
@@ -3207,7 +3210,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         for body1, body2 in check_body_pairs:
             if pairwise_collision(body1, body2, **kwargs):
                 #print(get_body_name(body1), get_body_name(body2))
-                if verbose: print(body1, body)
+                if verbose: print(body1, body2)
                 return True
         return False
     return collision_fn
