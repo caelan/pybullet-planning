@@ -2,7 +2,7 @@
 
 from __future__ import print_function
 
-from lxml import etree
+from lxml import etree # pip install lxml
 import os
 
 def find_insensitive(elem, pattern):

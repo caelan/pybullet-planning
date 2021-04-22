@@ -7,7 +7,7 @@ import numpy as np
 
 from pybullet_tools.utils import add_data_path, connect, enable_gravity, wait_if_gui, disconnect, create_sphere, set_point, Point, \
     enable_real_time, dump_world, load_model, wait_if_gui, set_camera, stable_z, \
-    set_color, get_lower_upper, wait_for_duration, simulate_for_duration, load_pybullet
+    set_color, get_lower_upper, wait_for_duration, simulate_for_duration, load_pybullet, safe_zip
 
 
 def main():
@@ -36,7 +36,7 @@ def main():
     lower = np.array(lower) + buffer*np.ones(len(lower))
     upper = np.array(upper) - buffer*np.ones(len(upper))
 
-    limits = zip(lower, upper)
+    limits = safe_zip(lower, upper)
     x_range, y_range = limits[:2]
     z = upper[2] + 0.1
     #x_range = [-1, 1]
