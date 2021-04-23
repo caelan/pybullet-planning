@@ -199,19 +199,19 @@ def randomize(iterable): # TODO: bisect
     return sequence
 
 def get_random_seed():
-    return random.getstate()[1][0]
+    return random.getstate()[1][1]
 
 def get_numpy_seed():
     return np.random.get_state()[1][0]
 
-def set_random_seed(seed):
+def set_random_seed(seed=None):
     if seed is not None:
         random.seed(seed)
 
 def wrap_numpy_seed(seed):
-    return seed % (2**32)
+    return seed % (2**32) # int | hash
 
-def set_numpy_seed(seed):
+def set_numpy_seed(seed=None):
     # These generators are different and independent
     if seed is not None:
         np.random.seed(wrap_numpy_seed(seed))

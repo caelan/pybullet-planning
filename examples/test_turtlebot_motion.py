@@ -1,22 +1,35 @@
 from __future__ import print_function
 
+import argparse
+import time
 import random
 import numpy as np
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 
 from pybullet_tools.utils import HUSKY_URDF, load_model, TURTLEBOT_URDF, joints_from_names, \
     set_joint_positions, HideOutput, get_bodies, sample_placement, pairwise_collision, \
-    add_data_path, load_pybullet, set_point, Point, create_box, stable_z, BLUE, TAN, GREY, connect, PI, wait_if_gui
+    add_data_path, load_pybullet, set_point, Point, create_box, stable_z, BLUE, TAN, GREY, connect, PI, \
+    wait_if_gui, dump_body, set_all_color, BLUE, child_link_from_joint, link_from_name, draw_pose, Pose, pose_from_pose2d, \
+    get_random_seed, get_numpy_seed, set_random_seed, set_numpy_seed
 
+# TODO: https://stackoverflow.com/questions/1653970/does-python-have-an-ordered-set
+
+BASE_LINK = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
 
+##################################################
+
 def sample_placements(body_surfaces, obstacles=None, min_distances={}):
+    # TODO: check object at the goal pose
     if obstacles is None:
+        # TODO: savers per object
         obstacles = [body for body in get_bodies() if body not in body_surfaces]
     obstacles = list(obstacles)
+    if not isinstance(min_distances, dict):
+        min_distances = defaultdict(lambda: 0.)
     # TODO: max attempts here
-    for body, surface in body_surfaces.items():
-        min_distance = min_distances.get(body, 0.01)
+    for body, surface in body_surfaces.items(): # TODO: shuffle
+        min_distance = min_distances.get(body, 0.)
         while True:
             pose = sample_placement(body, surface)
             if pose is None:
@@ -27,81 +40,75 @@ def sample_placements(body_surfaces, obstacles=None, min_distances={}):
                 break
     return True
 
-def problem1(n_rovers=2, n_objectives=4, n_rocks=3, n_soil=3, n_stores=1, n_obstacles=8):
-    base_extent = 5.0
-    base_limits = (-base_extent/2.*np.ones(2), base_extent/2.*np.ones(2))
-    mount_width = 0.5
-    mound_height = 0.1
+##################################################
 
-    floor = create_box(base_extent, base_extent, 0.001, color=TAN) # TODO: two rooms
-    set_point(floor, Point(z=-0.001/2.))
+def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
+    floor_extent = 5.0
+    base_limits = (-floor_extent/2.*np.ones(2),
+                   +floor_extent/2.*np.ones(2))
 
-    wall1 = create_box(base_extent + mound_height, mound_height, mound_height, color=GREY)
-    set_point(wall1, Point(y=base_extent/2., z=mound_height/2.))
-    wall2 = create_box(base_extent + mound_height, mound_height, mound_height, color=GREY)
-    set_point(wall2, Point(y=-base_extent/2., z=mound_height/2.))
-    wall3 = create_box(mound_height, base_extent + mound_height, mound_height, color=GREY)
-    set_point(wall3, Point(x=base_extent/2., z=mound_height/2.))
-    wall4 = create_box(mound_height, base_extent + mound_height, mound_height, color=GREY)
-    set_point(wall4, Point(x=-base_extent/2., z=mound_height/2.))
-    # TODO: can add obstacles along the wall
+    floor_height = 0.001
+    floor = create_box(floor_extent, floor_extent, floor_height, color=TAN)
+    set_point(floor, Point(z=-floor_height/2.))
 
-    wall = create_box(mound_height, base_extent, mound_height, color=GREY)  # TODO: two rooms
-    set_point(wall, Point(z=mound_height / 2.))
+    wall1 = create_box(floor_extent + wall_side, wall_side, wall_side, color=GREY)
+    set_point(wall1, Point(y=floor_extent/2., z=wall_side/2.))
+    wall2 = create_box(floor_extent + wall_side, wall_side, wall_side, color=GREY)
+    set_point(wall2, Point(y=-floor_extent/2., z=wall_side/2.))
+    wall3 = create_box(wall_side, floor_extent + wall_side, wall_side, color=GREY)
+    set_point(wall3, Point(x=floor_extent/2., z=wall_side/2.))
+    wall4 = create_box(wall_side, floor_extent + wall_side, wall_side, color=GREY)
+    set_point(wall4, Point(x=-floor_extent/2., z=wall_side/2.))
+    walls = [wall1, wall2, wall3, wall4]
 
-    add_data_path()
-    with HideOutput():
-        lander = load_pybullet(HUSKY_URDF, scale=1)
-    lander_z = stable_z(lander, floor)
-    set_point(lander, Point(-1.9, -2, lander_z))
-
-    mound1 = create_box(mount_width, mount_width, mound_height, color=GREY)
-    set_point(mound1, [+2, 2, mound_height/2.])
-    mound2 = create_box(mount_width, mount_width, mound_height, color=GREY)
-    set_point(mound2, [-2, 2, mound_height/2.])
-    mound3 = create_box(mount_width, mount_width, mound_height, color=GREY)
-    set_point(mound3, [+0.5, 2, mound_height/2.])
-    mound4 = create_box(mount_width, mount_width, mound_height, color=GREY)
-    set_point(mound4, [-0.5, 2, mound_height/2.])
-    mounds = [mound1, mound2, mound3, mound4]
-    random.shuffle(mounds)
-
-    body_types = []
     initial_surfaces = OrderedDict()
-    min_distances = {}
     for _ in range(n_obstacles):
-        body = create_box(mound_height, mound_height, 4*mound_height, color=GREY)
+        body = create_box(obst_width, obst_width, obst_height, color=GREY)
         initial_surfaces[body] = floor
 
-    # camera_rgb_optical_frame
+    initial_conf = np.array([+floor_extent/3, -floor_extent/3, 3*PI/4])
+    draw_pose(pose_from_pose2d(initial_conf), length=0.5)
+    goal_conf = -initial_conf
+    draw_pose(pose_from_pose2d(goal_conf), length=0.5)
+
     with HideOutput():
-        rover = load_model(TURTLEBOT_URDF)
-    robot_z = stable_z(rover, floor)
-
-    set_point(rover, Point(z=robot_z))
-    #handles = draw_aabb(get_aabb(rover)) # Includes the origin
-    #print(get_center_extent(rover))
+        robot = load_model(TURTLEBOT_URDF)
+        base_joints = joints_from_names(robot, BASE_JOINTS)
+        # base_link = child_link_from_joint(base_joints[-1])
+        base_link = link_from_name(robot, BASE_LINK)
+        set_all_color(robot, BLUE)
+    dump_body(robot)
+    set_point(robot, Point(z=stable_z(robot, floor)))
+    #handles = draw_aabb(get_aabb(robot))
+    #print(get_center_extent(robot))
     #wait_for_user()
-    base_joints = joints_from_names(rover, BASE_JOINTS)
-    set_joint_positions(rover, base_joints, [+1, -1.75, PI])
-    #dump_body(rover)
-    #draw_pose(get_link_pose(rover, link_from_name(rover, KINECT_FRAME)))
+    draw_pose(Pose(), parent=robot, parent_link=base_link, length=0.5)
+    set_joint_positions(robot, base_joints, initial_conf)
 
-    obj_width = 0.07
-    obj_height = 0.2
-
-    objectives = []
-    for i in range(n_objectives):
-        body = create_box(obj_width, obj_width, obj_height, color=BLUE)
-        objectives.append(body)
-        #initial_surfaces[body] = random.choice(mounds)
-        initial_surfaces[body] = mounds[i]
-
-    min_distances.update({r: 0.05 for r in objectives})
-    sample_placements(initial_surfaces, min_distances=min_distances)
+    sample_placements(initial_surfaces, obstacles=[robot] + walls, min_distances=10e-2)
 
 def main():
-    connect(use_gui=True)
+    parser = argparse.ArgumentParser()
+    # parser.add_argument('-c', '--cfree', action='store_true',
+    #                     help='When enabled, disables collision checking (for debugging).')
+    # parser.add_argument('-p', '--problem', default='test_pour', choices=sorted(problem_fn_from_name),
+    #                     help='The name of the problem to solve.')
+    parser.add_argument('-s', '--seed', default=None, type=int,
+                        help='The random seed to use.')
+    parser.add_argument('-v', '--viewer', action='store_true',
+                        help='')
+    args = parser.parse_args()
+
+    connect()
+
+    seed = args.seed
+    #seed = 0
+    #seed = time.time()
+    set_random_seed(seed=seed) # None: 2147483648 = 2**31
+    set_numpy_seed(seed=seed)
+    print('Random seed:', get_random_seed(), random.random())
+    print('Numpy seed:', get_numpy_seed(), np.random.random())
+
     problem1()
     wait_if_gui()
 
