@@ -13,7 +13,8 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     get_random_seed, get_numpy_seed, set_random_seed, set_numpy_seed, plan_joint_motion, plan_nonholonomic_motion, \
     joint_from_name, safe_zip, draw_base_limits, BodySaver, WorldSaver, LockRenderer, elapsed_time, disconnect, flatten, \
     INF, wait_for_duration, get_unbuffered_aabb, draw_aabb, DEFAULT_AABB_BUFFER, get_link_pose, get_joint_positions, \
-    get_subtree_aabb, get_pairs, get_distance_fn, get_aabb, set_all_static
+    get_subtree_aabb, get_pairs, get_distance_fn, get_aabb, set_all_static, step_simulation, get_bodies_in_region, \
+    AABB, update_scene, Profiler
 
 BASE_LINK = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
@@ -154,7 +155,17 @@ def main():
     #base_link = link_from_name(robot, BASE_LINK)
     if args.cfree:
         obstacles = []
+    # for obstacle in obstacles:
+    #     draw_aabb(get_aabb(obstacle)) # Updates automatically
     resolutions = None
+    set_all_static() # Doesn't seem to affect
+
+    region_aabb = AABB(lower=-np.ones(3), upper=+np.ones(3))
+    draw_aabb(region_aabb)
+    step_simulation() # Need to call before get_bodies_in_region
+    #update_scene() # TODO: https://github.com/bulletphysics/bullet3/pull/3331
+    bodies = get_bodies_in_region(region_aabb)
+    print(len(bodies), bodies)
 
     #draw_pose(get_link_pose(robot, base_link), length=0.5)
     for conf in [get_joint_positions(robot, base_joints), goal_conf]:
@@ -165,11 +176,14 @@ def main():
 
     saver = WorldSaver()
     start_time = time.time() # TODO: Profiler
+    profiler = Profiler(field=None)
+    profiler.save()
     with LockRenderer(lock=args.lock):
         path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic, obstacles=obstacles,
                            custom_limits=custom_limits, resolutions=resolutions)
         saver.restore()
     #wait_for_duration(duration=1e-3)
+    profiler.restore()
 
     solved = path is not None
     length = INF if path is None else len(path)

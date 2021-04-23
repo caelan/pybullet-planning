@@ -16,6 +16,8 @@ import sys
 import time
 import datetime
 import shutil
+import cProfile
+import pstats
 
 from collections import defaultdict, deque, namedtuple
 from itertools import product, combinations, count, cycle, islice
@@ -531,6 +533,26 @@ class VideoSaver(Saver):
             p.stopStateLogging(self.log_id)
             print('Saved', self.path)
 
+class Profiler(Saver):
+    fields = ['tottime', 'cumtime']
+    def __init__(self, field='tottime', num=10):
+        assert field in self.fields
+        self.field = field
+        self.num = num
+        self.pr = cProfile.Profile()
+    def save(self):
+        self.pr.enable()
+        return self.pr
+    def restore(self):
+        self.pr.disable()
+        if self.num is None:
+            return None
+        stream = None
+        #stream = io.StringIO()
+        stats = pstats.Stats(self.pr, stream=stream).sort_stats(self.field) # TODO: print multiple
+        stats.print_stats(self.num)
+        return stats
+
 #####################################
 
 class PoseSaver(Saver):
@@ -976,6 +998,9 @@ def disable_gravity():
 def step_simulation():
     p.stepSimulation(physicsClientId=CLIENT)
 
+def update_scene():
+    p.performCollisionDetection(physicsClientId=CLIENT)
+
 def set_real_time(real_time):
     p.setRealTimeSimulation(int(real_time), physicsClientId=CLIENT)
 
@@ -1002,6 +1027,9 @@ def update_state():
     #p.getMouseEvents()
 
 def reset_simulation():
+    # RESET_USE_SIMPLE_BROADPHASE
+    # RESET_USE_DEFORMABLE_WORLD
+    # RESET_USE_DISCRETE_DYNAMICS_WORLD
     p.resetSimulation(physicsClientId=CLIENT)
 
 #####################################
@@ -2974,7 +3002,9 @@ def any_link_pair_collision(body1, links1, body2, links2=None, **kwargs):
 
 link_pairs_collision = any_link_pair_collision
 
-def body_collision(body1, body2, **kwargs):
+def body_collision(body1, body2, use_aabb=False, **kwargs):
+    if use_aabb and not aabb_overlap(get_aabb(body1), get_aabb(body2)):
+        return False
     return len(get_closest_points(body1, body2, **kwargs)) != 0
 
 def pairwise_collision(body1, body2, **kwargs):
@@ -3233,8 +3263,7 @@ def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=Tru
 def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
                      custom_limits={}, **kwargs):
     # TODO: convert most of these to keyword arguments
-    check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) \
-        if self_collisions else []
+    check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
     moving_links = frozenset(get_moving_links(body, joints))
     attached_bodies = [attachment.child for attachment in attachments]
     moving_bodies = [(body, moving_links)] + attached_bodies
