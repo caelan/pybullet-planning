@@ -1,23 +1,25 @@
 from __future__ import print_function
 
 import argparse
-import time
 import random
 import numpy as np
 from collections import OrderedDict, defaultdict
 
-from pybullet_tools.utils import HUSKY_URDF, load_model, TURTLEBOT_URDF, joints_from_names, \
+from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, \
     set_joint_positions, HideOutput, get_bodies, sample_placement, pairwise_collision, \
-    add_data_path, load_pybullet, set_point, Point, create_box, stable_z, BLUE, TAN, GREY, connect, PI, \
+    set_point, Point, create_box, stable_z, TAN, GREY, connect, PI, OrderedSet, \
     wait_if_gui, dump_body, set_all_color, BLUE, child_link_from_joint, link_from_name, draw_pose, Pose, pose_from_pose2d, \
-    get_random_seed, get_numpy_seed, set_random_seed, set_numpy_seed
-
-# TODO: https://stackoverflow.com/questions/1653970/does-python-have-an-ordered-set
+    get_random_seed, get_numpy_seed, set_random_seed, set_numpy_seed, plan_joint_motion, plan_nonholonomic_motion, \
+    joint_from_name, safe_zip, draw_base_limits
 
 BASE_LINK = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
 
 ##################################################
+
+def create_custom_base_limits(robot, base_limits):
+    return {joint_from_name(robot, joint): limits
+            for joint, limits in safe_zip(BASE_JOINTS[:2], zip(*base_limits))}
 
 def sample_placements(body_surfaces, obstacles=None, min_distances={}):
     # TODO: check object at the goal pose
@@ -39,6 +41,18 @@ def sample_placements(body_surfaces, obstacles=None, min_distances={}):
                 obstacles.append(body)
                 break
     return True
+
+def plan_motion(robot, joints, goal_positions, attachments=[], obstacles=None, holonomic=False, reversible=False, **kwargs):
+    attached_bodies = [attachment.child for attachment in attachments]
+    moving_bodies = [robot] + attached_bodies
+    if obstacles is None:
+        obstacles = get_bodies()
+    obstacles = OrderedSet(obstacles) - set(moving_bodies)
+    if holonomic:
+        return plan_joint_motion(robot, joints, goal_positions,
+                                 attachments=attachments, obstacles=obstacles, **kwargs)
+    return plan_nonholonomic_motion(robot, joints, goal_positions, reversible=reversible,
+                                    attachments=attachments, obstacles=obstacles, **kwargs)
 
 ##################################################
 
@@ -65,6 +79,7 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     for _ in range(n_obstacles):
         body = create_box(obst_width, obst_width, obst_height, color=GREY)
         initial_surfaces[body] = floor
+    obstacles = walls + list(initial_surfaces)
 
     initial_conf = np.array([+floor_extent/3, -floor_extent/3, 3*PI/4])
     draw_pose(pose_from_pose2d(initial_conf), length=0.5)
@@ -86,6 +101,8 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     set_joint_positions(robot, base_joints, initial_conf)
 
     sample_placements(initial_surfaces, obstacles=[robot] + walls, min_distances=10e-2)
+
+    return robot, base_limits, goal_conf, obstacles
 
 def main():
     parser = argparse.ArgumentParser()
@@ -109,7 +126,13 @@ def main():
     print('Random seed:', get_random_seed(), random.random())
     print('Numpy seed:', get_numpy_seed(), np.random.random())
 
-    problem1()
+    robot, base_limits, goal_conf, obstacles = problem1()
+    draw_base_limits(base_limits)
+    custom_limits = create_custom_base_limits(robot, base_limits)
+    base_joints = joints_from_names(robot, BASE_JOINTS)
+    path = plan_motion(robot, base_joints, goal_conf, obstacles=obstacles, custom_limits=custom_limits)
+    print(path)
+
     wait_if_gui()
 
 if __name__ == '__main__':
