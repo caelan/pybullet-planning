@@ -534,9 +534,11 @@ class VideoSaver(Saver):
 #####################################
 
 class PoseSaver(Saver):
-    def __init__(self, body):
+    def __init__(self, body, pose=None):
         self.body = body
-        self.pose = get_pose(self.body)
+        if pose is None:
+            pose = get_pose(self.body)
+        self.pose = pose
         self.velocity = get_velocity(self.body)
 
     def apply_mapping(self, mapping):
@@ -550,12 +552,14 @@ class PoseSaver(Saver):
         return '{}({})'.format(self.__class__.__name__, self.body)
 
 class ConfSaver(Saver):
-    def __init__(self, body, joints=None):
+    def __init__(self, body, joints=None, positions=None):
         self.body = body
         if joints is None:
             joints = get_movable_joints(self.body)
         self.joints = joints
-        self.positions = get_joint_positions(self.body, self.joints)
+        if positions is None:
+            positions = get_joint_positions(self.body, self.joints)
+        self.positions = positions
         self.velocities = get_joint_velocities(self.body, self.joints)
 
     @property

@@ -3,6 +3,7 @@ from __future__ import print_function
 import argparse
 import random
 import numpy as np
+import time
 from collections import OrderedDict, defaultdict
 
 from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, \
@@ -10,10 +11,12 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     set_point, Point, create_box, stable_z, TAN, GREY, connect, PI, OrderedSet, \
     wait_if_gui, dump_body, set_all_color, BLUE, child_link_from_joint, link_from_name, draw_pose, Pose, pose_from_pose2d, \
     get_random_seed, get_numpy_seed, set_random_seed, set_numpy_seed, plan_joint_motion, plan_nonholonomic_motion, \
-    joint_from_name, safe_zip, draw_base_limits
+    joint_from_name, safe_zip, draw_base_limits, BodySaver, WorldSaver, LockRenderer, elapsed_time, disconnect, flatten, \
+    INF, wait_for_duration
 
 BASE_LINK = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
+DRAW_Z = 1e-3
 
 ##################################################
 
@@ -21,26 +24,41 @@ def create_custom_base_limits(robot, base_limits):
     return {joint_from_name(robot, joint): limits
             for joint, limits in safe_zip(BASE_JOINTS[:2], zip(*base_limits))}
 
-def sample_placements(body_surfaces, obstacles=None, min_distances={}):
-    # TODO: check object at the goal pose
+def sample_placements(body_surfaces, obstacles=None, savers=[], min_distances={}):
     if obstacles is None:
-        # TODO: savers per object
-        obstacles = [body for body in get_bodies() if body not in body_surfaces]
+        obstacles = OrderedSet(get_bodies()) - set(body_surfaces)
     obstacles = list(obstacles)
+    savers = list(savers) + [BodySaver(obstacle) for obstacle in obstacles]
     if not isinstance(min_distances, dict):
-        min_distances = defaultdict(lambda: 0.)
+        min_distances = {body: min_distances for body in body_surfaces}
     # TODO: max attempts here
     for body, surface in body_surfaces.items(): # TODO: shuffle
         min_distance = min_distances.get(body, 0.)
         while True:
             pose = sample_placement(body, surface)
             if pose is None:
+                for saver in savers:
+                    saver.restore()
                 return False
-            if not any(pairwise_collision(body, obst, max_distance=min_distance)
-                       for obst in obstacles if obst not in [body, surface]):
+            for saver in savers:
+                obstacle = saver.body
+                if obstacle in [body, surface]:
+                    continue
+                saver.restore()
+                if pairwise_collision(body, obstacle, max_distance=min_distance):
+                    break
+            else:
                 obstacles.append(body)
                 break
+    for saver in savers:
+        saver.restore()
     return True
+
+def draw_path(path, z=DRAW_Z, **kwargs):
+    if path is None:
+        return []
+    return list(flatten(draw_pose(pose_from_pose2d(pose2d, z=z), **kwargs) for pose2d in path))
+
 
 def plan_motion(robot, joints, goal_positions, attachments=[], obstacles=None, holonomic=False, reversible=False, **kwargs):
     attached_bodies = [attachment.child for attachment in attachments]
@@ -82,9 +100,9 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     obstacles = walls + list(initial_surfaces)
 
     initial_conf = np.array([+floor_extent/3, -floor_extent/3, 3*PI/4])
-    draw_pose(pose_from_pose2d(initial_conf), length=0.5)
+    draw_pose(pose_from_pose2d(initial_conf, z=DRAW_Z), length=0.5)
     goal_conf = -initial_conf
-    draw_pose(pose_from_pose2d(goal_conf), length=0.5)
+    draw_pose(pose_from_pose2d(goal_conf, z=DRAW_Z), length=0.5)
 
     with HideOutput():
         robot = load_model(TURTLEBOT_URDF)
@@ -100,23 +118,29 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     draw_pose(Pose(), parent=robot, parent_link=base_link, length=0.5)
     set_joint_positions(robot, base_joints, initial_conf)
 
-    sample_placements(initial_surfaces, obstacles=[robot] + walls, min_distances=10e-2)
+    sample_placements(initial_surfaces, obstacles=[robot] + walls,
+                      savers=[BodySaver(robot, joints=base_joints, positions=goal_conf)],
+                      min_distances=10e-2)
 
     return robot, base_limits, goal_conf, obstacles
 
 def main():
     parser = argparse.ArgumentParser()
-    # parser.add_argument('-c', '--cfree', action='store_true',
-    #                     help='When enabled, disables collision checking (for debugging).')
+    parser.add_argument('-c', '--cfree', action='store_true',
+                        help='When enabled, disables collision checking.')
     # parser.add_argument('-p', '--problem', default='test_pour', choices=sorted(problem_fn_from_name),
     #                     help='The name of the problem to solve.')
+    parser.add_argument('--holonomic', action='store_true', # '-h',
+                        help='')
+    parser.add_argument('-l', '--lock', action='store_false',
+                        help='')
     parser.add_argument('-s', '--seed', default=None, type=int,
                         help='The random seed to use.')
-    parser.add_argument('-v', '--viewer', action='store_true',
+    parser.add_argument('-v', '--viewer', action='store_false',
                         help='')
     args = parser.parse_args()
 
-    connect()
+    connect(use_gui=args.viewer)
 
     seed = args.seed
     #seed = 0
@@ -130,10 +154,28 @@ def main():
     draw_base_limits(base_limits)
     custom_limits = create_custom_base_limits(robot, base_limits)
     base_joints = joints_from_names(robot, BASE_JOINTS)
-    path = plan_motion(robot, base_joints, goal_conf, obstacles=obstacles, custom_limits=custom_limits)
-    print(path)
+    if args.cfree:
+        obstacles = []
+    saver = WorldSaver()
 
-    wait_if_gui()
+    with LockRenderer(lock=args.lock):
+        path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic, obstacles=obstacles, custom_limits=custom_limits)
+        saver.restore()
+
+    print('Solved: {} | Length: {} | Runtime: {:.3f} sec'.format(
+        path is not None, INF if path is None else len(path), elapsed_time(time.time())))
+    if path is None:
+        disconnect()
+        return
+
+    with LockRenderer():
+        draw_path(path)
+    wait_if_gui(message='Begin?')
+    for conf in path:
+        set_joint_positions(robot, base_joints, conf)
+        wait_for_duration(duration=1e-2)
+    wait_if_gui(message='Finish?')
+    disconnect()
 
 if __name__ == '__main__':
     main()
