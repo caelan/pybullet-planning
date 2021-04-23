@@ -401,6 +401,78 @@ def timeout(duration):
         # if the timeout is not reached
         signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
+def log_time(method):
+    """
+    A decorator for methods which will time the method
+    and then emit a log.debug message with the method name
+    and how long it took to execute.
+    """
+    # https://github.com/mikedh/trimesh/blob/60dae2352875f48c4476e01052829e8b9166d9e5/trimesh/constants.py#L126
+    import logging
+    log = logging.getLogger()
+    def timed(*args, **kwargs):
+        tic = now()
+        result = method(*args, **kwargs)
+        log.debug('%s executed in %.4f seconds.',
+                  method.__name__,
+                  now() - tic)
+        return result
+    timed.__name__ = method.__name__
+    timed.__doc__ = method.__doc__
+    return timed
+
+def cache_decorator(function):
+    """
+    A decorator for class methods, replaces @property
+    but will store and retrieve function return values
+    in object cache.
+    Parameters
+    ------------
+    function : method
+      This is used as a decorator:
+      ```
+      @cache_decorator
+      def foo(self, things):
+        return 'happy days'
+      ```
+    """
+    # https://github.com/mikedh/trimesh/blob/60dae2352875f48c4476e01052829e8b9166d9e5/trimesh/caching.py#L64
+    from functools import wraps
+
+    # use wraps to preserve docstring
+    @wraps(function)
+    def get_cached(*args, **kwargs):
+        """
+        Only execute the function if its value isn't stored
+        in cache already.
+        """
+        self = args[0]
+        # use function name as key in cache
+        name = function.__name__
+        # do the dump logic ourselves to avoid
+        # verifying cache twice per call
+        self._cache.verify()
+        # access cache dict to avoid automatic validation
+        # since we already called cache.verify manually
+        if name in self._cache.cache:
+            # already stored so return value
+            return self._cache.cache[name]
+        # value not in cache so execute the function
+        value = function(*args, **kwargs)
+        # store the value
+        if self._cache.force_immutable and hasattr(
+                value, 'flags') and len(value.shape) > 0:
+            value.flags.writeable = False
+
+        self._cache.cache[name] = value
+
+        return value
+
+    # all cached values are also properties
+    # so they can be accessed like value attributes
+    # rather than functions
+    return property(get_cached)
+
 #####################################
 
 # https://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python/14797594#14797594
@@ -758,6 +830,8 @@ def get_version(): # year-month-0-day format
 #         return '{}({})'.format(self.__class__.__name__, len(self.bodies))
 
 #####################################
+
+now = time.time
 
 def elapsed_time(start_time):
     return time.time() - start_time
