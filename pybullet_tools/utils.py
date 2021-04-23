@@ -534,19 +534,23 @@ class VideoSaver(Saver):
             print('Saved', self.path)
 
 class Profiler(Saver):
-    fields = ['tottime', 'cumtime']
+    fields = ['tottime', 'cumtime', None]
     def __init__(self, field='tottime', num=10):
         assert field in self.fields
         self.field = field
         self.num = num
+        if field is None:
+            return
         self.pr = cProfile.Profile()
     def save(self):
+        if self.field is None:
+            return
         self.pr.enable()
         return self.pr
     def restore(self):
+        if self.field is None:
+            return
         self.pr.disable()
-        if self.num is None:
-            return None
         stream = None
         #stream = io.StringIO()
         stats = pstats.Stats(self.pr, stream=stream).sort_stats(self.field) # TODO: print multiple
@@ -2775,8 +2779,11 @@ def get_aabb_edges(aabb):
 def aabb_from_extent_center(extent, center=None):
     if center is None:
         center = np.zeros(len(extent))
-    lower = np.array(center) - np.array(extent) / 2.
-    upper = np.array(center) + np.array(extent) / 2.
+    else:
+        center = np.array(center)
+    half_extent = np.array(extent) / 2.
+    lower = center - half_extent
+    upper = center + half_extent
     return AABB(lower, upper)
 
 def scale_aabb(aabb, scale):
@@ -2788,11 +2795,13 @@ def scale_aabb(aabb, scale):
     return aabb_from_extent_center(new_extent, center)
 
 def buffer_aabb(aabb, buffer):
-    center = get_aabb_center(aabb)
     extent = get_aabb_extent(aabb)
     if np.isscalar(buffer):
+        if buffer == 0.:
+            return aabb
         buffer = buffer * np.ones(len(extent))
     new_extent = np.add(2*buffer, extent)
+    center = get_aabb_center(aabb)
     return aabb_from_extent_center(new_extent, center)
 
 #####################################
@@ -2970,7 +2979,10 @@ def draw_collision_info(collision_info, **kwargs):
         handles.extend(draw_point(point, **kwargs))
     return handles
 
-def get_closest_points(body1, body2, link1=None, link2=None, max_distance=MAX_DISTANCE):
+def get_closest_points(body1, body2, link1=None, link2=None, max_distance=MAX_DISTANCE, use_aabb=False):
+    if use_aabb and not aabb_overlap(buffer_aabb(get_aabb(body1, link1), max_distance),
+                                     buffer_aabb(get_aabb(body2, link2), max_distance)):
+        return []
     if (link1 is None) and (link2 is None):
         results = p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance, physicsClientId=CLIENT)
     elif link2 is None:
@@ -3002,9 +3014,7 @@ def any_link_pair_collision(body1, links1, body2, links2=None, **kwargs):
 
 link_pairs_collision = any_link_pair_collision
 
-def body_collision(body1, body2, use_aabb=False, **kwargs):
-    if use_aabb and not aabb_overlap(get_aabb(body1), get_aabb(body2)):
-        return False
+def body_collision(body1, body2, **kwargs):
     return len(get_closest_points(body1, body2, **kwargs)) != 0
 
 def pairwise_collision(body1, body2, **kwargs):

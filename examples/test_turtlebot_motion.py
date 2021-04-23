@@ -175,8 +175,8 @@ def main():
     draw_aabb(aabb)
 
     saver = WorldSaver()
-    start_time = time.time() # TODO: Profiler
-    profiler = Profiler(field=None)
+    start_time = time.time()
+    profiler = Profiler(field='cumtime', num=50) # tottime | cumtime | None
     profiler.save()
     with LockRenderer(lock=args.lock):
         path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic, obstacles=obstacles,
