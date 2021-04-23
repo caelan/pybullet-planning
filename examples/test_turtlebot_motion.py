@@ -12,11 +12,14 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     wait_if_gui, dump_body, set_all_color, BLUE, child_link_from_joint, link_from_name, draw_pose, Pose, pose_from_pose2d, \
     get_random_seed, get_numpy_seed, set_random_seed, set_numpy_seed, plan_joint_motion, plan_nonholonomic_motion, \
     joint_from_name, safe_zip, draw_base_limits, BodySaver, WorldSaver, LockRenderer, elapsed_time, disconnect, flatten, \
-    INF, wait_for_duration
+    INF, wait_for_duration, get_unbuffered_aabb, draw_aabb, DEFAULT_AABB_BUFFER, get_link_pose, get_joint_positions, \
+    get_subtree_aabb, get_pairs, get_distance_fn, get_aabb, set_all_static
 
 BASE_LINK = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
 DRAW_Z = 1e-3
+DRAW_LENGTH = 0.5
+MIN_AABB_VOLUME = DEFAULT_AABB_BUFFER**3
 
 ##################################################
 
@@ -100,9 +103,7 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     obstacles = walls + list(initial_surfaces)
 
     initial_conf = np.array([+floor_extent/3, -floor_extent/3, 3*PI/4])
-    draw_pose(pose_from_pose2d(initial_conf, z=DRAW_Z), length=0.5)
     goal_conf = -initial_conf
-    draw_pose(pose_from_pose2d(goal_conf, z=DRAW_Z), length=0.5)
 
     with HideOutput():
         robot = load_model(TURTLEBOT_URDF)
@@ -112,9 +113,6 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
         set_all_color(robot, BLUE)
     dump_body(robot)
     set_point(robot, Point(z=stable_z(robot, floor)))
-    #handles = draw_aabb(get_aabb(robot))
-    #print(get_center_extent(robot))
-    #wait_for_user()
     draw_pose(Pose(), parent=robot, parent_link=base_link, length=0.5)
     set_joint_positions(robot, base_joints, initial_conf)
 
@@ -139,7 +137,6 @@ def main():
     parser.add_argument('-v', '--viewer', action='store_false',
                         help='')
     args = parser.parse_args()
-
     connect(use_gui=args.viewer)
 
     seed = args.seed
@@ -154,16 +151,31 @@ def main():
     draw_base_limits(base_limits)
     custom_limits = create_custom_base_limits(robot, base_limits)
     base_joints = joints_from_names(robot, BASE_JOINTS)
+    #base_link = link_from_name(robot, BASE_LINK)
     if args.cfree:
         obstacles = []
+    resolutions = None
+
+    #draw_pose(get_link_pose(robot, base_link), length=0.5)
+    for conf in [get_joint_positions(robot, base_joints), goal_conf]:
+        draw_pose(pose_from_pose2d(conf, z=DRAW_Z), length=DRAW_LENGTH)
+    aabb = get_aabb(robot)
+    #aabb = get_subtree_aabb(robot, base_link)
+    draw_aabb(aabb)
+
     saver = WorldSaver()
-
+    start_time = time.time() # TODO: Profiler
     with LockRenderer(lock=args.lock):
-        path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic, obstacles=obstacles, custom_limits=custom_limits)
+        path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic, obstacles=obstacles,
+                           custom_limits=custom_limits, resolutions=resolutions)
         saver.restore()
+    #wait_for_duration(duration=1e-3)
 
-    print('Solved: {} | Length: {} | Runtime: {:.3f} sec'.format(
-        path is not None, INF if path is None else len(path), elapsed_time(time.time())))
+    solved = path is not None
+    length = INF if path is None else len(path)
+    cost = sum(get_distance_fn(robot, base_joints, weights=resolutions)(*pair) for pair in get_pairs(path))
+    print('Solved: {} | Length: {} | Cost: {:.3f} | Runtime: {:.3f} sec'.format(
+        solved, length, cost, elapsed_time(start_time)))
     if path is None:
         disconnect()
         return

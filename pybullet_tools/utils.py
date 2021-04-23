@@ -2623,6 +2623,8 @@ def set_texture(body, texture=None, link=BASE_LINK, shape_index=NULL_ID):
 
 # Bounding box
 
+DEFAULT_AABB_BUFFER = 0.02
+
 AABB = namedtuple('AABB', ['lower', 'upper'])
 
 def aabb_from_points(points):
@@ -2656,19 +2658,26 @@ def aabb_intersection(*aabbs):
 def get_subtree_aabb(body, root_link=BASE_LINK):
     return aabb_union(get_aabb(body, link) for link in get_link_subtree(body, root_link))
 
-def get_aabbs(body):
-    return [get_aabb(body, link=link) for link in get_all_links(body)]
+def get_aabbs(body, only_collision=True):
+    links = get_all_links(body)
+    if only_collision:
+        links = [link for link in links if get_collision_data(body, link)]
+    return [get_aabb(body, link=link) for link in links]
 
-def get_aabb(body, link=None):
+def get_aabb(body, link=None, **kwargs):
     # Note that the query is conservative and may return additional objects that don't have actual AABB overlap.
     # This happens because the acceleration structures have some heuristic that enlarges the AABBs a bit
     # (extra margin and extruded along the velocity vector).
     # Contact points with distance exceeding this threshold are not processed by the LCP solver.
     # AABBs are extended by this number. Defaults to 0.02 in Bullet 2.x
     #p.setPhysicsEngineParameter(contactBreakingThreshold=0.0, physicsClientId=CLIENT)
+    # Computes the AABB of the collision geometry
     if link is None:
-        return aabb_union(get_aabbs(body))
+        return aabb_union(get_aabbs(body, **kwargs))
     return AABB(*p.getAABB(body, linkIndex=link, physicsClientId=CLIENT))
+
+def get_unbuffered_aabb(*args, **kwargs):
+    return buffer_aabb(get_aabb(*args, **kwargs), buffer=-DEFAULT_AABB_BUFFER/2.)
 
 get_lower_upper = get_aabb
 
@@ -3302,6 +3311,8 @@ def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
                       weights=None, resolutions=None, max_distance=MAX_DISTANCE, custom_limits={}, **kwargs):
 
     assert len(joints) == len(end_conf)
+    if (weights is None) and (resolutions is not None):
+        weights = np.reciprocal(resolutions)
     sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
     distance_fn = get_distance_fn(body, joints, weights=weights)
     extend_fn = get_extend_fn(body, joints, resolutions=resolutions)
