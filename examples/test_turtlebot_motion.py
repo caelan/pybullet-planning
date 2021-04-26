@@ -4,6 +4,7 @@ import argparse
 import random
 import numpy as np
 import time
+import math
 from collections import OrderedDict, defaultdict
 
 from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, \
@@ -14,9 +15,9 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     joint_from_name, safe_zip, draw_base_limits, BodySaver, WorldSaver, LockRenderer, elapsed_time, disconnect, flatten, \
     INF, wait_for_duration, get_unbuffered_aabb, draw_aabb, DEFAULT_AABB_BUFFER, get_link_pose, get_joint_positions, \
     get_subtree_aabb, get_pairs, get_distance_fn, get_aabb, set_all_static, step_simulation, get_bodies_in_region, \
-    AABB, update_scene, Profiler
+    AABB, update_scene, Profiler, pairwise_link_collision, BASE_LINK, get_collision_data
 
-BASE_LINK = 'base_link'
+BASE_LINK_NAME = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
 DRAW_Z = 1e-3
 DRAW_LENGTH = 0.5
@@ -73,6 +74,9 @@ def plan_motion(robot, joints, goal_positions, attachments=[], obstacles=None, h
     if holonomic:
         return plan_joint_motion(robot, joints, goal_positions,
                                  attachments=attachments, obstacles=obstacles, **kwargs)
+    # TODO: just sample the x, y waypoint and use the resulting orientation
+    # TODO: the turtlebot still seems to turn the wrong direction sometimes
+    # TODO: shortcut changes in orientation
     return plan_nonholonomic_motion(robot, joints, goal_positions, reversible=reversible,
                                     attachments=attachments, obstacles=obstacles, **kwargs)
 
@@ -110,7 +114,7 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
         robot = load_model(TURTLEBOT_URDF)
         base_joints = joints_from_names(robot, BASE_JOINTS)
         # base_link = child_link_from_joint(base_joints[-1])
-        base_link = link_from_name(robot, BASE_LINK)
+        base_link = link_from_name(robot, BASE_LINK_NAME)
         set_all_color(robot, BLUE)
     dump_body(robot)
     set_point(robot, Point(z=stable_z(robot, floor)))
@@ -122,6 +126,22 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
                       min_distances=10e-2)
 
     return robot, base_limits, goal_conf, obstacles
+
+##################################################
+
+def iterate_path(robot, joints, path, step_size=None): # 1e-2 | None
+    if path is None:
+        return
+    with LockRenderer():
+        handles = draw_path(path)
+    wait_if_gui(message='Begin?')
+    for i, conf in enumerate(path):
+        set_joint_positions(robot, joints, conf)
+        if step_size is None:
+            wait_if_gui(message='{}/{} Continue?'.format(i, len(path)))
+        else:
+            wait_for_duration(duration=step_size)
+    wait_if_gui(message='Finish?')
 
 def main():
     parser = argparse.ArgumentParser()
@@ -148,16 +168,19 @@ def main():
     print('Random seed:', get_random_seed(), random.random())
     print('Numpy seed:', get_numpy_seed(), np.random.random())
 
+    #########################
+
     robot, base_limits, goal_conf, obstacles = problem1()
     draw_base_limits(base_limits)
     custom_limits = create_custom_base_limits(robot, base_limits)
     base_joints = joints_from_names(robot, BASE_JOINTS)
-    #base_link = link_from_name(robot, BASE_LINK)
+    base_link = link_from_name(robot, BASE_LINK_NAME)
     if args.cfree:
         obstacles = []
     # for obstacle in obstacles:
     #     draw_aabb(get_aabb(obstacle)) # Updates automatically
     resolutions = None
+    #resolutions = np.array([0.05, 0.05, math.radians(10)])
     set_all_static() # Doesn't seem to affect
 
     region_aabb = AABB(lower=-np.ones(3), upper=+np.ones(3))
@@ -178,16 +201,24 @@ def main():
     #aabb = get_subtree_aabb(robot, base_link)
     draw_aabb(aabb)
 
+    for link in [BASE_LINK, base_link]:
+        print(link, get_collision_data(robot, link), pairwise_link_collision(robot, link, robot, link))
+
+    #########################
+
     saver = WorldSaver()
     start_time = time.time()
     profiler = Profiler(field='tottime', num=50) # tottime | cumtime | None
     profiler.save()
     with LockRenderer(lock=args.lock):
         path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic, obstacles=obstacles,
-                           custom_limits=custom_limits, resolutions=resolutions, cache=True, max_distance=0.)
+                           custom_limits=custom_limits, resolutions=resolutions, cache=True, max_distance=0.,
+                           restarts=2, iterations=20, smooth=20)
         saver.restore()
     #wait_for_duration(duration=1e-3)
     profiler.restore()
+
+    #########################
 
     solved = path is not None
     length = INF if path is None else len(path)
@@ -197,14 +228,7 @@ def main():
     if path is None:
         disconnect()
         return
-
-    with LockRenderer():
-        draw_path(path)
-    wait_if_gui(message='Begin?')
-    for conf in path:
-        set_joint_positions(robot, base_joints, conf)
-        wait_for_duration(duration=1e-2)
-    wait_if_gui(message='Finish?')
+    iterate_path(robot, base_joints, path)
     disconnect()
 
 if __name__ == '__main__':

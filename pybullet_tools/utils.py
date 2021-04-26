@@ -1096,6 +1096,7 @@ def step_simulation():
     p.stepSimulation(physicsClientId=CLIENT)
 
 def update_scene():
+    # TODO: https://github.com/bulletphysics/bullet3/pull/3331
     p.performCollisionDetection(physicsClientId=CLIENT)
 
 def set_real_time(real_time):
@@ -2787,6 +2788,7 @@ def get_aabbs(body, links=None, only_collision=True):
     if links is None:
         links = get_all_links(body)
     if only_collision:
+        # TODO: return the null bounding box
         links = [link for link in links if get_collision_data(body, link)]
     return [get_aabb(body, link=link) for link in links]
 
@@ -3021,17 +3023,16 @@ def approximate_as_cylinder(body, **kwargs):
 
 # Collision
 
-#MAX_DISTANCE = 1e-3
-MAX_DISTANCE = 0.
+MAX_DISTANCE = 0. # 0. | 1e-3
 
 CollisionPair = namedtuple('Collision', ['body', 'links'])
 
-def get_buffered_aabb(body, link=None, max_distance=MAX_DISTANCE):
-    body, links = parse_body(body, link=link)
+def get_buffered_aabb(body, max_distance=MAX_DISTANCE, **kwargs):
+    body, links = parse_body(body, **kwargs)
     return buffer_aabb(aabb_union(get_aabb(body, links=links)), buffer=max_distance)
 
-def get_unbuffered_aabb(body, link=None):
-    return get_buffered_aabb(body, link=link, max_distance=-DEFAULT_AABB_BUFFER/2.)
+def get_unbuffered_aabb(body, **kwargs):
+    return get_buffered_aabb(body, max_distance=-DEFAULT_AABB_BUFFER/2., **kwargs)
 
 def contact_collision():
     step_simulation()
@@ -3044,10 +3045,10 @@ ContactResult = namedtuple('ContactResult', ['contactFlag', 'bodyUniqueIdA', 'bo
 def flatten_links(body, links=None):
     if links is None:
         links = get_all_links(body)
-    return {(body, frozenset([link])) for link in links}
+    return {CollisionPair(body, frozenset([link])) for link in links}
 
 def parse_body(body, link=None):
-    return body if isinstance(body, tuple) else (body, link)
+    return body if isinstance(body, tuple) else CollisionPair(body, link)
 
 def expand_links(body, **kwargs):
     body, links = parse_body(body, **kwargs)
@@ -3190,9 +3191,10 @@ def uniform_generator(d):
     while True:
         yield np.random.uniform(size=d)
 
-def halton_generator(d):
+def halton_generator(d, seed=None):
     import ghalton
-    seed = random.randint(0, 1000)
+    if seed is None:
+        seed = random.randint(0, 1000)
     #sequencer = ghalton.Halton(d)
     sequencer = ghalton.GeneralizedHalton(d, seed)
     #sequencer.reset()
@@ -3374,12 +3376,12 @@ def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=Tru
 
 
 def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
-                     custom_limits={}, cache=True, max_distance=MAX_DISTANCE, **kwargs):
+                     custom_limits={}, cache=True, use_aabb=True, max_distance=MAX_DISTANCE, **kwargs):
     # TODO: convert most of these to keyword arguments
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
     moving_links = frozenset(get_moving_links(body, joints))
     attached_bodies = [attachment.child for attachment in attachments]
-    moving_bodies = [(body, moving_links)] + attached_bodies
+    moving_bodies = [CollisionPair(body, moving_links)] + attached_bodies
     #moving_bodies = [body] + [attachment.child for attachment in attachments]
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits)
     get_obstacle_aabb = cached_fn(get_buffered_aabb, cache=cache, max_distance=max_distance/2., **kwargs)
@@ -3398,15 +3400,16 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
 
         for link1, link2 in check_link_pairs:
             # Self-collisions should not have the max_distance parameter
-            # TODO: aabbs
-            if pairwise_link_collision(body, link1, body, link2): #, **kwargs):
+            # TODO: self-collisions between body and attached_bodies
+            if (not use_aabb or aabb_overlap(get_moving_aabb(body), get_moving_aabb(body))) and \
+                    pairwise_link_collision(body, link1, body, link2): #, **kwargs):
                 #print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
                 if verbose: print(body, link1, body, link2)
                 return True
         for body1, body2 in product(moving_bodies, obstacles):
             # TODO: individual links
             # TODO: get_bodies_in_region
-            if aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2)) \
+            if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
                     and pairwise_collision(body1, body2, **kwargs):
                 #print(get_body_name(body1), get_body_name(body2))
                 if verbose: print(body1, body2)
@@ -3456,7 +3459,7 @@ def check_initial_end(start_conf, end_conf, collision_fn):
 
 def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
                       self_collisions=True, disabled_collisions=set(),
-                      weights=None, resolutions=None, max_distance=MAX_DISTANCE, custom_limits={}, **kwargs):
+                      weights=None, resolutions=None, max_distance=MAX_DISTANCE, cache=True, custom_limits={}, **kwargs):
 
     assert len(joints) == len(end_conf)
     if (weights is None) and (resolutions is not None):
@@ -3465,7 +3468,7 @@ def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
     distance_fn = get_distance_fn(body, joints, weights=weights)
     extend_fn = get_extend_fn(body, joints, resolutions=resolutions)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
-                                    custom_limits=custom_limits, max_distance=max_distance)
+                                    custom_limits=custom_limits, max_distance=max_distance, cache=cache)
 
     start_conf = get_joint_positions(body, joints)
 
@@ -3473,6 +3476,8 @@ def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
         return None
     return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
     #return plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn)
+
+plan_holonomic_motion = plan_joint_motion
 
 def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kwargs):
     # TODO: cost metric based on total robot movement (encouraging greater distances possibly)
@@ -3556,7 +3561,7 @@ def get_nonholonomic_extend_fn(body, joints, resolutions=None, angular_tol=0., *
 def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[],
                              self_collisions=True, disabled_collisions=set(),
                              weights=None, resolutions=None, reversible=True,
-                             max_distance=MAX_DISTANCE, custom_limits={}, **kwargs):
+                             max_distance=MAX_DISTANCE, cache=True, custom_limits={}, **kwargs):
 
     assert len(joints) == len(end_conf)
     sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
@@ -3564,12 +3569,14 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
     extend_fn = get_nonholonomic_extend_fn(body, joints, resolutions=resolutions, reversible=reversible)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments,
                                     self_collisions, disabled_collisions,
-                                    custom_limits=custom_limits, max_distance=max_distance)
+                                    custom_limits=custom_limits, max_distance=max_distance, cache=cache)
 
     start_conf = get_joint_positions(body, joints)
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
     return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
+
+plan_differential_motion = plan_nonholonomic_motion
 
 #####################################
 
