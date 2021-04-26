@@ -2757,9 +2757,13 @@ def aabb_from_points(points):
     return AABB(np.min(points, axis=0), np.max(points, axis=0))
 
 def aabb_union(aabbs):
+    if not aabbs:
+        return None
     return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
 
 def aabb_overlap(aabb1, aabb2):
+    if (aabb1 is None) or (aabb2 is None):
+        return False
     lower1, upper1 = aabb1
     lower2, upper2 = aabb2
     return np.less_equal(lower1, upper2).all() and \
@@ -2888,6 +2892,8 @@ def scale_aabb(aabb, scale):
     return aabb_from_extent_center(new_extent, center)
 
 def buffer_aabb(aabb, buffer):
+    if aabb is None:
+        return aabb
     extent = get_aabb_extent(aabb)
     if np.isscalar(buffer):
         if buffer == 0.:
@@ -3029,7 +3035,7 @@ CollisionPair = namedtuple('Collision', ['body', 'links'])
 
 def get_buffered_aabb(body, max_distance=MAX_DISTANCE, **kwargs):
     body, links = parse_body(body, **kwargs)
-    return buffer_aabb(aabb_union(get_aabb(body, links=links)), buffer=max_distance)
+    return buffer_aabb(aabb_union(get_aabbs(body, links=links)), buffer=max_distance)
 
 def get_unbuffered_aabb(body, **kwargs):
     return get_buffered_aabb(body, max_distance=-DEFAULT_AABB_BUFFER/2., **kwargs)
@@ -3360,7 +3366,6 @@ def get_moving_pairs(body, moving_joints):
         if ancestors1 != ancestors2:
             yield link1, link2
 
-
 def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=True):
     moving_links = get_moving_links(body, joints)
     fixed_links = list(set(get_links(body)) - set(moving_links))
@@ -3374,20 +3379,19 @@ def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=Tru
                                                 (pair[::-1] not in disabled_collisions), check_link_pairs))
     return check_link_pairs
 
-
 def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
-                     custom_limits={}, cache=True, use_aabb=True, max_distance=MAX_DISTANCE, **kwargs):
+                     custom_limits={}, use_aabb=False, cache=False, max_distance=MAX_DISTANCE, **kwargs):
     # TODO: convert most of these to keyword arguments
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
     moving_links = frozenset(get_moving_links(body, joints))
     attached_bodies = [attachment.child for attachment in attachments]
-    moving_bodies = [CollisionPair(body, moving_links)] + attached_bodies
+    moving_bodies = [CollisionPair(body, moving_links)] + list(map(parse_body, attached_bodies))
+    #moving_bodies = list(flatten(flatten_links(*pair) for pair in moving_bodies)) # Introduces overhead
     #moving_bodies = [body] + [attachment.child for attachment in attachments]
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits)
     get_obstacle_aabb = cached_fn(get_buffered_aabb, cache=cache, max_distance=max_distance/2., **kwargs)
+    # TODO: sort bodies by bounding box size
 
-    # TODO: maybe prune the link adjacent to the robot
-    # TODO: test self collision with the holding
     def collision_fn(q, verbose=False):
         if not all_between(lower_limits, q, upper_limits):
             #print('Joint limits violated')
@@ -3400,15 +3404,20 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
 
         for link1, link2 in check_link_pairs:
             # Self-collisions should not have the max_distance parameter
-            # TODO: self-collisions between body and attached_bodies
+            # TODO: self-collisions between body and attached_bodies (except for the link adjacent to the robot)
             if (not use_aabb or aabb_overlap(get_moving_aabb(body), get_moving_aabb(body))) and \
                     pairwise_link_collision(body, link1, body, link2): #, **kwargs):
                 #print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
                 if verbose: print(body, link1, body, link2)
                 return True
+        #step_simulation()
+        # for body1 in moving_bodies:
+        #     for body2, _ in get_bodies_in_region(get_moving_aabb(body1)):
+        #         if (body2 in obstacles) and pairwise_collision(body1, body2, **kwargs):
+        #             #print(get_body_name(body1), get_body_name(body2))
+        #             if verbose: print(body1, body2)
+        #             return True
         for body1, body2 in product(moving_bodies, obstacles):
-            # TODO: individual links
-            # TODO: get_bodies_in_region
             if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
                     and pairwise_collision(body1, body2, **kwargs):
                 #print(get_body_name(body1), get_body_name(body2))
@@ -3432,12 +3441,14 @@ def interpolate_joint_waypoints(body, joints, waypoints, resolutions=None,
 
 def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstacles=[], attachments=[],
                                 self_collisions=True, disabled_collisions=set(),
-                                resolutions=None, custom_limits={}, max_distance=MAX_DISTANCE):
+                                resolutions=None, custom_limits={}, max_distance=MAX_DISTANCE,
+                                use_aabb=True, cache=True):
     if start_conf is None:
         start_conf = get_joint_positions(body, joints)
     assert len(start_conf) == len(joints)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
-                                    custom_limits=custom_limits, max_distance=max_distance)
+                                    custom_limits=custom_limits, max_distance=max_distance,
+                                    use_aabb=True, cache=True)
     waypoints = [start_conf] + list(waypoints)
     for i, waypoint in enumerate(waypoints):
         if collision_fn(waypoint):
@@ -3459,7 +3470,8 @@ def check_initial_end(start_conf, end_conf, collision_fn):
 
 def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
                       self_collisions=True, disabled_collisions=set(),
-                      weights=None, resolutions=None, max_distance=MAX_DISTANCE, cache=True, custom_limits={}, **kwargs):
+                      weights=None, resolutions=None, max_distance=MAX_DISTANCE,
+                      use_aabb=True, cache=True, custom_limits={}, **kwargs):
 
     assert len(joints) == len(end_conf)
     if (weights is None) and (resolutions is not None):
@@ -3468,7 +3480,8 @@ def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
     distance_fn = get_distance_fn(body, joints, weights=weights)
     extend_fn = get_extend_fn(body, joints, resolutions=resolutions)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
-                                    custom_limits=custom_limits, max_distance=max_distance, cache=cache)
+                                    custom_limits=custom_limits, max_distance=max_distance,
+                                    use_aabb=use_aabb, cache=cache)
 
     start_conf = get_joint_positions(body, joints)
 
@@ -3561,7 +3574,7 @@ def get_nonholonomic_extend_fn(body, joints, resolutions=None, angular_tol=0., *
 def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[],
                              self_collisions=True, disabled_collisions=set(),
                              weights=None, resolutions=None, reversible=True,
-                             max_distance=MAX_DISTANCE, cache=True, custom_limits={}, **kwargs):
+                             max_distance=MAX_DISTANCE, use_aabb=True, cache=True, custom_limits={}, **kwargs):
 
     assert len(joints) == len(end_conf)
     sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
@@ -3569,7 +3582,8 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
     extend_fn = get_nonholonomic_extend_fn(body, joints, resolutions=resolutions, reversible=reversible)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments,
                                     self_collisions, disabled_collisions,
-                                    custom_limits=custom_limits, max_distance=max_distance, cache=cache)
+                                    custom_limits=custom_limits, max_distance=max_distance,
+                                    use_aabb=use_aabb, cache=cache)
 
     start_conf = get_joint_positions(body, joints)
     if not check_initial_end(start_conf, end_conf, collision_fn):

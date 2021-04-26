@@ -212,7 +212,8 @@ def main():
     profiler.save()
     with LockRenderer(lock=args.lock):
         path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic, obstacles=obstacles,
-                           custom_limits=custom_limits, resolutions=resolutions, cache=True, max_distance=0.,
+                           custom_limits=custom_limits, resolutions=resolutions,
+                           use_aabb=True, cache=True, max_distance=0.,
                            restarts=2, iterations=20, smooth=20)
         saver.restore()
     #wait_for_duration(duration=1e-3)
