@@ -166,6 +166,10 @@ def main():
     #update_scene() # TODO: https://github.com/bulletphysics/bullet3/pull/3331
     bodies = get_bodies_in_region(region_aabb)
     print(len(bodies), bodies)
+    # https://github.com/bulletphysics/bullet3/search?q=broadphase
+    # https://github.com/bulletphysics/bullet3/search?p=1&q=getCachedOverlappingObjects&type=&utf8=%E2%9C%93
+    # https://andysomogyi.github.io/mechanica/bullet.html
+    # http://www.cs.kent.edu/~ruttan/GameEngines/lectures/Bullet_User_Manual
 
     #draw_pose(get_link_pose(robot, base_link), length=0.5)
     for conf in [get_joint_positions(robot, base_joints), goal_conf]:
@@ -176,11 +180,11 @@ def main():
 
     saver = WorldSaver()
     start_time = time.time()
-    profiler = Profiler(field='cumtime', num=50) # tottime | cumtime | None
+    profiler = Profiler(field='tottime', num=50) # tottime | cumtime | None
     profiler.save()
     with LockRenderer(lock=args.lock):
         path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic, obstacles=obstacles,
-                           custom_limits=custom_limits, resolutions=resolutions)
+                           custom_limits=custom_limits, resolutions=resolutions, cache=True, max_distance=0.)
         saver.restore()
     #wait_for_duration(duration=1e-3)
     profiler.restore()

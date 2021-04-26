@@ -46,6 +46,10 @@ CIRCULAR_LIMITS = -PI, PI
 UNBOUNDED_LIMITS = -INF, INF
 DEFAULT_TIME_STEP = 1./240. # seconds
 
+# Resources
+# https://docs.google.com/document/d/10sXEhzFRSnvFcl3XxNGhnD4N2SedqwdAvK3dsihxVUA/edit
+# http://www.cs.kent.edu/~ruttan/GameEngines/lectures/Bullet_User_Manual
+
 #####################################
 
 DRAKE_PATH = 'models/drake/'
@@ -420,6 +424,21 @@ def log_time(method):
     timed.__name__ = method.__name__
     timed.__doc__ = method.__doc__
     return timed
+
+def cached_fn(fn, cache=True, **global_kargs):
+    # https://docs.python.org/3/library/functools.html#functools.cache
+    def normal(*args, **local_kwargs):
+        kwargs = dict(global_kargs)
+        kwargs.update(local_kwargs)
+        return fn(*args, **kwargs)
+    if not cache:
+        return normal
+
+    from functools import lru_cache as cache
+    @cache
+    def wrapped(*args, **local_kwargs):
+        return normal(*args, **local_kwargs)
+    return wrapped
 
 def cache_decorator(function):
     """
@@ -2764,8 +2783,9 @@ def aabb_intersection(*aabbs):
 def get_subtree_aabb(body, root_link=BASE_LINK):
     return aabb_union(get_aabb(body, link) for link in get_link_subtree(body, root_link))
 
-def get_aabbs(body, only_collision=True):
-    links = get_all_links(body)
+def get_aabbs(body, links=None, only_collision=True):
+    if links is None:
+        links = get_all_links(body)
     if only_collision:
         links = [link for link in links if get_collision_data(body, link)]
     return [get_aabb(body, link=link) for link in links]
@@ -2781,9 +2801,6 @@ def get_aabb(body, link=None, **kwargs):
     if link is None:
         return aabb_union(get_aabbs(body, **kwargs))
     return AABB(*p.getAABB(body, linkIndex=link, physicsClientId=CLIENT))
-
-def get_unbuffered_aabb(*args, **kwargs):
-    return buffer_aabb(get_aabb(*args, **kwargs), buffer=-DEFAULT_AABB_BUFFER/2.)
 
 get_lower_upper = get_aabb
 
@@ -3007,6 +3024,15 @@ def approximate_as_cylinder(body, **kwargs):
 #MAX_DISTANCE = 1e-3
 MAX_DISTANCE = 0.
 
+CollisionPair = namedtuple('Collision', ['body', 'links'])
+
+def get_buffered_aabb(body, link=None, max_distance=MAX_DISTANCE):
+    body, links = parse_body(body, link=link)
+    return buffer_aabb(aabb_union(get_aabb(body, links=links)), buffer=max_distance)
+
+def get_unbuffered_aabb(body, link=None):
+    return get_buffered_aabb(body, link=link, max_distance=-DEFAULT_AABB_BUFFER/2.)
+
 def contact_collision():
     step_simulation()
     return len(p.getContactPoints(physicsClientId=CLIENT)) != 0
@@ -3020,11 +3046,14 @@ def flatten_links(body, links=None):
         links = get_all_links(body)
     return {(body, frozenset([link])) for link in links}
 
-def expand_links(body):
-    body, links = body if isinstance(body, tuple) else (body, None)
+def parse_body(body, link=None):
+    return body if isinstance(body, tuple) else (body, link)
+
+def expand_links(body, **kwargs):
+    body, links = parse_body(body, **kwargs)
     if links is None:
         links = get_all_links(body)
-    return body, links
+    return CollisionPair(body, links)
 
 CollisionInfo = namedtuple('CollisionInfo',
                            """
@@ -3054,8 +3083,8 @@ def draw_collision_info(collision_info, **kwargs):
     return handles
 
 def get_closest_points(body1, body2, link1=None, link2=None, max_distance=MAX_DISTANCE, use_aabb=False):
-    if use_aabb and not aabb_overlap(buffer_aabb(get_aabb(body1, link1), max_distance),
-                                     buffer_aabb(get_aabb(body2, link2), max_distance)):
+    if use_aabb and not aabb_overlap(get_buffered_aabb(body1, link1, max_distance=max_distance/2.),
+                                     get_buffered_aabb(body2, link2, max_distance=max_distance/2.)):
         return []
     if (link1 is None) and (link2 is None):
         results = p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance, physicsClientId=CLIENT)
@@ -3345,15 +3374,15 @@ def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=Tru
 
 
 def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
-                     custom_limits={}, **kwargs):
+                     custom_limits={}, cache=True, max_distance=MAX_DISTANCE, **kwargs):
     # TODO: convert most of these to keyword arguments
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
     moving_links = frozenset(get_moving_links(body, joints))
     attached_bodies = [attachment.child for attachment in attachments]
     moving_bodies = [(body, moving_links)] + attached_bodies
     #moving_bodies = [body] + [attachment.child for attachment in attachments]
-    check_body_pairs = list(product(moving_bodies, obstacles))  # + list(combinations(moving_bodies, 2))
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits)
+    get_obstacle_aabb = cached_fn(get_buffered_aabb, cache=cache, max_distance=max_distance/2., **kwargs)
 
     # TODO: maybe prune the link adjacent to the robot
     # TODO: test self collision with the holding
@@ -3365,14 +3394,20 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         set_joint_positions(body, joints, q)
         for attachment in attachments:
             attachment.assign()
+        get_moving_aabb = cached_fn(get_buffered_aabb, cache=True, max_distance=max_distance/2., **kwargs)
+
         for link1, link2 in check_link_pairs:
             # Self-collisions should not have the max_distance parameter
+            # TODO: aabbs
             if pairwise_link_collision(body, link1, body, link2): #, **kwargs):
                 #print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
                 if verbose: print(body, link1, body, link2)
                 return True
-        for body1, body2 in check_body_pairs:
-            if pairwise_collision(body1, body2, **kwargs):
+        for body1, body2 in product(moving_bodies, obstacles):
+            # TODO: individual links
+            # TODO: get_bodies_in_region
+            if aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2)) \
+                    and pairwise_collision(body1, body2, **kwargs):
                 #print(get_body_name(body1), get_body_name(body2))
                 if verbose: print(body1, body2)
                 return True
