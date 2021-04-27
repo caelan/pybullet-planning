@@ -1,9 +1,14 @@
+from __future__ import print_function
+
 import importlib
 import time
 import numpy as np
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+import traceback
+
+PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.append(PARENT_DIR)
 
 from itertools import islice
 
@@ -11,7 +16,11 @@ from .utils import compute_inverse_kinematics, compute_forward_kinematics
 from ..utils import get_link_pose, link_from_name, multiply, invert, get_link_ancestors, \
     parent_joint_from_link, parent_link_from_joint, prune_fixed_joints, joints_from_names, INF, get_difference_fn, \
     get_joint_positions, get_min_limits, get_max_limits, interval_generator, elapsed_time, randomize, violates_limits, \
-    get_length, get_relative_pose, get_link_name, set_joint_positions, get_pose_distance, ConfSaver
+    get_length, get_relative_pose, get_link_name, set_joint_positions, get_pose_distance, ConfSaver, \
+    sub_inverse_kinematics, user_input, set_configuration, wait_for_user
+
+def get_module_name(ikfast_info):
+    return 'ikfast.{}'.format(ikfast_info.module_name)
 
 
 def import_ikfast(ikfast_info):
@@ -19,7 +28,7 @@ def import_ikfast(ikfast_info):
     #print(sys.modules['__main__'].__file__)
     #return importlib.import_module('pybullet_tools.ikfast.{}'.format(ikfast_info.module_name), package=None)
     #return importlib.import_module('{}'.format(ikfast_info.module_name), package='pybullet_tools.ikfast')
-    return importlib.import_module('ikfast.{}'.format(ikfast_info.module_name), package=None)
+    return importlib.import_module(get_module_name(ikfast_info), package=None)
 
 
 def is_ik_compiled(ikfast_info):
@@ -27,6 +36,24 @@ def is_ik_compiled(ikfast_info):
         import_ikfast(ikfast_info)
         return True
     except ImportError:
+        return False
+
+
+def print_ik_warning(ikfast_info):
+    try:
+        import_ikfast(ikfast_info)
+    except ImportError: # as e:
+        traceback.print_exc()
+        #print('\x1b[6;30;43m' + '{}, Using pybullet ik fn instead'.format(e) + '\x1b[0m')
+        module_name = get_module_name(ikfast_info)
+        ik_path = os.path.join(PARENT_DIR, module_name.replace('.', '/'))
+        build_path = os.path.join(ik_path, 'build.py')
+        print('Could not import IKFast module {}, please compile {} to use IKFast.'.format(
+            module_name, build_path, module_name))
+        print('$ cd {}; python setup.py build'.format(ik_path))
+        wait_for_user()
+        return True
+    else:
         return False
 
 ##################################################
