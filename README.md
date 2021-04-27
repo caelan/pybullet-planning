@@ -72,6 +72,10 @@ pybullet-planning/pybullet_tools/ikfast/pr2$ python setup.py build
 
 ## Tutorial
 
+[test_turtlebot](https://github.com/caelan/pybullet-planning/blob/master/examples/test_turtlebot.py) - ```$ python -m examples.test_turtlebot```
+
+<img src="images/turtlebot.png" height="150">
+
 Heavily annotated simple example that demonstrates:
 * Creating a PyBullet simulation
 * Waiting for user input (useful on macOS)
@@ -84,33 +88,34 @@ Heavily annotated simple example that demonstrates:
 * Drawing coordinate frames and bounding boxes
 * Checking collisions between two objects
 * Temporarily disabling rendering for efficiency purposes
-* [test_turtlebot](https://github.com/caelan/pybullet-planning/blob/master/examples/test_turtlebot.py) - ```$ python -m examples.test_turtlebot```
 
 ## Planning Examples
 
 * [Kuka IIWA pick motion planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_kuka_pick.py) - `$ python -m examples.test_kuka_pick`
-* [TutleBot base motion planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_turtlebot_motion.py) - ```$ python -m examples.test_turtlebot```
+* [TutleBot base motion planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_turtlebot_motion.py) - ```$ python -m examples.test_turtlebot_motion```
 * [PR2 base & arm motion planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_pr2_motion.py) - ```$ python -m examples.test_pr2_motion```
 * [Franka Panda workspace planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_franka.py) - ```$ python -m examples.test_franka```
 * [Kinova MOVO workspace planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_movo.py) - ```$ python -m examples.test_movo```
+* [Cylinder SE(3) motion planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_se3.py) - ```$ python -m examples.test_se3```
 * [PR2 teleoperation](https://github.com/caelan/pybullet-planning/blob/master/examples/teleop_pr2.py) - ```$ python -m examples.teleop_pr2```
 
-<img src="images/turtlebot.png" height="150">&emsp;<img src="images/movo.png" height="150">
+<img src="images/movo.png" height="150">
 
 ## Debug Examples
 
-* [PR2 visibility](https://github.com/caelan/pybullet-planning/blob/master/examples/test_visibility.py) - ```$ python -m examples.test_visibility```
-* [PR2 copying](https://github.com/caelan/pybullet-planning/blob/master/examples/test_clone.py) - ```$ python -m examples.test_clone```
-* [TurtleBot collisions](https://github.com/caelan/pybullet-planning/blob/master/examples/test_turtlebot.py) - ```$ python -m examples.test_turtlebot```
-* [Dropping beads](https://github.com/caelan/pybullet-planning/blob/master/examples/test_water.py) - ```$ python -m examples.test_water```
+* [TAMP environments](https://github.com/caelan/pybullet-planning/blob/master/examples/test_json.py) - ```$ python -m examples.test_json```
+* [TAMP benchmarks](https://github.com/caelan/pybullet-planning/blob/master/examples/test_tamp_xml.py) - ```$ python -m examples.test_tamp_xml```
+* [Gripper side grasps](https://github.com/caelan/pybullet-planning/blob/master/examples/gripper/test_side.py) - ```$ python -m examples.gripper.test_side```
+* [Gripper top grasps](https://github.com/caelan/pybullet-planning/blob/master/examples/gripper/test_top.py) - ```$ python -m examples.gripper.test_top```
+* [Dropping particles](https://github.com/caelan/pybullet-planning/blob/master/examples/test_water.py) - ```$ python -m examples.test_water```
+* [PR2 cloning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_clone.py) - ```$ python -m examples.test_clone```
 
 <!--
-* [SE(3)](https://github.com/caelan/pybullet-planning/blob/master/examples/test_se3.py) - ```$ python -m examples.test_se3```
-* [TBD](https://github.com/caelan/pybullet-planning/blob/master/examples/test_json.py) - ```$ python -m examples.test_json```
-* [TBD](https://github.com/caelan/pybullet-planning/blob/master/examples/test_kinbody.py) - ```$ python -m examples.test_kinbody```
-* [KIVA](https://github.com/caelan/pybullet-planning/blob/master/examples/test_kiva.py) - ```$ python -m examples.test_kiva```
-* [TBD](https://github.com/caelan/pybullet-planning/blob/master/examples/test_models.py) - ```$ python -m examples.test_models```
-* [TBD](https://github.com/caelan/pybullet-planning/blob/master/examples/test_tamp_xml.py) - ```$ python -m examples.test_tamp_xml```
+* [OpenRAVE bodies](https://github.com/caelan/pybullet-planning/blob/master/examples/test_kinbody.py) - ```$ python -m examples.test_kinbody```
+* [Kiva shelves](https://github.com/caelan/pybullet-planning/blob/master/examples/test_kiva.py) - ```$ python -m examples.test_kiva```
+* [LIS/YCB models](https://github.com/caelan/pybullet-planning/blob/master/examples/test_models.py) - ```$ python -m examples.test_models```
+* [PR2 visibility](https://github.com/caelan/pybullet-planning/blob/master/examples/test_visibility.py) - ```$ python -m examples.test_visibility```
+* [TurtleBot collisions](https://github.com/caelan/pybullet-planning/blob/master/examples/test_turtlebot.py) - ```$ python -m examples.test_turtlebot```
 -->
 
 ## PDDLStream Examples
