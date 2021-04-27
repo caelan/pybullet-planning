@@ -5,7 +5,6 @@ import time
 import numpy as np
 import sys
 import os
-import traceback
 
 PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 sys.path.append(PARENT_DIR)
@@ -13,11 +12,13 @@ sys.path.append(PARENT_DIR)
 from itertools import islice
 
 from .utils import compute_inverse_kinematics, compute_forward_kinematics
-from ..utils import get_link_pose, link_from_name, multiply, invert, get_link_ancestors, \
-    parent_joint_from_link, parent_link_from_joint, prune_fixed_joints, joints_from_names, INF, get_difference_fn, \
+from ..utils import get_link_pose, link_from_name, multiply, invert, parent_joint_from_link, parent_link_from_joint, prune_fixed_joints, joints_from_names, INF, get_difference_fn, \
     get_joint_positions, get_min_limits, get_max_limits, interval_generator, elapsed_time, randomize, violates_limits, \
-    get_length, get_relative_pose, get_link_name, set_joint_positions, get_pose_distance, ConfSaver, \
-    sub_inverse_kinematics, user_input, set_configuration, wait_for_user
+    get_length, get_relative_pose, set_joint_positions, get_pose_distance, ConfSaver, \
+    sub_inverse_kinematics, set_configuration, wait_for_user, multiple_sub_inverse_kinematics, get_ordered_ancestors
+
+SETUP_FILENAME = 'setup.py'
+
 
 def get_module_name(ikfast_info):
     return 'ikfast.{}'.format(ikfast_info.module_name)
@@ -42,15 +43,16 @@ def is_ik_compiled(ikfast_info):
 def print_ik_warning(ikfast_info):
     try:
         import_ikfast(ikfast_info)
-    except ImportError: # as e:
-        traceback.print_exc()
+    except ImportError as e:
+        #traceback.print_exc()
         #print('\x1b[6;30;43m' + '{}, Using pybullet ik fn instead'.format(e) + '\x1b[0m')
+        print(e)
         module_name = get_module_name(ikfast_info)
-        ik_path = os.path.join(PARENT_DIR, module_name.replace('.', '/'))
-        build_path = os.path.join(ik_path, 'build.py')
+        ik_path = os.path.join(PARENT_DIR, '/'.join(module_name.split('.')[:-1]))
+        build_path = os.path.join(ik_path, SETUP_FILENAME)
         print('Could not import IKFast module {}, please compile {} to use IKFast.'.format(
-            module_name, build_path, module_name))
-        print('$ cd {}; python setup.py build'.format(ik_path))
+            module_name, build_path))
+        #print('$ cd {}; python {} build'.format(ik_path, SETUP_FILENAME))
         wait_for_user()
         return True
     else:
@@ -63,11 +65,6 @@ def get_base_from_ee(robot, ikfast_info, tool_link, world_from_target):
     tool_from_ee = get_relative_pose(robot, ee_link, tool_link)
     world_from_base = get_link_pose(robot, link_from_name(robot, ikfast_info.base_link))
     return multiply(invert(world_from_base), world_from_target, tool_from_ee)
-
-
-def get_ordered_ancestors(robot, link):
-    #return prune_fixed_joints(robot, get_link_ancestors(robot, link)[1:] + [link])
-    return get_link_ancestors(robot, link)[1:] + [link]
 
 
 def get_ik_joints(robot, ikfast_info, tool_link):
@@ -184,3 +181,20 @@ def closest_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
         print('Identified {} IK solutions with minimum distance of {:.3f} in {:.3f} seconds'.format(
             len(solutions), min_distance, elapsed_time(start_time)))
     return iter(solutions)
+
+
+def closest_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
+                               max_candidates=INF, norm=INF, verbose=True,
+                               fixed_joints=[], max_attempts=INF, max_time=INF,
+                               max_distance=INF, **kwargs):
+    ik_joints = get_ik_joints(robot, ikfast_info, tool_link)
+    print(ikfast_info)
+    free_joints = [joint for joint in ik_joints if joint not in fixed_joints]
+    assert free_joints
+    first_joint = free_joints[0]
+    conf = sub_inverse_kinematics(robot, first_joint, tool_link, world_from_target, **kwargs)
+    conf = multiple_sub_inverse_kinematics(robot, first_joint, tool_link, world_from_target, max_attempts=10)
+    if conf is None:
+        return
+    set_configuration(robot, conf)
+    yield get_joint_positions(robot, ik_joints)

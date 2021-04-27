@@ -125,6 +125,14 @@ def irange(start, end=None, step=1):
         yield n
         n += step
 
+def count_until(max_iterations=INF, max_time=INF):
+    start_time = time.time()
+    assert (max_iterations < INF) or (max_time < INF)
+    for iteration in irange(max_iterations):
+        if elapsed_time(start_time) >= max_time:
+            break
+        yield iteration
+
 def print_separator(n=50):
     print('\n' + n*'-' + '\n')
 
@@ -1309,7 +1317,7 @@ def image_from_segmented(segmented, color_from_body=None):
     for r in range(segmented.shape[0]):
         for c in range(segmented.shape[1]):
             body, link = segmented[r, c, :]
-            image[r, c, :] = color_from_body.get(body, (0, 0, 0))
+            image[r, c, :] = color_from_body.get(body, BLACK)[:3] # TODO: alpha
     return image
 
 def get_image_flags(segment=False, segment_links=False):
@@ -2062,6 +2070,10 @@ def get_link_ancestors(body, link):
     if parent is None:
         return []
     return get_link_ancestors(body, parent) + [parent]
+
+def get_ordered_ancestors(robot, link):
+    #return prune_fixed_joints(robot, get_link_ancestors(robot, link)[1:] + [link])
+    return get_link_ancestors(robot, link)[1:] + [link]
 
 def get_joint_ancestors(body, joint):
     link = child_link_from_joint(joint)
@@ -3508,11 +3520,11 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
     for q1, q2 in get_pairs(path):
         handles.append(add_line(draw_fn(q1), draw_fn(q2), color=GREEN))
     for i1, i2 in edges:
-        color = (0, 0, 1)
+        color = BLUE
         if any(colliding_vertices.get(i, False) for i in (i1, i2)) or colliding_vertices.get((i1, i2), False):
-            color = (1, 0, 0)
+            color = RED
         elif not colliding_vertices.get((i1, i2), True):
-            color = (0, 0, 0)
+            color = BLACK
         handles.append(add_line(draw_fn(samples[i1]), draw_fn(samples[i2]), color=color))
     wait_if_gui()
     return path
@@ -4134,10 +4146,10 @@ def is_pose_close(pose, target_pose, pos_tolerance=1e-3, ori_tolerance=1e-3*np.p
 def inverse_kinematics(robot, link, target_pose, max_iterations=200, max_time=INF, custom_limits={}, **kwargs):
     start_time = time.time()
     movable_joints = get_movable_joints(robot)
-    for iterations in range(max_iterations):
-        # TODO: stop is no progress
+    for iteration in irange(max_iterations):
+        # TODO: stop is no progress (converged)
         # TODO: stop if collision or invalid joint limits
-        if elapsed_time(start_time) > max_time:
+        if elapsed_time(start_time) >= max_time:
             return None
         kinematic_conf = inverse_kinematics_helper(robot, link, target_pose)
         if kinematic_conf is None:
@@ -4240,22 +4252,43 @@ def create_sub_robot(robot, first_joint, target_link):
     assert(target_link in selected_links)
     sub_target_link = selected_links.index(target_link)
     sub_robot = clone_body(robot, links=selected_links, visual=False, collision=False) # TODO: joint limits
+    assert len(selected_joints) == len(get_movable_joints(sub_robot))
     return sub_robot, selected_joints, sub_target_link
 
-def closest_kinematic_solution(robot, first_joint, target_link, target_pose, max_iterations=200, max_time=INF):
+def multiple_sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_attempts=1, max_solutions=INF,
+                                    max_time=INF, custom_limits={}, **kwargs):
     # TODO: gradient descent using collision_info
     start_time = time.time()
+    ancestor_joints = prune_fixed_joints(robot, get_ordered_ancestors(robot, target_link))
+    affected_joints = ancestor_joints[ancestor_joints.index(first_joint):]
     sub_robot, selected_joints, sub_target_link = create_sub_robot(robot, first_joint, target_link)
-    sub_joints = get_movable_joints(sub_robot)
-    for iteration in range(max_iterations):
-        # TODO: convergence
-        if elapsed_time(start_time) > max_time:
+    #sub_joints = get_movable_joints(sub_robot)
+    #sub_from_real = dict(safe_zip(sub_joints, selected_joints))
+    sub_joints = prune_fixed_joints(sub_robot, get_ordered_ancestors(sub_robot, sub_target_link))
+    selected_joints = affected_joints
+    #sub_from_real = dict(safe_zip(sub_joints, selected_joints))
+
+    #sample_fn = get_sample_fn(sub_robot, sub_joints, custom_limits=custom_limits) # [-PI, PI]
+    sample_fn = get_sample_fn(robot, selected_joints, custom_limits=custom_limits)
+    # lower_limits, upper_limits = get_custom_limits(robot, get_movable_joints(robot), custom_limits)
+    solutions = []
+    for attempt in irange(max_attempts):
+        if (len(solutions) >= max_solutions) or (elapsed_time(start_time) >= max_time):
             break
-        sub_kinematic_conf = inverse_kinematics_helper(sub_robot, sub_target_link, target_pose)
-        if sub_kinematic_conf is None:
-            break
-        set_joint_positions(sub_robot, sub_joints, sub_kinematic_conf)
-    set_joint_positions(robot, selected_joints, get_joint_positions(sub_robot, sub_joints))
+        if attempt >= 1:
+            sub_conf = sample_fn()
+            set_joint_positions(sub_robot, sub_joints, sub_conf)
+        sub_kinematic_conf = inverse_kinematics(sub_robot, sub_target_link, target_pose,
+                                                max_time=max_time-elapsed_time(start_time), **kwargs)
+        if sub_kinematic_conf is not None:
+            set_configuration(sub_robot, sub_kinematic_conf)
+            sub_kinematic_conf = get_joint_positions(sub_robot, sub_joints)
+            set_joint_positions(robot, selected_joints, sub_kinematic_conf)
+            kinematic_conf = get_configuration(robot) # TODO: test on the resulting robot state (e.g. collisions)
+            #if not all_between(lower_limits, kinematic_conf, upper_limits):
+            solutions.append(kinematic_conf) # kinematic_conf | sub_kinematic_conf
+    if solutions:
+        set_configuration(robot, solutions[-1])
     remove_body(sub_robot)
     return get_configuration(robot)
 
@@ -4277,8 +4310,8 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
     solutions = []
     for target_pose in waypoint_poses:
         start_time = time.time()
-        for iteration in range(max_iterations):
-            if elapsed_time(start_time) > max_time:
+        for iteration in irange(max_iterations):
+            if elapsed_time(start_time) >= max_time:
                 remove_body(sub_robot)
                 return None
             sub_kinematic_conf = inverse_kinematics_helper(sub_robot, sub_target_link, target_pose, null_space=null_space)
@@ -4339,7 +4372,7 @@ def read_counter(debug):
 def read_button(debug):
     return read_counter(debug) % 2 == 1
 
-def add_text(text, position=(0, 0, 0), color=BLACK, lifetime=None, parent=NULL_ID, parent_link=BASE_LINK):
+def add_text(text, position=unit_point(), color=BLACK, lifetime=None, parent=NULL_ID, parent_link=BASE_LINK):
     return p.addUserDebugText(str(text), textPosition=position, textColorRGB=color[:3], # textSize=1,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
