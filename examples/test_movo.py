@@ -3,7 +3,7 @@
 from __future__ import print_function
 
 import time
-
+import numpy as np
 import pybullet as p
 
 from examples.test_franka import test_retraction
@@ -46,7 +46,7 @@ def test_grasps(robot, block):
 
 #####################################
 
-def main():
+def main(num_iterations=10):
     # The URDF loader seems robust to package:// and slightly wrong relative paths?
     connect(use_gui=True)
     add_data_path()
@@ -54,17 +54,17 @@ def main():
     side = 0.05
     block = create_box(w=side, l=side, h=side, color=RED)
 
+    start_time = time.time()
     with LockRenderer():
-        start_time = time.time()
         with HideOutput():
             # TODO: MOVO must be loaded last
             robot = load_model(MOVO_URDF, fixed_base=True)
-        print(elapsed_time(start_time))
         for link in get_links(robot):
             set_color(robot, color=MOVO_COLOR, link=link)
         base_joints = joints_from_names(robot, BASE_JOINTS)
         draw_base_limits((get_min_limits(robot, base_joints),
                           get_max_limits(robot, base_joints)), z=1e-2)
+    print('Load time: {:.3f}'.format(elapsed_time(start_time)))
 
     dump_body(robot)
     #print(get_colliding(robot))
@@ -89,10 +89,9 @@ def main():
 
     sample_fn = get_sample_fn(robot, joints)
     handles = []
-    for i in range(10):
-        print('Iteration:', i)
+    for i in range(num_iterations):
         conf = sample_fn()
-        print(conf)
+        print('Iteration: {}/{} | Conf: {}'.format(i+1, num_iterations, np.array(conf)))
         set_joint_positions(robot, joints, conf)
         tool_pose = get_link_pose(robot, tool_link)
         remove_handles(handles)

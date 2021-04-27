@@ -4112,9 +4112,10 @@ def inverse_kinematics_helper(robot, link, target_pose, null_space=None):
         #ikSolver = p.IK_DLS or p.IK_SDLS
         kinematic_conf = p.calculateInverseKinematics(robot, link, target_point,
                                                       #lowerLimits=ll, upperLimits=ul, jointRanges=jr, restPoses=rp, jointDamping=jd,
-                                                      # solver=ikSolver, maxNumIterations=-1, residualThreshold=-1,
+                                                      # solver=ikSolver, currentPosition=None, maxNumIterations=20, residualThreshold=-1,
                                                       physicsClientId=CLIENT)
     else:
+        # TODO: calculateInverseKinematics2
         kinematic_conf = p.calculateInverseKinematics(robot, link, target_point, target_quat, physicsClientId=CLIENT)
     if (kinematic_conf is None) or any(map(math.isnan, kinematic_conf)):
         return None
@@ -4130,11 +4131,14 @@ def is_pose_close(pose, target_pose, pos_tolerance=1e-3, ori_tolerance=1e-3*np.p
         return False
     return True
 
-def inverse_kinematics(robot, link, target_pose, max_iterations=200, custom_limits={}, **kwargs):
+def inverse_kinematics(robot, link, target_pose, max_iterations=200, max_time=INF, custom_limits={}, **kwargs):
+    start_time = time.time()
     movable_joints = get_movable_joints(robot)
     for iterations in range(max_iterations):
         # TODO: stop is no progress
         # TODO: stop if collision or invalid joint limits
+        if elapsed_time(start_time) > max_time:
+            return None
         kinematic_conf = inverse_kinematics_helper(robot, link, target_pose)
         if kinematic_conf is None:
             return None
@@ -4230,6 +4234,7 @@ def get_null_space(robot, joints, custom_limits={}):
     return NullSpace(list(lower), list(upper), list(joint_ranges), list(rest_positions))
 
 def create_sub_robot(robot, first_joint, target_link):
+    # TODO: create a class or generator for repeated use
     selected_links = get_link_subtree(robot, first_joint) # TODO: child_link_from_joint?
     selected_joints = prune_fixed_joints(robot, selected_links)
     assert(target_link in selected_links)
@@ -4237,12 +4242,15 @@ def create_sub_robot(robot, first_joint, target_link):
     sub_robot = clone_body(robot, links=selected_links, visual=False, collision=False) # TODO: joint limits
     return sub_robot, selected_joints, sub_target_link
 
-def closet_kinematic_solution(robot, first_joint, target_link, target_pose, max_iterations=200):
+def closest_kinematic_solution(robot, first_joint, target_link, target_pose, max_iterations=200, max_time=INF):
     # TODO: gradient descent using collision_info
+    start_time = time.time()
     sub_robot, selected_joints, sub_target_link = create_sub_robot(robot, first_joint, target_link)
     sub_joints = get_movable_joints(sub_robot)
     for iteration in range(max_iterations):
         # TODO: convergence
+        if elapsed_time(start_time) > max_time:
+            break
         sub_kinematic_conf = inverse_kinematics_helper(sub_robot, sub_target_link, target_pose)
         if sub_kinematic_conf is None:
             break
@@ -4252,7 +4260,7 @@ def closet_kinematic_solution(robot, first_joint, target_link, target_pose, max_
     return get_configuration(robot)
 
 def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
-                          max_iterations=200, custom_limits={}, **kwargs):
+                          max_iterations=200, max_time=INF, custom_limits={}, **kwargs):
     # TODO: fix stationary joints
     # TODO: pass in set of movable joints and take least common ancestor
     # TODO: update with most recent bullet updates
@@ -4268,7 +4276,11 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
 
     solutions = []
     for target_pose in waypoint_poses:
+        start_time = time.time()
         for iteration in range(max_iterations):
+            if elapsed_time(start_time) > max_time:
+                remove_body(sub_robot)
+                return None
             sub_kinematic_conf = inverse_kinematics_helper(sub_robot, sub_target_link, target_pose, null_space=null_space)
             if sub_kinematic_conf is None:
                 remove_body(sub_robot)
@@ -4291,6 +4303,7 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
         else:
             remove_body(sub_robot)
             return None
+    # TODO: finally:
     remove_body(sub_robot)
     return solutions
 
@@ -4382,6 +4395,9 @@ def draw_pose(pose, length=0.1, d=3, **kwargs):
         axis_world = tform_point(pose, length*axis)
         handles.append(add_line(origin_world, axis_world, color=axis, **kwargs))
     return handles
+
+def draw_pose2d(pose2d, z=0., d=2, **kwargs):
+    return draw_pose(pose_from_pose2d(pose2d, z), d=d, **kwargs)
 
 def draw_base_limits(limits, z=1e-2, **kwargs):
     lower, upper = limits

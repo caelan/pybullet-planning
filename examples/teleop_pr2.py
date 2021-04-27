@@ -10,7 +10,7 @@ import tty
 from pybullet_tools.pr2_utils import PR2_GROUPS, DRAKE_PR2_URDF
 from pybullet_tools.utils import add_data_path, connect, enable_gravity, load_model, \
 	joints_from_names, load_pybullet, \
-	velocity_control_joints, disconnect, enable_real_time
+	velocity_control_joints, disconnect, enable_real_time, HideOutput
 
 HELP_MSG = """
 Reading from the keyboard  and Publishing to Twist!
@@ -114,23 +114,21 @@ def run_thread(pr2):
 			velocity_control_joints(pr2, joints, velocities)
 	except Exception as e:
 		print(e)
-
 	finally:
 		termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
 
 #####################################
 
 def main():
-	"""
-	https://github.com/ros-teleop/teleop_twist_keyboard
-	http://openrave.org/docs/latest_stable/_modules/openravepy/misc/#SetViewerUserThread
-	"""
+	# https://github.com/ros-teleop/teleop_twist_keyboard
+	# http://openrave.org/docs/latest_stable/_modules/openravepy/misc/#SetViewerUserThread
 
 	connect(use_gui=True)
 	add_data_path()
 	load_pybullet("plane.urdf")
 	#load_pybullet("models/table_collision/table.urdf")
-	pr2 = load_model(DRAKE_PR2_URDF, fixed_base=True)
+	with HideOutput():
+		pr2 = load_model(DRAKE_PR2_URDF, fixed_base=True)
 	enable_gravity()
 	enable_real_time() # TODO: won't work as well on OS X due to simulation thread
 
