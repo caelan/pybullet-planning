@@ -17,7 +17,7 @@ from .utils import multiply, get_link_pose, set_joint_position, set_joint_positi
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
     get_extend_fn, get_moving_links, link_pairs_collision, get_link_subtree, \
     clone_body, get_all_links, pairwise_collision, tform_point, get_camera_matrix, ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, \
-    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color
+    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color, wait_if_gui
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -618,17 +618,18 @@ def draw_viewcone(pose, depth=MAX_VISUAL_DISTANCE,
 def is_optical(link_name):
     return 'optical' in link_name
 
-def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME,
-                       max_iterations=100, step_size=0.5, tolerance=np.pi*1e-2):
+def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME, head_joints=None,
+                       max_iterations=100, step_size=0.5, tolerance=np.pi*1e-2, verbose=False):
     # https://github.com/PR2/pr2_controllers/blob/kinetic-devel/pr2_head_action/src/pr2_point_frame.cpp
-    head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
     head_link = link_from_name(pr2, head_name)
     camera_axis = np.array([0, 0, 1]) if is_optical(head_name) else np.array([1, 0, 0])
+    if head_joints is None:
+        head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
     # TODO: could also set the target orientation for inverse kinematics
     head_conf = np.zeros(len(head_joints))
-    with LockRenderer():
+    with LockRenderer(lock=True):
         with ConfSaver(pr2):
-            for _ in range(max_iterations):
+            for iteration in range(max_iterations):
                 set_joint_positions(pr2, head_joints, head_conf)
                 world_from_head = get_link_pose(pr2, head_link)
                 point_head = tform_point(invert(world_from_head), point)
@@ -642,8 +643,14 @@ def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME,
                 _, angular = compute_jacobian(pr2, head_link)
                 correction_conf = np.array([np.dot(angular[mj], correction_euler)
                                             for mj in movable_from_joints(pr2, head_joints)])
+                if verbose:
+                    print('Iteration: {} | Error: {:.3f} | Correction: {}'.format(
+                        iteration, error_angle, correction_conf))
                 head_conf += correction_conf
+                #if debug:
                 #wait_if_gui()
+                if np.all(correction_conf == 0):
+                    return None
             else:
                 return None
     if violates_limits(pr2, head_joints, head_conf):

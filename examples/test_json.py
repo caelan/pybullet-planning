@@ -33,7 +33,7 @@ def parse_task(task, robots, bodies, regions):
     #grasp_types = ['top']
     sinks = [bodies[n] for n in task['sink_names']]
     stoves = [bodies[n] for n in task['stove_names']]
-    surfaces = [bodies[n] for n in task['table_names']] + regions.values() + sinks + stoves
+    surfaces = [bodies[n] for n in task['table_names']] + list(regions.values()) + sinks + stoves
     #buttons = tuple()
     #assert not task['goal_poses']
     assert task['goal_config'] is None
@@ -43,12 +43,14 @@ def parse_task(task, robots, bodies, regions):
     goal_cleaned = [bodies[n] for n in task['goal_cleaned']]
     goal_cooked = [bodies[n] for n in task['goal_cooked']]
 
-    body_names = {body: name for name, body in bodies.items() + regions.items()}
+    body_names = {body: name for name, body in list(bodies.items()) + list(regions.items())}
 
     return Problem(robot=robot, arms=arms, movable=movable, grasp_types=grasp_types,
                    surfaces=surfaces, sinks=sinks, stoves=stoves,
                    goal_conf=goal_conf, goal_on=goal_on, goal_cleaned=goal_cleaned, goal_cooked=goal_cooked,
                    body_names=body_names)
+
+##################################################
 
 JSON_DIRECTORY = 'problems/json/'
 
@@ -79,6 +81,8 @@ def load_json_problem(problem_filename):
     #print(get_image())
 
     return parse_task(task_json, robots, bodies, regions)
+
+##################################################
 
 # TODO: cannot solve any FFRob
 FFROB = ['blocks_row', 'bury', 'clean', 'cook', 'dig',
@@ -138,10 +142,11 @@ IJCAI = ['exists_hold_obs_0.json', 'exists_hold_obs_1.json',
  'sink_stove_4_20.json', 'sink_stove_4_30.json', 'sink_stove_4_4.json', 'sink_stove_4_40.json',
  'sink_stove_4_8.json']
 
+##################################################
 
 SCREENSHOT_DIR = 'images/json'
 
-def main():
+def main(screenshot=False):
     connect(use_gui=True)
     print(get_json_filenames())
 
@@ -155,7 +160,6 @@ def main():
     #height = 1600
     #
     #640, 480
-    screenshot = False
 
     for problem_filename in problem_filenames:
         load_json_problem(problem_filename)
