@@ -49,21 +49,21 @@ To create IKFast bindings for a new robot, following the instructions in [ikfast
 
 ```
 $ cd pybullet-pybullet/pybullet_tools/ikfast/franka_panda
-pybullet-planning/pybullet_tools/ikfast/franka_panda$ python setup.py build
+pybullet-planning/pybullet_tools/ikfast/franka_panda$ python setup.py
 ```
 
 ### MOVO
 
 ```
 $ cd pybullet-planning/pybullet_tools/ikfast/movo
-pybullet-planning/pybullet_tools/ikfast/movo$ python setup.py -a {left,right}
+pybullet-planning/pybullet_tools/ikfast/movo$ python setup.py
 ```
 
 ### PR2
 
 ```
 $ cd pybullet-planning/pybullet_tools/ikfast/pr2
-pybullet-planning/pybullet_tools/ikfast/pr2$ python setup.py build
+pybullet-planning/pybullet_tools/ikfast/pr2$ python setup.py
 ```
 
 ## Tests
