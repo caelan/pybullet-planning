@@ -4,9 +4,10 @@ from __future__ import print_function
 
 import pybullet as p
 
-from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, disconnect, wait_for_user, \
+from pybullet_tools.utils import add_data_path, connect, dump_body, disconnect, wait_for_user, \
     get_movable_joints, get_sample_fn, set_joint_positions, get_joint_name, LockRenderer, link_from_name, get_link_pose, \
-    multiply, Pose, Point, interpolate_poses, HideOutput
+    multiply, Pose, Point, interpolate_poses, HideOutput, draw_pose, set_camera_pose, load_pybullet, \
+    assign_link_colors
 
 from pybullet_tools.ikfast.franka_panda.ik import PANDA_INFO, FRANKA_URDF
 from pybullet_tools.ikfast.ikfast import get_ik_joints, either_inverse_kinematics, print_ik_warning
@@ -28,22 +29,29 @@ def test_retraction(robot, info, tool_link, distance=0.1, **kwargs):
         #    set_joint_positions(robot, joints[:len(conf)], conf)
         #    wait_for_user()
 
+
 #####################################
 
 def main():
     connect(use_gui=True)
     add_data_path()
+    draw_pose(Pose(), length=1.)
+    set_camera_pose(camera_point=[1, -1, 1])
 
     plane = p.loadURDF("plane.urdf")
-    with HideOutput():
-        with LockRenderer():
-            robot = load_model(FRANKA_URDF, fixed_base=True)
+    with LockRenderer():
+        with HideOutput():
+            robot = load_pybullet(FRANKA_URDF, fixed_base=True)
+            assign_link_colors(robot)
+            #set_all_color(robot, GREEN)
+
     dump_body(robot)
     print('Start?')
     wait_for_user()
 
     info = PANDA_INFO
     tool_link = link_from_name(robot, 'panda_hand')
+    draw_pose(Pose(), parent=robot, parent_link=tool_link)
     joints = get_movable_joints(robot)
     print('Joints', [get_joint_name(robot, joint) for joint in joints])
     print_ik_warning(info)

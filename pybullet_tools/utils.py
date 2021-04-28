@@ -2115,14 +2115,14 @@ def get_adjacent_fixed_links(body):
     return list(filter(lambda item: not is_movable(body, item[0]),
                        get_adjacent_links(body)))
 
-def get_fixed_links(body):
+def get_rigid_clusters(body):
     edges = defaultdict(list)
     for link, parent in get_adjacent_fixed_links(body):
         edges[link].append(parent)
         edges[parent].append(link)
     visited = set()
-    fixed = set()
-    for initial_link in get_links(body):
+    clusters = []
+    for initial_link in get_all_links(body):
         if initial_link in visited:
             continue
         cluster = [initial_link]
@@ -2134,6 +2134,22 @@ def get_fixed_links(body):
                     cluster.append(next_link)
                     queue.append(next_link)
                     visited.add(next_link)
+        clusters.append(cluster)
+    return clusters
+
+def assign_link_colors(body, max_colors=INF, alpha=1., **kwargs):
+    components = sorted(get_rigid_clusters(body), key=min)
+    num_colors = len(components)
+    colors = spaced_colors(num_colors, **kwargs)
+    for component, color in zip(components, colors):
+        for link in component:
+            #print(get_color(body, link=link))
+            set_color(body, link=link, color=apply_alpha(color, alpha=alpha))
+    return components
+
+def get_fixed_links(body):
+    fixed = set()
+    for cluster in get_rigid_clusters(body):
         fixed.update(product(cluster, cluster))
     return fixed
 
@@ -2722,9 +2738,9 @@ def get_data_geometry(data):
         raise ValueError(geometry_type)
     return SHAPE_TYPES[geometry_type], parameters
 
-def get_color(body):
+def get_color(body, **kwargs):
     # TODO: average over texture
-    visual_data = get_visual_data(body)
+    visual_data = get_visual_data(body, **kwargs)
     if not visual_data:
         # TODO: no viewer implies no visual data
         return None
@@ -2737,12 +2753,14 @@ def set_color(body, color, link=BASE_LINK, shape_index=NULL_ID):
     since URDF (and SDF etc) can have more than 1 visual shape per link.
     This shapeIndex matches the list ordering returned by getVisualShapeData.
     :param body:
+    :param color: RGBA
     :param link:
     :param shape_index:
     :return:
     """
     # specularColor
-    # TODO: if link is None, set_all_color (like AABB)
+    if link is None:
+        return set_all_color(body, color)
     return p.changeVisualShape(body, link, shapeIndex=shape_index, rgbaColor=color,
                                #textureUniqueId=None, specularColor=None,
                                physicsClientId=CLIENT)
