@@ -58,6 +58,7 @@ To create IKFast bindings for a new robot, following the instructions in [ikfast
 [test_turtlebot](https://github.com/caelan/pybullet-planning/blob/master/examples/test_turtlebot.py) - ```$ python -m examples.test_turtlebot```
 
 <img src="images/turtlebot.png" height="150">
+<!--img src="images/turtlebot2.png" height="150"-->
 
 Heavily annotated simple example that demonstrates:
 * Creating a PyBullet simulation
@@ -82,7 +83,12 @@ Heavily annotated simple example that demonstrates:
 * [Cylinder SE(3) motion planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_se3.py) - ```$ python -m examples.test_se3```
 * [PR2 teleoperation](https://github.com/caelan/pybullet-planning/blob/master/examples/teleop_pr2.py) - ```$ python -m examples.teleop_pr2```
 
-<img src="images/movo.png" height="150">
+<!--img src="images/movo.png" height="150"-->
+<img src="images/kuka_pick.png" height="150">&emsp;<img src="images/turtlebot_motion.png" height="150">
+&emsp;<img src="images/pr2_motion.png" height="150">
+
+<img src="images/franka.png" height="150">&emsp;<img src="images/movo2.png" height="150">
+&emsp;<img src="images/se3.png" height="150">
 
 ## Debug Examples
 
@@ -92,6 +98,11 @@ Heavily annotated simple example that demonstrates:
 * [Gripper top grasps](https://github.com/caelan/pybullet-planning/blob/master/examples/gripper/test_top.py) - ```$ python -m examples.gripper.test_top```
 * [Dropping particles](https://github.com/caelan/pybullet-planning/blob/master/examples/test_water.py) - ```$ python -m examples.test_water```
 * [PR2 cloning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_clone.py) - ```$ python -m examples.test_clone```
+
+<img src="images/json.png" height="150">&emsp;<img src="images/tamp_xml.png" height="150">
+&emsp;<img src="images/water.png" height="150">
+<!--&emsp;<img src="images/test_side.png" height="150">
+&emsp;<img src="images/test_top.png" height="150"-->
 
 <!--
 * [OpenRAVE bodies](https://github.com/caelan/pybullet-planning/blob/master/examples/test_kinbody.py) - ```$ python -m examples.test_kinbody```
