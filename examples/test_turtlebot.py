@@ -9,15 +9,17 @@ from pybullet_tools.utils import connect, load_model, disconnect, wait_if_gui, c
     TURTLEBOT_URDF, HideOutput, LockRenderer, joint_from_name, set_euler, get_euler, get_point, \
     set_joint_position, get_joint_positions, pairwise_collision, stable_z, wait_for_duration, get_link_pose, \
     link_from_name, get_pose, euler_from_quat, multiply, invert, draw_pose, unit_point, unit_quat, \
-    remove_debug, get_aabb, draw_aabb, get_subtree_aabb, ROOMBA_URDF, set_all_static
+    remove_debug, get_aabb, draw_aabb, get_subtree_aabb, ROOMBA_URDF, set_all_static, assign_link_colors, \
+    set_camera_pose, RGBA, draw_point
 
 # RGBA colors (alpha is transparency)
-RED = (1, 0, 0, 1)
-TAN = (0.824, 0.706, 0.549, 1)
+RED = RGBA(1, 0, 0, 1)
+TAN = RGBA(0.824, 0.706, 0.549, 1)
 
 def main(floor_width=2.0):
     # Creates a pybullet world and a visualizer for it
     connect(use_gui=True)
+    set_camera_pose(camera_point=[1, -1, 1], target_point=unit_point()) # Sets the camera's position
     identity_pose = (unit_point(), unit_quat())
     origin_handles = draw_pose(identity_pose, length=1.0) # Draws the origin coordinate system (x:RED, y:GREEN, z:BLUE)
 
@@ -33,7 +35,8 @@ def main(floor_width=2.0):
 
     with LockRenderer(): # Temporarily prevents the renderer from updating for improved loading efficiency
         with HideOutput(): # Temporarily suppresses pybullet output
-            robot = load_model(ROOMBA_URDF) # Loads a robot from a *.urdf file
+            robot = load_model(TURTLEBOT_URDF) # TURTLEBOT_URDF | ROOMBA_URDF # Loads a robot from a *.urdf file
+            assign_link_colors(robot)
             robot_z = stable_z(robot, floor) # Returns the z offset required for robot to be placed on floor
             set_point(robot, [0, 0, robot_z]) # Sets the z position of the robot
     dump_body(robot) # Prints joint and link information about robot
@@ -80,13 +83,14 @@ def main(floor_width=2.0):
         lower, upper = robot_aabb # Decomposing the AABB into the lower and upper extrema
         center = (lower + upper)/2. # Computing the center of the AABB
         extent = upper - lower # Computing the dimensions of the AABB
+        handles.extend(draw_point(center))
         handles.extend(draw_aabb(robot_aabb))
 
         collision = pairwise_collision(robot, obstacle) # Checks whether robot is currently colliding with obstacle
         print('Collision: {}'.format(collision))
         wait_for_duration(1.0) # Like sleep() but also updates the viewer
-    wait_if_gui() # Like raw_input() but also updates the viewer
 
+    wait_if_gui() # Like raw_input() but also updates the viewer
     # Destroys the pybullet world
     disconnect()
 

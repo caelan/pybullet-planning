@@ -15,7 +15,7 @@ from lxml import etree
 from pybullet_tools.pr2_utils import DRAKE_PR2_URDF, set_group_conf
 from pybullet_tools.utils import STATIC_MASS, CLIENT, connect, \
     disconnect, set_pose, wait_if_gui, load_model, HideOutput, base_values_from_pose, create_shape, \
-    get_mesh_geometry
+    get_mesh_geometry, point_from_pose, set_camera_pose, draw_global_system
 from pybullet_tools.utils import quaternion_from_matrix
 
 # https://docs.python.org/3.5/library/xml.etree.elementtree.html
@@ -86,7 +86,8 @@ def parse_robot(robot):
 
     with HideOutput():
         robot_id = load_model(DRAKE_PR2_URDF, fixed_base=True)
-    set_group_conf(robot_id, 'base', base_values_from_pose(pose))
+    set_pose(robot_id, pose)
+    #set_group_conf(robot_id, 'base', base_values_from_pose(pose))
     set_group_conf(robot_id, 'torso', torso)
     set_group_conf(robot_id, 'left_arm', left_arm)
     set_group_conf(robot_id, 'right_arm', right_arm)
@@ -123,6 +124,8 @@ def main():
     connect(use_gui=True)
     #add_data_path()
     #load_pybullet("plane.urdf")
+    draw_global_system()
+    set_camera_pose(camera_point=[+1, -1, 1])
 
     #root = xml_data.getroot()
     #print(root.items())

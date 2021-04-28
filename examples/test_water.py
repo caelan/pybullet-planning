@@ -7,17 +7,19 @@ import numpy as np
 
 from pybullet_tools.utils import add_data_path, connect, enable_gravity, wait_if_gui, disconnect, create_sphere, set_point, Point, \
     enable_real_time, dump_world, load_model, wait_if_gui, set_camera, stable_z, \
-    set_color, get_lower_upper, wait_for_duration, simulate_for_duration, load_pybullet, safe_zip
+    set_color, get_lower_upper, wait_for_duration, simulate_for_duration, load_pybullet, \
+    safe_zip, HideOutput, draw_global_system
 
 
 def main():
     connect(use_gui=True)
     add_data_path()
-
+    draw_global_system()
     set_camera(0, -30, 1)
-    plane = load_pybullet('plane.urdf', fixed_base=True)
-    #plane = load_model('plane.urdf')
-    cup = load_model('models/cup.urdf', fixed_base=True)
+    with HideOutput():
+        plane = load_pybullet('plane.urdf', fixed_base=True)
+        #plane = load_model('plane.urdf')
+        cup = load_model('models/cup.urdf', fixed_base=True)
     #set_point(cup, Point(z=stable_z(cup, plane)))
     set_point(cup, Point(z=.2))
     set_color(cup, (1, 0, 0, .4))

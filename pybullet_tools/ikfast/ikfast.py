@@ -146,6 +146,7 @@ def ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
     current_positions = get_joint_positions(robot, free_joints)
 
     # TODO: handle circular joints
+    # TODO: use norm=INF to limit the search for free values
     free_deltas = np.array([0. if joint in fixed_joints else max_distance for joint in free_joints])
     lower_limits = np.maximum(get_min_limits(robot, free_joints), current_positions - free_deltas)
     upper_limits = np.minimum(get_max_limits(robot, free_joints), current_positions + free_deltas)
@@ -184,8 +185,9 @@ def closest_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
     return iter(solutions)
 
 
-def either_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target, fixed_joints=[], **kwargs):
-    if is_ik_compiled(ikfast_info):
+def either_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target, fixed_joints=[],
+                              use_pybullet=False, **kwargs):
+    if not use_pybullet and is_ik_compiled(ikfast_info):
         for solution in closest_inverse_kinematics(
                 robot, ikfast_info, tool_link, world_from_target, fixed_joints=fixed_joints, **kwargs):
             yield solution

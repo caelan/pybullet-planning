@@ -1380,9 +1380,9 @@ def get_image_at_pose(camera_pose, camera_matrix, far=5.0, **kwargs):
     return get_image(camera_point, target_point, width=width, height=height,
                      vertical_fov=vertical_fov, far=far, **kwargs)
 
-def set_default_camera():
+def set_default_camera(yaw=160, pitch=-35, distance=2.5):
     # TODO: deprecate
-    set_camera(160, -35, 2.5, Point())
+    set_camera(yaw, pitch, distance, Point())
 
 #####################################
 
@@ -2116,31 +2116,18 @@ def get_adjacent_fixed_links(body):
                        get_adjacent_links(body)))
 
 def get_rigid_clusters(body):
-    edges = defaultdict(list)
-    for link, parent in get_adjacent_fixed_links(body):
-        edges[link].append(parent)
-        edges[parent].append(link)
-    visited = set()
-    clusters = []
-    for initial_link in get_all_links(body):
-        if initial_link in visited:
-            continue
-        cluster = [initial_link]
-        queue = deque([initial_link])
-        visited.add(initial_link)
-        while queue:
-            for next_link in edges[queue.popleft()]:
-                if next_link not in visited:
-                    cluster.append(next_link)
-                    queue.append(next_link)
-                    visited.add(next_link)
-        clusters.append(cluster)
-    return clusters
+    return get_connected_components(vertices=get_all_links(body),
+                                    edges=get_adjacent_fixed_links(body))
 
-def assign_link_colors(body, max_colors=INF, alpha=1., **kwargs):
-    components = sorted(get_rigid_clusters(body), key=min)
-    num_colors = len(components)
-    colors = spaced_colors(num_colors, **kwargs)
+def assign_link_colors(body, max_colors=3, alpha=1., s=0.5, **kwargs):
+    # TODO: graph coloring
+    components = sorted(map(list, get_rigid_clusters(body)),
+                        key=np.average,
+                        #key=min,
+                        ) # TODO: only if any have visual data
+    num_colors = min(len(components), max_colors)
+    colors = spaced_colors(num_colors, s=s, **kwargs)
+    colors = islice(cycle(colors), len(components))
     for component, color in zip(components, colors):
         for link in component:
             #print(get_color(body, link=link))
@@ -4460,6 +4447,9 @@ def draw_pose(pose, length=0.1, d=3, **kwargs):
         axis_world = tform_point(pose, length*axis)
         handles.append(add_line(origin_world, axis_world, color=axis, **kwargs))
     return handles
+
+def draw_global_system(**kwargs):
+    return draw_pose(Pose(), length=1., **kwargs)
 
 def draw_pose2d(pose2d, z=0., d=2, **kwargs):
     return draw_pose(pose_from_pose2d(pose2d, z), d=d, **kwargs)

@@ -16,7 +16,7 @@ from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, 
     joints_from_names, set_color, get_links, get_max_limits, get_min_limits, get_extend_fn, get_link_pose, \
     get_joint_names, draw_pose, remove_handles, draw_base_limits, \
     elapsed_time, create_box, RED, \
-    unit_pose, multiply, set_pose
+    unit_pose, multiply, set_pose, assign_link_colors, set_all_color
 
 
 def test_close_gripper(robot, arm):
@@ -59,8 +59,8 @@ def main(num_iterations=10):
         with HideOutput():
             # TODO: MOVO must be loaded last
             robot = load_model(MOVO_URDF, fixed_base=True)
-        for link in get_links(robot):
-            set_color(robot, color=MOVO_COLOR, link=link)
+        #set_all_color(robot, color=MOVO_COLOR)
+        assign_link_colors(robot)
         base_joints = joints_from_names(robot, BASE_JOINTS)
         draw_base_limits((get_min_limits(robot, base_joints),
                           get_max_limits(robot, base_joints)), z=1e-2)
