@@ -40,31 +40,14 @@ $ git pull --recurse-submodules
 ## IKFast Compilation
 
 We recommend using [IKFast](http://openrave.org/docs/0.8.2/openravepy/ikfast/), an analytical inverse kinematics solver, instead of PyBullet's damped least squares solver.
-IKFast bindings are included for the following robots.
+IKFast bindings are included for the following robots:
+* Franka Panda - `$ cd pybullet-pybullet/pybullet_tools/ikfast/franka_panda; python setup.py`
+* MOVO - `$ cd pybullet-pybullet/pybullet_tools/ikfast/movo; python setup.py`
+* PR2 - `$ cd pybullet-pybullet/pybullet_tools/ikfast/pr2; python setup.py`
+
 To create IKFast bindings for a new robot, following the instructions in [ikfast_pybind](https://github.com/yijiangh/ikfast_pybind). 
 
 <!-- https://pypi.org/project/ikfast-pybind/ -->
-
-### Franka Panda
-
-```
-$ cd pybullet-pybullet/pybullet_tools/ikfast/franka_panda
-pybullet-planning/pybullet_tools/ikfast/franka_panda$ python setup.py
-```
-
-### MOVO
-
-```
-$ cd pybullet-planning/pybullet_tools/ikfast/movo
-pybullet-planning/pybullet_tools/ikfast/movo$ python setup.py
-```
-
-### PR2
-
-```
-$ cd pybullet-planning/pybullet_tools/ikfast/pr2
-pybullet-planning/pybullet_tools/ikfast/pr2$ python setup.py
-```
 
 ## Tests
 
