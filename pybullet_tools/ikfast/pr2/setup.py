@@ -2,62 +2,29 @@
 
 from __future__ import print_function
 
-import os, shutil, sys
-#sys.args.append('build')
+import sys
+import os
+import argparse
+sys.path.append(os.path.join(os.pardir, os.pardir, os.pardir))
 
-from distutils.core import setup, Extension
+from pybullet_tools.ikfast.compile import compile_ikfast
 
-# pr2_without_sensor_ik_files
-# python setup.py build
+# Build C++ extension by running: 'python setup.py'
+# see: https://docs.python.org/3/extending/building.html
 
-LEFT_IK = 'ikLeft'
-RIGHT_IK = 'ikRight'
-LIBRARY_TEMPLATE = '{}.so'
+ARMS = ['left', 'right']
 
-leftModule = Extension(LEFT_IK, sources=['left_arm_ik.cpp'])
-rightModule = Extension(RIGHT_IK, sources=['right_arm_ik.cpp'])
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-a', '--arms', nargs='+', type=str,
+                        default=ARMS, choices=ARMS, #required=True,
+                        help='Which arms to compile')
+    args = parser.parse_args()
+    sys.argv[:] = sys.argv[:1] + ['build'] # Must come after argparse
 
-setup(name=LEFT_IK,
-	version='1.0',
-	description="IK for PR2's left arm",
-	ext_modules=[leftModule])
+    for arm in args.arms:
+        compile_ikfast(module_name='ik{}'.format(arm.capitalize()), # TODO: {}_arm_ik
+                       cpp_filename='{}_arm_ik.cpp'.format(arm)) # TODO: {}_arm.cpp
 
-setup(name=RIGHT_IK,
-	version='1.0',
-	description="IK for PR2's right arm",
-	ext_modules=[rightModule])
-
-LEFT_LIBRARY = LIBRARY_TEMPLATE.format(LEFT_IK)
-RIGHT_LIBRARY = LIBRARY_TEMPLATE.format(RIGHT_IK)
-ik_folder = os.getcwd()
-
-# TODO: refactor
-left_path = None
-right_path = None
-for dirpath, _, filenames in os.walk(os.getcwd()):
-	if LEFT_LIBRARY in filenames:
-		left_path = os.path.join(dirpath, LEFT_LIBRARY)
-	if RIGHT_LIBRARY in filenames:
-		right_path = os.path.join(dirpath, RIGHT_LIBRARY)
-
-left_target = os.path.join(ik_folder, LEFT_LIBRARY)
-right_target = os.path.join(ik_folder, RIGHT_LIBRARY)
-
-ik_files = os.listdir(ik_folder)
-if LEFT_LIBRARY in ik_files:
-	os.remove(left_target)
-if RIGHT_IK in ik_files:
-	os.remove(right_target)
-
-os.rename(left_path, left_target)
-os.rename(right_path, right_target)
-
-build_folder = os.path.join(os.getcwd(), 'build')
-shutil.rmtree(build_folder)
-
-try:
-	import ikLeft, ikRight
-	print('IK Successful')
-except ImportError as e:
-	print('IK Failed')
-	raise e
+if __name__ == '__main__':
+    main()
