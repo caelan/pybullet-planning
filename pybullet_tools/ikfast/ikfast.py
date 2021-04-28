@@ -9,10 +9,11 @@ import os
 PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 sys.path.append(PARENT_DIR)
 
-from itertools import islice
+from itertools import islice, chain
 
 from .utils import compute_inverse_kinematics, compute_forward_kinematics
-from ..utils import get_link_pose, link_from_name, multiply, invert, parent_joint_from_link, parent_link_from_joint, prune_fixed_joints, joints_from_names, INF, get_difference_fn, \
+from ..utils import get_link_pose, link_from_name, multiply, invert, parent_joint_from_link, parent_link_from_joint, \
+    prune_fixed_joints, joints_from_names, INF, get_difference_fn, \
     get_joint_positions, get_min_limits, get_max_limits, interval_generator, elapsed_time, randomize, violates_limits, \
     get_length, get_relative_pose, set_joint_positions, get_pose_distance, ConfSaver, \
     sub_inverse_kinematics, set_configuration, wait_for_user, multiple_sub_inverse_kinematics, get_ordered_ancestors
@@ -148,7 +149,8 @@ def ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
     free_deltas = np.array([0. if joint in fixed_joints else max_distance for joint in free_joints])
     lower_limits = np.maximum(get_min_limits(robot, free_joints), current_positions - free_deltas)
     upper_limits = np.minimum(get_max_limits(robot, free_joints), current_positions + free_deltas)
-    generator = interval_generator(lower_limits, upper_limits)
+    generator = chain([current_positions], # TODO: sample from a truncated Gaussian nearby
+                      interval_generator(lower_limits, upper_limits))
     if max_attempts < INF:
         generator = islice(generator, max_attempts)
     start_time = time.time()
@@ -174,7 +176,6 @@ def closest_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
     solutions = list(generator)
     # TODO: relative to joint limits
     difference_fn = get_difference_fn(robot, ik_joints) # get_distance_fn
-    #set_joint_positions(robot, ik_joints, closest_conf)
     solutions = sorted(solutions, key=lambda q: get_length(difference_fn(q, current_conf), norm=norm))
     if verbose:
         min_distance = min([INF] + [get_length(difference_fn(q, current_conf), norm=norm) for q in solutions])
@@ -183,18 +184,21 @@ def closest_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
     return iter(solutions)
 
 
-def closest_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
-                               max_candidates=INF, norm=INF, verbose=True,
-                               fixed_joints=[], max_attempts=INF, max_time=INF,
-                               max_distance=INF, **kwargs):
+def either_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target, fixed_joints=[], **kwargs):
+    if is_ik_compiled(ikfast_info):
+        for solution in closest_inverse_kinematics(
+                robot, ikfast_info, tool_link, world_from_target, fixed_joints=fixed_joints, **kwargs):
+            yield solution
+        return
     ik_joints = get_ik_joints(robot, ikfast_info, tool_link)
-    print(ikfast_info)
     free_joints = [joint for joint in ik_joints if joint not in fixed_joints]
     assert free_joints
     first_joint = free_joints[0]
-    conf = sub_inverse_kinematics(robot, first_joint, tool_link, world_from_target, **kwargs)
-    conf = multiple_sub_inverse_kinematics(robot, first_joint, tool_link, world_from_target, max_attempts=10)
-    if conf is None:
-        return
-    set_configuration(robot, conf)
-    yield get_joint_positions(robot, ik_joints)
+    # conf = sub_inverse_kinematics(robot, first_joint, tool_link, world_from_target, **kwargs)
+    # solutions = [] if conf is None else [conf]
+    # TODO: sample multiple solutions and return
+    solutions = multiple_sub_inverse_kinematics(robot, first_joint, tool_link, world_from_target,
+                                                max_attempts=1, first_close=True)
+    for solution in solutions: # TODO: sort by distance
+        set_configuration(robot, solution)
+        yield get_joint_positions(robot, ik_joints)

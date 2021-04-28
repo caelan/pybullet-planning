@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 from __future__ import print_function
 
@@ -16,14 +16,15 @@ ARMS = ['left', 'right']
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-a', '--arm', choices=ARMS, required=True,
-                        help='Which arm to compile')
+    parser.add_argument('-a', '--arms', nargs='+', type=str,
+                        default=ARMS, choices=ARMS, #required=True,
+                        help='Which arms to compile')
     args = parser.parse_args()
-    sys.argv[:] = sys.argv[:1] + ['build']
+    sys.argv[:] = sys.argv[:1] + ['build'] # Must come after argparse
 
-    arm = args.arm
-    compile_ikfast(module_name='movo_{}_arm_ik'.format(arm),
-                   cpp_filename='movo_{}_arm_ik.cpp'.format(arm))
+    for arm in args.arms:
+        compile_ikfast(module_name='movo_{}_arm_ik'.format(arm),
+                       cpp_filename='movo_{}_arm_ik.cpp'.format(arm))
 
 if __name__ == '__main__':
     main()

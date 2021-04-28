@@ -106,7 +106,7 @@ def main(num_iterations=10):
         #if conf is not None:
         #    set_joint_positions(robot, ik_joints, conf)
         #wait_if_gui()
-        test_retraction(robot, ik_info, tool_link, fixed_joints=fixed_joints, max_time=0.1)
+        test_retraction(robot, ik_info, tool_link, fixed_joints=fixed_joints, max_time=0.05, max_candidates=100)
     disconnect()
 
 if __name__ == '__main__':

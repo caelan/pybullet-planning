@@ -3209,6 +3209,19 @@ def uniform_generator(d):
     while True:
         yield np.random.uniform(size=d)
 
+def sample_norm(mu, sigma, lower=0., upper=INF):
+    # scipy.stats.truncnorm
+    assert lower <= upper
+    if lower == upper:
+        return lower
+    if sigma == 0.:
+        assert lower <= mu <= upper
+        return mu
+    while True:
+        x = random.gauss(mu=mu, sigma=sigma)
+        if lower <= x <= upper:
+            return x
+
 def halton_generator(d, seed=None):
     import ghalton
     if seed is None:
@@ -4256,7 +4269,7 @@ def create_sub_robot(robot, first_joint, target_link):
     return sub_robot, selected_joints, sub_target_link
 
 def multiple_sub_inverse_kinematics(robot, first_joint, target_link, target_pose, max_attempts=1, max_solutions=INF,
-                                    max_time=INF, custom_limits={}, **kwargs):
+                                    max_time=INF, custom_limits={}, first_close=True, **kwargs):
     # TODO: gradient descent using collision_info
     start_time = time.time()
     ancestor_joints = prune_fixed_joints(robot, get_ordered_ancestors(robot, target_link))
@@ -4275,13 +4288,13 @@ def multiple_sub_inverse_kinematics(robot, first_joint, target_link, target_pose
     for attempt in irange(max_attempts):
         if (len(solutions) >= max_solutions) or (elapsed_time(start_time) >= max_time):
             break
-        if attempt >= 1:
+        if not first_close or (attempt >= 1): # TODO: multiple seed confs
             sub_conf = sample_fn()
             set_joint_positions(sub_robot, sub_joints, sub_conf)
         sub_kinematic_conf = inverse_kinematics(sub_robot, sub_target_link, target_pose,
                                                 max_time=max_time-elapsed_time(start_time), **kwargs)
         if sub_kinematic_conf is not None:
-            set_configuration(sub_robot, sub_kinematic_conf)
+            #set_configuration(sub_robot, sub_kinematic_conf)
             sub_kinematic_conf = get_joint_positions(sub_robot, sub_joints)
             set_joint_positions(robot, selected_joints, sub_kinematic_conf)
             kinematic_conf = get_configuration(robot) # TODO: test on the resulting robot state (e.g. collisions)
@@ -4289,8 +4302,9 @@ def multiple_sub_inverse_kinematics(robot, first_joint, target_link, target_pose
             solutions.append(kinematic_conf) # kinematic_conf | sub_kinematic_conf
     if solutions:
         set_configuration(robot, solutions[-1])
+    # TODO: test for redundant configurations
     remove_body(sub_robot)
-    return get_configuration(robot)
+    return solutions
 
 def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
                           max_iterations=200, max_time=INF, custom_limits={}, **kwargs):

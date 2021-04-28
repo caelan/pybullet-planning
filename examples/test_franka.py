@@ -9,7 +9,7 @@ from pybullet_tools.utils import add_data_path, connect, dump_body, load_model, 
     multiply, Pose, Point, interpolate_poses, HideOutput
 
 from pybullet_tools.ikfast.franka_panda.ik import PANDA_INFO, FRANKA_URDF
-from pybullet_tools.ikfast.ikfast import get_ik_joints, closest_inverse_kinematics
+from pybullet_tools.ikfast.ikfast import get_ik_joints, either_inverse_kinematics, print_ik_warning
 
 
 def test_retraction(robot, info, tool_link, distance=0.1, **kwargs):
@@ -17,7 +17,7 @@ def test_retraction(robot, info, tool_link, distance=0.1, **kwargs):
     start_pose = get_link_pose(robot, tool_link)
     end_pose = multiply(start_pose, Pose(Point(z=-distance)))
     for pose in interpolate_poses(start_pose, end_pose, pos_step_size=0.01):
-        conf = next(closest_inverse_kinematics(robot, info, tool_link, pose, **kwargs), None)
+        conf = next(either_inverse_kinematics(robot, info, tool_link, pose, **kwargs), None)
         if conf is None:
             print('Failure!')
             wait_for_user()
@@ -42,16 +42,19 @@ def main():
     print('Start?')
     wait_for_user()
 
+    info = PANDA_INFO
     tool_link = link_from_name(robot, 'panda_hand')
     joints = get_movable_joints(robot)
     print('Joints', [get_joint_name(robot, joint) for joint in joints])
+    print_ik_warning(info)
+
     sample_fn = get_sample_fn(robot, joints)
     for i in range(10):
         print('Iteration:', i)
         conf = sample_fn()
         set_joint_positions(robot, joints, conf)
         wait_for_user()
-        test_retraction(robot, PANDA_INFO, tool_link, max_distance=0.01, max_time=0.05)
+        test_retraction(robot, info, tool_link, max_distance=0.01, max_time=0.05, max_candidates=100)
     disconnect()
 
 if __name__ == '__main__':

@@ -19,7 +19,7 @@ from distutils.extension import Extension
 # https://github.com/yijiangh/conrob_pybullet/tree/master/utils/ikfast
 # https://github.com/yijiangh/choreo/blob/bc777069b8eb7283c74af26e5461532aec3d9e8a/framefab_robot/abb/framefab_irb6600/framefab_irb6600_support/doc/ikfast_tutorial.rst
 
-def compile_ikfast(module_name, cpp_filename, remove_build=True):
+def compile_ikfast(module_name, cpp_filename, remove_build=False):
     ikfast_module = Extension(module_name, sources=[cpp_filename])
     setup(name=module_name,
           version='1.0',
@@ -35,6 +35,8 @@ def compile_ikfast(module_name, cpp_filename, remove_build=True):
 
     copy_tree(build_lib_path, os.getcwd())
     if remove_build:
+        # TODO: error when compiling multiple arms for python2
+        # error: unable to open output file 'build/temp.macosx-10.15-x86_64-2.7/movo_right_arm_ik.o': 'No such file or directory'
         shutil.rmtree(os.path.join(os.getcwd(), 'build'))
 
     try:
