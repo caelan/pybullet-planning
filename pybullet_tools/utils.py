@@ -42,9 +42,13 @@ except NameError:
 
 INF = np.inf
 PI = np.pi
-CIRCULAR_LIMITS = -PI, PI
-UNBOUNDED_LIMITS = -INF, INF
+EPSILON = 1e-6
 DEFAULT_TIME_STEP = 1./240. # seconds
+
+Interval = namedtuple('Interval', ['lower', 'upper']) # AABB
+UNIT_LIMITS = Interval(0., 1.)
+CIRCULAR_LIMITS = Interval(-PI, PI)
+UNBOUNDED_LIMITS = Interval(-INF, INF)
 
 # Resources
 # https://docs.google.com/document/d/10sXEhzFRSnvFcl3XxNGhnD4N2SedqwdAvK3dsihxVUA/edit
@@ -1517,12 +1521,21 @@ def tform_from_pose(pose):
 def pose_from_tform(tform):
     return point_from_tform(tform), quat_from_matrix(matrix_from_tform(tform))
 
-def wrap_interval(value, interval=(0., 1.)):
+def normalize_interval(value, interval=UNIT_LIMITS):
+    lower, upper = interval
+    assert lower <= upper
+    return (value - lower) / (upper - lower)
+
+def rescale_interval(value, old_interval=UNIT_LIMITS, new_interval=UNIT_LIMITS):
+    lower, upper = new_interval
+    return convex_combination(lower, upper, w=normalize_interval(value, old_interval))
+
+def wrap_interval(value, interval=UNIT_LIMITS):
     lower, upper = interval
     assert lower <= upper
     return (value - lower) % (upper - lower) + lower
 
-def interval_distance(value1, value2, interval=(0., 1.)):
+def interval_distance(value1, value2, interval=UNIT_LIMITS):
     value1 = wrap_interval(value1, interval)
     value2 = wrap_interval(value2, interval)
     if value1 > value2:
@@ -1530,14 +1543,14 @@ def interval_distance(value1, value2, interval=(0., 1.)):
     lower, upper = interval
     return min(value2 - value1, (value1 - lower) + (upper - value2))
 
-def circular_interval(lower=-np.pi): # [-np.pi, np.pi)
-    return (lower, lower + 2*PI)
+def circular_interval(lower=-PI): # [-np.pi, np.pi)
+    return Interval(lower, lower + 2*PI)
 
 def wrap_angle(theta, **kwargs):
     return wrap_interval(theta, interval=circular_interval(**kwargs))
 
-def circular_difference(theta2, theta1):
-    return wrap_angle(theta2 - theta1)
+def circular_difference(theta2, theta1, **kwargs):
+    return wrap_angle(theta2 - theta1, **kwargs)
 
 def base_values_from_pose(pose, tolerance=1e-3):
     (point, quat) = pose
@@ -3430,6 +3443,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         set_joint_positions(body, joints, q)
         for attachment in attachments:
             attachment.assign()
+        #wait_for_duration(1e-2)
         get_moving_aabb = cached_fn(get_buffered_aabb, cache=True, max_distance=max_distance/2., **kwargs)
 
         for link1, link2 in check_link_pairs:
@@ -3604,12 +3618,15 @@ def get_nonholonomic_extend_fn(body, joints, resolutions=None, angular_tol=0., *
 def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[],
                              self_collisions=True, disabled_collisions=set(),
                              weights=None, resolutions=None, reversible=True,
+                             linear_tol=EPSILON, angular_tol=0.,
                              max_distance=MAX_DISTANCE, use_aabb=True, cache=True, custom_limits={}, **kwargs):
 
     assert len(joints) == len(end_conf)
     sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
-    distance_fn = get_nonholonomic_distance_fn(body, joints, weights=weights, reversible=reversible)
-    extend_fn = get_nonholonomic_extend_fn(body, joints, resolutions=resolutions, reversible=reversible)
+    distance_fn = get_nonholonomic_distance_fn(body, joints, weights=weights, reversible=reversible,
+                                               linear_tol=linear_tol) #, angular_tol=angular_tol)
+    extend_fn = get_nonholonomic_extend_fn(body, joints, resolutions=resolutions, reversible=reversible,
+                                           linear_tol=linear_tol, angular_tol=angular_tol)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments,
                                     self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, max_distance=max_distance,

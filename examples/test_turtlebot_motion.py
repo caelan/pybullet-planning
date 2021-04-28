@@ -15,7 +15,8 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     joint_from_name, safe_zip, draw_base_limits, BodySaver, WorldSaver, LockRenderer, elapsed_time, disconnect, flatten, \
     INF, wait_for_duration, get_unbuffered_aabb, draw_aabb, DEFAULT_AABB_BUFFER, get_link_pose, get_joint_positions, \
     get_subtree_aabb, get_pairs, get_distance_fn, get_aabb, set_all_static, step_simulation, get_bodies_in_region, \
-    AABB, update_scene, Profiler, pairwise_link_collision, BASE_LINK, get_collision_data
+    AABB, update_scene, Profiler, pairwise_link_collision, BASE_LINK, get_collision_data, draw_pose2d, \
+    normalize_interval, wrap_angle, CIRCULAR_LIMITS, wrap_interval, Euler, rescale_interval, adjust_path
 
 BASE_LINK_NAME = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
@@ -59,10 +60,23 @@ def sample_placements(body_surfaces, obstacles=None, savers=[], min_distances={}
         saver.restore()
     return True
 
-def draw_path(path, z=DRAW_Z, **kwargs):
-    if path is None:
+def draw_path(path2d, z=DRAW_Z, **kwargs):
+    if path2d is None:
         return []
-    return list(flatten(draw_pose(pose_from_pose2d(pose2d, z=z), **kwargs) for pose2d in path))
+    #return list(flatten(draw_pose(pose_from_pose2d(pose2d, z=z), **kwargs) for pose2d in path2d))
+    #return list(flatten(draw_pose2d(pose2d, z=z, **kwargs) for pose2d in path2d))
+    base_z = 1.
+    start = path2d[0]
+    mid_yaw = start[2]
+    #mid_yaw = wrap_interval(mid_yaw)
+    interval = (mid_yaw - PI, mid_yaw + PI)
+    #interval = CIRCULAR_LIMITS
+    draw_pose(pose_from_pose2d(start, z=base_z), length=1, **kwargs)
+    # TODO: draw the current pose
+    # TODO: line between orientations when there is a jump
+    return list(flatten(draw_pose2d(pose2d, z=base_z+rescale_interval(
+        wrap_interval(pose2d[2], interval=interval), old_interval=interval, new_interval=(-0.5, 0.5)), **kwargs)
+                        for pose2d in path2d))
 
 
 def plan_motion(robot, joints, goal_positions, attachments=[], obstacles=None, holonomic=False, reversible=False, **kwargs):
@@ -75,9 +89,9 @@ def plan_motion(robot, joints, goal_positions, attachments=[], obstacles=None, h
         return plan_joint_motion(robot, joints, goal_positions,
                                  attachments=attachments, obstacles=obstacles, **kwargs)
     # TODO: just sample the x, y waypoint and use the resulting orientation
-    # TODO: the turtlebot still seems to turn the wrong direction sometimes
-    # TODO: shortcut changes in orientation
+    # TODO: remove overlapping configurations/intervals due to circular joints
     return plan_nonholonomic_motion(robot, joints, goal_positions, reversible=reversible,
+                                    linear_tol=1e-6, angular_tol=0.,
                                     attachments=attachments, obstacles=obstacles, **kwargs)
 
 ##################################################
@@ -132,6 +146,7 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
 def iterate_path(robot, joints, path, step_size=None): # 1e-2 | None
     if path is None:
         return
+    path = adjust_path(robot, joints, path)
     with LockRenderer():
         handles = draw_path(path)
     wait_if_gui(message='Begin?')
@@ -214,7 +229,7 @@ def main():
         path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic, obstacles=obstacles,
                            custom_limits=custom_limits, resolutions=resolutions,
                            use_aabb=True, cache=True, max_distance=0.,
-                           restarts=2, iterations=20, smooth=20)
+                           restarts=2, iterations=20, smooth=20) # 20 | None
         saver.restore()
     #wait_for_duration(duration=1e-3)
     profiler.restore()
