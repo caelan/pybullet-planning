@@ -53,7 +53,7 @@ def print_ik_warning(ikfast_info):
         build_path = os.path.join(ik_path, SETUP_FILENAME)
         print('Could not import IKFast module {}, please compile {} to use IKFast.'.format(
             module_name, build_path))
-        #print('$ cd {}; python {} build'.format(ik_path, SETUP_FILENAME))
+        print('$ cd {}; ./{}'.format(ik_path, SETUP_FILENAME))
         wait_for_user()
         return True
     else:
