@@ -25,8 +25,6 @@ pybullet-planning$ git pull --init --recurse-submodules
 pybullet-planning$ pip install -r requirements.txt
 ```
 
-**pybullet-planning** is intended to have ongoing support for both python2.7 and python3.*
-
 <!--
 Install PyBullet on OS X or Linux using: 
 ```
@@ -36,6 +34,13 @@ $ cd ss-pybullet
 $ git pull --recurse-submodules
 ```
 -->
+
+**pybullet-planning** is intended to have ongoing support for both python2.7 and python3.*
+
+Make sure to recursively update **pybullet-planning**'s submodules when pulling new commits.
+```
+pybullet-planning$ git pull --recurse-submodules
+```
 
 ## IKFast Compilation
 
