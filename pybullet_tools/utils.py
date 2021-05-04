@@ -3488,13 +3488,13 @@ def interpolate_joint_waypoints(body, joints, waypoints, resolutions=None,
 def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstacles=[], attachments=[],
                                 self_collisions=True, disabled_collisions=set(),
                                 resolutions=None, custom_limits={}, max_distance=MAX_DISTANCE,
-                                use_aabb=True, cache=True):
+                                use_aabb=False, cache=True):
     if start_conf is None:
         start_conf = get_joint_positions(body, joints)
     assert len(start_conf) == len(joints)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, max_distance=max_distance,
-                                    use_aabb=True, cache=True)
+                                    use_aabb=use_aabb, cache=cache)
     waypoints = [start_conf] + list(waypoints)
     for i, waypoint in enumerate(waypoints):
         if collision_fn(waypoint):
@@ -3518,7 +3518,7 @@ def check_initial_end(start_conf, end_conf, collision_fn, verbose=True):
 def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
                       self_collisions=True, disabled_collisions=set(),
                       weights=None, resolutions=None, max_distance=MAX_DISTANCE,
-                      use_aabb=True, cache=True, custom_limits={}, **kwargs):
+                      use_aabb=False, cache=True, custom_limits={}, **kwargs):
 
     assert len(joints) == len(end_conf)
     if (weights is None) and (resolutions is not None):
@@ -3622,7 +3622,7 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
                              self_collisions=True, disabled_collisions=set(),
                              weights=None, resolutions=None, reversible=True,
                              linear_tol=EPSILON, angular_tol=0.,
-                             max_distance=MAX_DISTANCE, use_aabb=True, cache=True, custom_limits={}, **kwargs):
+                             max_distance=MAX_DISTANCE, use_aabb=False, cache=True, custom_limits={}, **kwargs):
 
     assert len(joints) == len(end_conf)
     sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
