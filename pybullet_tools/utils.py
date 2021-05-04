@@ -72,12 +72,12 @@ PANDA_ARM_URDF = "models/franka_description/robots/panda_arm_hand.urdf"
 
 # PyBullet Robots
 #PYBULLET_DIRECTORY = add_data_path()
-KUKA_IIWA_URDF = "kuka_iiwa/model.urdf"
-KUKA_IIWA_GRIPPER_SDF = "kuka_iiwa/kuka_with_gripper.sdf"
-R2D2_URDF = "r2d2.urdf"
-MINITAUR_URDF = "quadruped/minitaur.urdf"
-HUMANOID_MJCF = "mjcf/humanoid.xml"
-HUSKY_URDF = "husky/husky.urdf"
+KUKA_IIWA_URDF = 'kuka_iiwa/model.urdf'
+KUKA_IIWA_GRIPPER_SDF = 'kuka_iiwa/kuka_with_gripper.sdf'
+R2D2_URDF = 'r2d2.urdf'
+MINITAUR_URDF = 'quadruped/minitaur.urdf'
+HUMANOID_MJCF = 'mjcf/humanoid.xml'
+HUSKY_URDF = 'husky/husky.urdf'
 RACECAR_URDF = 'racecar/racecar.urdf' # racecar_differential.urdf
 PR2_GRIPPER = 'pr2_gripper.urdf'
 PANDA_URDF = 'franka_panda/panda.urdf'
@@ -93,13 +93,13 @@ PANDA_URDF = 'franka_panda/panda.urdf'
 WSG_GRIPPER = 'gripper/wsg50_one_motor_gripper_new.sdf'
 
 # PyBullet Objects
-KIVA_SHELF_SDF = "kiva_shelf/model.sdf"
+KIVA_SHELF_SDF = 'kiva_shelf/model.sdf'
 FLOOR_URDF = 'plane.urdf'
 TABLE_URDF = 'table/table.urdf'
 
 # Objects
-SMALL_BLOCK_URDF = "models/drake/objects/block_for_pick_and_place.urdf"
-BLOCK_URDF = "models/drake/objects/block_for_pick_and_place_mid_size.urdf"
+SMALL_BLOCK_URDF = 'models/drake/objects/block_for_pick_and_place.urdf'
+BLOCK_URDF = 'models/drake/objects/block_for_pick_and_place_mid_size.urdf'
 SINK_URDF = 'models/sink.urdf'
 STOVE_URDF = 'models/stove.urdf'
 
@@ -160,9 +160,11 @@ def write(filename, string):
 
 def read_pickle(filename):
     # Can sometimes read pickle3 from python2 by calling twice
-    # Can possibly read pickle2 from python3 by using encoding='latin1'
     with open(filename, 'rb') as f:
-        return pickle.load(f)
+        try:
+            return pickle.load(f)
+        except UnicodeDecodeError as e:
+            return pickle.load(f, encoding='latin1')
 
 def write_pickle(filename, data):  # NOTE - cannot pickle lambda or nested functions
     with open(filename, 'wb') as f:
@@ -323,7 +325,7 @@ class OrderedSet(collections.OrderedDict, collections.MutableSet):
         self.update(seq)
     def update(self, *args, **kwargs):
         if kwargs:
-            raise TypeError("update() takes no keyword arguments")
+            raise TypeError('update() takes no keyword arguments')
         for s in args:
             for e in s:
                 self.add(e)
@@ -628,7 +630,7 @@ class VideoSaver(Saver):
             name, ext = os.path.splitext(path)
             assert ext == '.mp4'
             # STATE_LOGGING_PROFILE_TIMINGS, STATE_LOGGING_ALL_COMMANDS
-            # p.submitProfileTiming("pythontest")
+            # p.submitProfileTiming('pythontest")
             self.log_id = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, fileName=path, physicsClientId=CLIENT)
 
     def restore(self):
@@ -997,7 +999,7 @@ def connect(use_gui=True, shadows=True, color=None, width=None, height=None):
     method = p.GUI if use_gui else p.DIRECT
     with HideOutput():
         #  --window_backend=2 --render_device=0'
-        # options="--mp4=\"test.mp4\" --mp4fps=240"
+        # options="--mp4=\"test.mp4\' --mp4fps=240"
         options = ''
         if color is not None:
             options += '--background_color_red={} --background_color_green={} --background_color_blue={}'.format(*color)
@@ -1006,7 +1008,7 @@ def connect(use_gui=True, shadows=True, color=None, width=None, height=None):
         if height is not None:
             options += '--height={}'.format(height)
         sim_id = p.connect(method, options=options) # key=None,
-        #sim_id = p.connect(p.GUI, options="--opengl2") if use_gui else p.connect(p.DIRECT)
+        #sim_id = p.connect(p.GUI, options='--opengl2') if use_gui else p.connect(p.DIRECT)
 
     assert 0 <= sim_id
     #sim_id2 = p.connect(p.SHARED_MEMORY)
@@ -3093,7 +3095,7 @@ def expand_links(body, **kwargs):
     return CollisionPair(body, links)
 
 CollisionInfo = namedtuple('CollisionInfo',
-                           """
+                           '''
                            contactFlag
                            bodyUniqueIdA
                            bodyUniqueIdB
@@ -3108,7 +3110,7 @@ CollisionInfo = namedtuple('CollisionInfo',
                            lateralFrictionDir1
                            lateralFriction2
                            lateralFrictionDir2
-                           """.split())
+                           '''.split())
 
 def draw_collision_info(collision_info, **kwargs):
     point1 = collision_info.positionOnA
@@ -3496,19 +3498,20 @@ def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstac
     waypoints = [start_conf] + list(waypoints)
     for i, waypoint in enumerate(waypoints):
         if collision_fn(waypoint):
-            #print("Warning: waypoint configuration {}/{} is in collision".format(i, len(waypoints)))
+            #print('Warning: waypoint configuration {}/{} is in collision'.format(i, len(waypoints)))
             return None
     return interpolate_joint_waypoints(body, joints, waypoints, resolutions=resolutions, collision_fn=collision_fn)
 
 def plan_direct_joint_motion(body, joints, end_conf, **kwargs):
     return plan_waypoints_joint_motion(body, joints, [end_conf], **kwargs)
 
-def check_initial_end(start_conf, end_conf, collision_fn):
-    if collision_fn(start_conf, verbose=True):
-        print("Warning: initial configuration is in collision")
+def check_initial_end(start_conf, end_conf, collision_fn, verbose=True):
+    # TODO: collision_fn might not accept kwargs
+    if collision_fn(start_conf, verbose=verbose):
+        print('Warning: initial configuration is in collision')
         return False
-    if collision_fn(end_conf, verbose=True):
-        print("Warning: end configuration is in collision")
+    if collision_fn(end_conf, verbose=verbose):
+        print('Warning: end configuration is in collision')
         return False
     return True
 
@@ -3684,11 +3687,7 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
         return any(pairwise_collision(body, obs, max_distance=max_distance) for obs in obstacles)
 
     start_conf = get_base_values(body)
-    if collision_fn(start_conf):
-        print("Warning: initial configuration is in collision")
-        return None
-    if collision_fn(end_conf):
-        print("Warning: end configuration is in collision")
+    if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
     if direct:
         return direct_path(start_conf, end_conf, extend_fn, collision_fn)
