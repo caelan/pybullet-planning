@@ -1,5 +1,7 @@
 import time
 
+from itertools import count
+
 from .pr2_utils import get_top_grasps
 from .utils import get_pose, set_pose, get_movable_joints, \
     set_joint_positions, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
@@ -16,7 +18,7 @@ GRASP_INFO = {
 }
 
 TOOL_FRAMES = {
-    'iiwa14': 'iiwa_link_ee_kuka', # iiwa_link_ee
+    'iiwa14': 'iiwa_link_ee_kuka', # iiwa_link_ee | iiwa_link_ee_kuka
 }
 
 DEBUG_FAILURE = False
@@ -24,11 +26,13 @@ DEBUG_FAILURE = False
 ##################################################
 
 class BodyPose(object):
+    num = count()
     def __init__(self, body, pose=None):
         if pose is None:
             pose = get_pose(body)
         self.body = body
         self.pose = pose
+        self.index = next(self.num)
     @property
     def value(self):
         return self.pose
@@ -36,16 +40,20 @@ class BodyPose(object):
         set_pose(self.body, self.pose)
         return self.pose
     def __repr__(self):
-        return 'p{}'.format(id(self) % 1000)
+        index = self.index
+        #index = id(self) % 1000
+        return 'p{}'.format(index)
 
 
 class BodyGrasp(object):
+    num = count()
     def __init__(self, body, grasp_pose, approach_pose, robot, link):
         self.body = body
         self.grasp_pose = grasp_pose
         self.approach_pose = approach_pose
         self.robot = robot
         self.link = link
+        self.index = next(self.num)
     @property
     def value(self):
         return self.grasp_pose
@@ -59,10 +67,12 @@ class BodyGrasp(object):
     def assign(self):
         return self.attachment().assign()
     def __repr__(self):
-        return 'g{}'.format(id(self) % 1000)
-
+        index = self.index
+        #index = id(self) % 1000
+        return 'g{}'.format(index)
 
 class BodyConf(object):
+    num = count()
     def __init__(self, body, configuration=None, joints=None):
         if joints is None:
             joints = get_movable_joints(body)
@@ -71,6 +81,7 @@ class BodyConf(object):
         self.body = body
         self.joints = joints
         self.configuration = configuration
+        self.index = next(self.num)
     @property
     def values(self):
         return self.configuration
@@ -78,8 +89,9 @@ class BodyConf(object):
         set_joint_positions(self.body, self.joints, self.configuration)
         return self.configuration
     def __repr__(self):
-        return 'q{}'.format(id(self) % 1000)
-
+        index = self.index
+        #index = id(self) % 1000
+        return 'q{}'.format(index)
 
 class BodyPath(object):
     def __init__(self, body, path, joints=None, attachments=[]):
@@ -150,8 +162,10 @@ class Detach(ApplyForce):
         return Attach(self.body, self.robot, self.link)
 
 class Command(object):
+    num = count()
     def __init__(self, body_paths):
         self.body_paths = body_paths
+        self.index = next(self.num)
     def bodies(self):
         return set(flatten(path.bodies() for path in self.body_paths))
     # def full_path(self, q0=None):
@@ -180,23 +194,29 @@ class Command(object):
     def reverse(self):
         return self.__class__([body_path.reverse() for body_path in reversed(self.body_paths)])
     def __repr__(self):
-        return 'c{}'.format(id(self) % 1000)
+        index = self.index
+        #index = id(self) % 1000
+        return 'c{}'.format(index)
 
 #######################################################
 
-def get_grasp_gen(robot, grasp_name):
+def get_tool_link(robot):
+    return link_from_name(robot, TOOL_FRAMES[get_body_name(robot)])
+
+
+def get_grasp_gen(robot, grasp_name='top'):
     grasp_info = GRASP_INFO[grasp_name]
-    end_effector_link = link_from_name(robot, TOOL_FRAMES[get_body_name(robot)])
+    tool_link = get_tool_link(robot)
     def gen(body):
         grasp_poses = grasp_info.get_grasps(body)
+        # TODO: continuous set of grasps
         for grasp_pose in grasp_poses:
-            body_grasp = BodyGrasp(body, grasp_pose, grasp_info.approach_pose,
-                                   robot, end_effector_link)
+            body_grasp = BodyGrasp(body, grasp_pose, grasp_info.approach_pose, robot, tool_link)
             yield (body_grasp,)
     return gen
 
 
-def get_stable_gen(fixed=[]): # TODO: continuous set of grasps
+def get_stable_gen(fixed=[]):
     def gen(body, surface):
         while True:
             pose = sample_placement(body, surface)
@@ -204,7 +224,6 @@ def get_stable_gen(fixed=[]): # TODO: continuous set of grasps
                 continue
             body_pose = BodyPose(body, pose)
             yield (body_pose,)
-            # TODO: check collisions
     return gen
 
 

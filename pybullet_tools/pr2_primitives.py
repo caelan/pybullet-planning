@@ -4,7 +4,7 @@ import copy
 import pybullet as p
 import random
 import time
-from itertools import islice
+from itertools import islice, count
 
 import numpy as np
 
@@ -45,6 +45,7 @@ def get_base_limits(robot):
 ##################################################
 
 class Pose(object):
+    num = count()
     #def __init__(self, position, orientation):
     #    self.position = position
     #    self.orientation = orientation
@@ -55,6 +56,7 @@ class Pose(object):
         self.value = tuple(value)
         self.support = support
         self.init = init
+        self.index = next(self.num)
     @property
     def bodies(self):
         return flatten_links(self.body)
@@ -66,7 +68,9 @@ class Pose(object):
         values = base_values_from_pose(self.value)
         return Conf(self.body, range(len(values)), values)
     def __repr__(self):
-        return 'p{}'.format(id(self) % 1000)
+        index = self.index
+        #index = id(self) % 1000
+        return 'p{}'.format(index)
 
 class Grasp(object):
     def __init__(self, grasp_type, body, value, approach, carry):
