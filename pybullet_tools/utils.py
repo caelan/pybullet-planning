@@ -449,7 +449,7 @@ def cached_fn(fn, cache=True, **global_kargs):
         return normal
 
     #from functools import cache # # New in version 3.9
-    from functools import lru_cache as cache
+    #from functools import lru_cache as cache
     #@cache(maxsize=None, typed=False)
     @cache_decorator
     def wrapped(*args, **local_kwargs):
