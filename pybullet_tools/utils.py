@@ -448,8 +448,10 @@ def cached_fn(fn, cache=True, **global_kargs):
     if not cache:
         return normal
 
+    #from functools import cache # # New in version 3.9
     from functools import lru_cache as cache
-    @cache
+    #@cache(maxsize=None, typed=False)
+    @cache_decorator
     def wrapped(*args, **local_kwargs):
         return normal(*args, **local_kwargs)
     return wrapped
@@ -471,6 +473,7 @@ def cache_decorator(function):
     """
     # https://github.com/mikedh/trimesh/blob/60dae2352875f48c4476e01052829e8b9166d9e5/trimesh/caching.py#L64
     from functools import wraps
+    #from functools import cached_property # TODO: New in version 3.8
 
     # use wraps to preserve docstring
     @wraps(function)
@@ -508,12 +511,10 @@ def cache_decorator(function):
 
 #####################################
 
-# https://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python/14797594#14797594
-# https://stackoverflow.com/questions/4178614/suppressing-output-of-module-calling-outside-library
-# https://stackoverflow.com/questions/4675728/redirect-stdout-to-a-file-in-python/22434262#22434262
-
-
 class HideOutput(object):
+    # https://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python/14797594#14797594
+    # https://stackoverflow.com/questions/4178614/suppressing-output-of-module-calling-outside-library
+    # https://stackoverflow.com/questions/4675728/redirect-stdout-to-a-file-in-python/22434262#22434262
     '''
     A context manager that block stdout for its scope, usage:
 
