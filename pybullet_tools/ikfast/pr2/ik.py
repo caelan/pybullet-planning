@@ -2,11 +2,12 @@ import random
 
 from ..utils import get_ik_limits, compute_forward_kinematics, compute_inverse_kinematics, select_solution, \
     USE_ALL, USE_CURRENT
-from ...pr2_utils import PR2_TOOL_FRAMES, get_torso_arm_joints, get_gripper_link, get_arm_joints
+from ...pr2_utils import PR2_TOOL_FRAMES, get_torso_arm_joints, get_gripper_link, get_arm_joints, side_from_arm
 from ...utils import multiply, get_link_pose, link_from_name, get_joint_positions, \
     joint_from_name, invert, get_custom_limits, all_between, sub_inverse_kinematics, set_joint_positions, \
     get_joint_positions, pairwise_collision
 from ...ikfast.utils import IKFastInfo
+#from ...ikfast.ikfast import closest_inverse_kinematics # TODO: use these functions instead
 
 # TODO: deprecate
 
@@ -21,6 +22,22 @@ UPPER_JOINT = {
     'left': 'l_upper_arm_roll_joint', # Third arm joint
     'right': 'r_upper_arm_roll_joint',
 }
+
+#####################################
+
+PR2_URDF = "models/pr2_description/pr2.urdf" # 87 joints
+#PR2_URDF = "models/pr2_description/pr2_hpn.urdf"
+#PR2_URDF = "models/pr2_description/pr2_kinect.urdf"
+DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
+
+
+PR2_INFOS = {arm: IKFastInfo(module_name='pr2.ik{}'.format(arm.capitalize()), base_link=BASE_FRAME,
+                             ee_link=IK_FRAME[arm], free_joints=[TORSO_JOINT, UPPER_JOINT[arm]]) for arm in IK_FRAME}
+
+
+def get_if_info(arm):
+    side = side_from_arm(arm)
+    return PR2_INFOS[side]
 
 #####################################
 
@@ -105,14 +122,3 @@ def pr2_inverse_kinematics(robot, arm, gripper_pose, obstacles=[], custom_limits
     if any(pairwise_collision(robot, b) for b in obstacles):
         return None
     return get_joint_positions(robot, arm_joints)
-
-#####################################
-
-PR2_URDF = "models/pr2_description/pr2.urdf" # 87 joints
-#PR2_URDF = "models/pr2_description/pr2_hpn.urdf"
-#PR2_URDF = "models/pr2_description/pr2_kinect.urdf"
-DRAKE_PR2_URDF = "models/drake/pr2_description/urdf/pr2_simplified.urdf"
-
-
-PR2_INFOS = {arm: IKFastInfo(module_name='pr2.ik{}'.format(arm.capitalize()), base_link=BASE_FRAME,
-                             ee_link=IK_FRAME[arm], free_joints=[TORSO_JOINT, UPPER_JOINT[arm]]) for arm in IK_FRAME}
