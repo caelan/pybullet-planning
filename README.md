@@ -18,10 +18,11 @@ Caelan Reed Garrett. PyBullet Planning. https://pypi.org/project/pybullet-planni
 ## Installation
 
 Install for macOS or Linux using: 
+
+<!-- `pybullet-planning$ git clone --recursive git@github.com:caelan/pybullet-planning.git` -->
 ```
 $ git clone --recurse-submodules https://github.com/caelan/pybullet-planning.git
-pybullet-planning$ cd pybullet-planning
-pybullet-planning$ git pull --init --recurse-submodules
+$ cd pybullet-planning
 pybullet-planning$ pip install -r requirements.txt
 ```
 
@@ -41,14 +42,17 @@ Make sure to recursively update **pybullet-planning**'s submodules when pulling 
 ```
 pybullet-planning$ git pull --recurse-submodules
 ```
+<!-- `pybullet-planning$ git submodule update --init --recursive` -->
 
 ## IKFast Compilation
 
 We recommend using [IKFast](http://openrave.org/docs/0.8.2/openravepy/ikfast/), an analytical inverse kinematics solver, instead of PyBullet's damped least squares solver.
 IKFast bindings are included for the following robots:
-* Franka Panda - `pybullet-planning $ cd pybullet_tools/ikfast/franka_panda; python setup.py`
-* MOVO - `pybullet-planning $ cd pybullet_tools/ikfast/movo; python setup.py`
-* PR2 - `pybullet-planning $ cd pybullet_tools/ikfast/pr2; python setup.py`
+* Franka Panda - `pybullet-planning$ (cd pybullet_tools/ikfast/franka_panda; python setup.py)`
+* MOVO - `pybullet-planning$ (cd pybullet_tools/ikfast/movo; python setup.py)`
+* PR2 - `pybullet-planning$ (cd pybullet_tools/ikfast/pr2; python setup.py)`
+
+<!-- https://stackoverflow.com/questions/10382141/temporarily-change-current-working-directory-in-bash-to-run-a-command -->
 
 To create IKFast bindings for a new robot, following the instructions in [ikfast_pybind](https://github.com/yijiangh/ikfast_pybind). 
 
@@ -56,7 +60,7 @@ To create IKFast bindings for a new robot, following the instructions in [ikfast
 
 ## Tests
 
-1) Test pybullet - ```python -c 'import pybullet'```
+1) Test PyBullet - ```pybullet-planning$ python -c 'import pybullet'```
 
 ## Tutorial
 
@@ -80,13 +84,13 @@ Heavily annotated simple example that demonstrates:
 
 ## Planning Examples
 
-* [Kuka IIWA pick motion planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_kuka_pick.py) - `$ python -m examples.test_kuka_pick`
-* [TutleBot base motion planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_turtlebot_motion.py) - ```$ python -m examples.test_turtlebot_motion```
-* [PR2 base & arm motion planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_pr2_motion.py) - ```$ python -m examples.test_pr2_motion```
-* [Franka Panda workspace planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_franka.py) - ```$ python -m examples.test_franka```
-* [Kinova MOVO workspace planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_movo.py) - ```$ python -m examples.test_movo```
-* [Cylinder SE(3) motion planning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_se3.py) - ```$ python -m examples.test_se3```
-* [PR2 teleoperation](https://github.com/caelan/pybullet-planning/blob/master/examples/teleop_pr2.py) - ```$ python -m examples.teleop_pr2```
+* [Kuka IIWA pick motion planning](examples/test_kuka_pick.py) - `pybullet-planning$ python -m examples.test_kuka_pick`
+* [TutleBot base motion planning](examples/test_turtlebot_motion.py) - ```pybullet-planning$ python -m examples.test_turtlebot_motion```
+* [PR2 base & arm motion planning](examples/test_pr2_motion.py) - ```pybullet-planning$ python -m examples.test_pr2_motion```
+* [Franka Panda workspace planning](examples/test_franka.py) - ```pybullet-planning$ python -m examples.test_franka```
+* [Kinova MOVO workspace planning](examples/test_movo.py) - ```pybullet-planning$ python -m examples.test_movo```
+* [Cylinder SE(3) motion planning](examples/test_se3.py) - ```pybullet-planning$ python -m examples.test_se3```
+* [PR2 teleoperation](examples/teleop_pr2.py) - ```pybullet-planning$ python -m examples.teleop_pr2```
 
 <!--img src="images/movo.png" height="150"-->
 <img src="images/kuka_pick.png" height="150">&emsp;<img src="images/turtlebot_motion.png" height="150">
@@ -97,12 +101,12 @@ Heavily annotated simple example that demonstrates:
 
 ## Debug Examples
 
-* [TAMP environments](https://github.com/caelan/pybullet-planning/blob/master/examples/test_json.py) - ```$ python -m examples.test_json```
-* [TAMP benchmarks](https://github.com/caelan/pybullet-planning/blob/master/examples/test_tamp_xml.py) - ```$ python -m examples.test_tamp_xml```
-* [Gripper side grasps](https://github.com/caelan/pybullet-planning/blob/master/examples/gripper/test_side.py) - ```$ python -m examples.gripper.test_side```
-* [Gripper top grasps](https://github.com/caelan/pybullet-planning/blob/master/examples/gripper/test_top.py) - ```$ python -m examples.gripper.test_top```
-* [Dropping particles](https://github.com/caelan/pybullet-planning/blob/master/examples/test_water.py) - ```$ python -m examples.test_water```
-* [PR2 cloning](https://github.com/caelan/pybullet-planning/blob/master/examples/test_clone.py) - ```$ python -m examples.test_clone```
+* [TAMP environments](examples/test_json.py) - ```pybullet-planning$ python -m examples.test_json```
+* [TAMP benchmarks](examples/test_tamp_xml.py) - ```pybullet-planning$ python -m examples.test_tamp_xml```
+* [Gripper side grasps](examples/gripper/test_side.py) - ```pybullet-planning$ python -m examples.gripper.test_side```
+* [Gripper top grasps](examples/gripper/test_top.py) - ```pybullet-planning$ python -m examples.gripper.test_top```
+* [Dropping particles](examples/test_water.py) - ```pybullet-planning$ python -m examples.test_water```
+* [PR2 cloning](examples/test_clone.py) - ```pybullet-planning$ python -m examples.test_clone```
 
 <img src="images/json.png" height="150">&emsp;<img src="images/tamp_xml.png" height="150">
 &emsp;<img src="images/water.png" height="150">
@@ -110,11 +114,11 @@ Heavily annotated simple example that demonstrates:
 &emsp;<img src="images/test_top.png" height="150"-->
 
 <!--
-* [OpenRAVE bodies](https://github.com/caelan/pybullet-planning/blob/master/examples/test_kinbody.py) - ```$ python -m examples.test_kinbody```
-* [Kiva shelves](https://github.com/caelan/pybullet-planning/blob/master/examples/test_kiva.py) - ```$ python -m examples.test_kiva```
-* [LIS/YCB models](https://github.com/caelan/pybullet-planning/blob/master/examples/test_models.py) - ```$ python -m examples.test_models```
-* [PR2 visibility](https://github.com/caelan/pybullet-planning/blob/master/examples/test_visibility.py) - ```$ python -m examples.test_visibility```
-* [TurtleBot collisions](https://github.com/caelan/pybullet-planning/blob/master/examples/test_turtlebot.py) - ```$ python -m examples.test_turtlebot```
+* [OpenRAVE bodies](examples/test_kinbody.py) - ```pybullet-planning$ python -m examples.test_kinbody```
+* [Kiva shelves](examples/test_kiva.py) - ```pybullet-planning$ python -m examples.test_kiva```
+* [LIS/YCB models](examples/test_models.py) - ```pybullet-planning$ python -m examples.test_models```
+* [PR2 visibility](examples/test_visibility.py) - ```pybullet-planning$ python -m examples.test_visibility```
+* [TurtleBot collisions](examples/test_turtlebot.py) - ```pybullet-planning$ python -m examples.test_turtlebot```
 -->
 
 ## PDDLStream Examples
