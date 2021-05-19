@@ -512,7 +512,7 @@ def cache_decorator(function):
 #####################################
 
 class HideOutput(object):
-    # https://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python/14797594#14797594
+    # https://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python
     # https://stackoverflow.com/questions/4178614/suppressing-output-of-module-calling-outside-library
     # https://stackoverflow.com/questions/4675728/redirect-stdout-to-a-file-in-python/22434262#22434262
     '''
@@ -536,8 +536,10 @@ class HideOutput(object):
     def __enter__(self):
         if not self.enable:
             return
-        self._newstdout = os.dup(1)
-        os.dup2(self._devnull, 1)
+        self.fd = 1
+        #self.fd = sys.stdout.fileno()
+        self._newstdout = os.dup(self.fd)
+        os.dup2(self._devnull, self.fd)
         os.close(self._devnull)
         sys.stdout = os.fdopen(self._newstdout, 'w')
 
@@ -547,7 +549,7 @@ class HideOutput(object):
         sys.stdout.close()
         sys.stdout = self._origstdout
         sys.stdout.flush()
-        os.dup2(self._oldstdout_fno, 1)
+        os.dup2(self._oldstdout_fno, self.fd)
         os.close(self._oldstdout_fno) # Added
 
 #####################################
@@ -599,14 +601,16 @@ def spaced_colors(n, s=1, v=1):
 
 # Savers
 
-# TODO: contextlib
-
 class Saver(object):
+    # TODO: contextlib
+    def save(self):
+        pass
     def restore(self):
         raise NotImplementedError()
     def __enter__(self):
         # TODO: move the saving to enter?
-        pass
+        self.save()
+        #return self
     def __exit__(self, type, value, traceback):
         self.restore()
 

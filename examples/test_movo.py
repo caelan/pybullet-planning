@@ -7,7 +7,7 @@ import numpy as np
 import pybullet as p
 
 from examples.test_franka import test_retraction
-from pybullet_tools.ikfast.ikfast import get_ik_joints, print_ik_warning
+from pybullet_tools.ikfast.ikfast import get_ik_joints, check_ik_solver
 from pybullet_tools.movo_constants import get_closed_positions, get_open_positions, TOOL_LINK, get_gripper_joints, ARMS, \
     MOVO_URDF, MOVO_INFOS, RIGHT, get_arm_joints, MOVO_COLOR, BASE_JOINTS
 from pybullet_tools.pr2_utils import get_side_grasps, close_until_collision
@@ -82,7 +82,7 @@ def main(num_iterations=10):
     print('Joints:', get_joint_names(robot, joints))
 
     ik_info = MOVO_INFOS[arm]
-    print_ik_warning(ik_info)
+    check_ik_solver(ik_info)
 
     ik_joints = get_ik_joints(robot, ik_info, tool_link)
     #fixed_joints = []

@@ -10,7 +10,7 @@ from pybullet_tools.utils import add_data_path, connect, dump_body, disconnect, 
     assign_link_colors, add_line, point_from_pose, remove_handles, BLUE
 
 from pybullet_tools.ikfast.franka_panda.ik import PANDA_INFO, FRANKA_URDF
-from pybullet_tools.ikfast.ikfast import get_ik_joints, either_inverse_kinematics, print_ik_warning
+from pybullet_tools.ikfast.ikfast import get_ik_joints, either_inverse_kinematics, check_ik_solver
 
 
 def test_retraction(robot, info, tool_link, distance=0.1, **kwargs):
@@ -51,7 +51,7 @@ def main():
 
     plane = p.loadURDF("plane.urdf")
     with LockRenderer():
-        with HideOutput():
+        with HideOutput(True):
             robot = load_pybullet(FRANKA_URDF, fixed_base=True)
             assign_link_colors(robot, max_colors=3, s=0.5, v=1.)
             #set_all_color(robot, GREEN)
@@ -66,7 +66,7 @@ def main():
     draw_pose(Pose(), parent=robot, parent_link=tool_link)
     joints = get_movable_joints(robot)
     print('Joints', [get_joint_name(robot, joint) for joint in joints])
-    print_ik_warning(info)
+    check_ik_solver(info)
 
     sample_fn = get_sample_fn(robot, joints)
     for i in range(10):

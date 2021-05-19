@@ -41,9 +41,11 @@ def is_ik_compiled(ikfast_info):
         return False
 
 
-def print_ik_warning(ikfast_info):
+def check_ik_solver(ikfast_info):
+    print(ikfast_info)
     try:
         import_ikfast(ikfast_info)
+        print('Using IKFast for inverse kinematics')
     except ImportError as e:
         #traceback.print_exc()
         #print('\x1b[6;30;43m' + '{}, Using pybullet ik fn instead'.format(e) + '\x1b[0m')
@@ -53,8 +55,8 @@ def print_ik_warning(ikfast_info):
         build_path = os.path.join(ik_path, SETUP_FILENAME)
         print('Could not import IKFast module {}, please compile {} to use IKFast.'.format(
             module_name, build_path))
-        print('$ cd {}; ./{}'.format(ik_path, SETUP_FILENAME))
-        wait_for_user()
+        print('$ (cd {}; ./{})'.format(ik_path, SETUP_FILENAME))
+        print('Using PyBullet for inverse kinematics')
         return True
     else:
         return False
@@ -185,13 +187,10 @@ def closest_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
     return iter(solutions)
 
 
-def either_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target, fixed_joints=[],
-                              use_pybullet=False, **kwargs):
-    if not use_pybullet and is_ik_compiled(ikfast_info):
-        for solution in closest_inverse_kinematics(
-                robot, ikfast_info, tool_link, world_from_target, fixed_joints=fixed_joints, **kwargs):
-            yield solution
-        return
+##################################################
+
+
+def pybullet_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target, fixed_joints=[], **kwargs):
     ik_joints = get_ik_joints(robot, ikfast_info, tool_link)
     free_joints = [joint for joint in ik_joints if joint not in fixed_joints]
     assert free_joints
@@ -200,7 +199,14 @@ def either_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target, 
     # solutions = [] if conf is None else [conf]
     # TODO: sample multiple solutions and return
     solutions = multiple_sub_inverse_kinematics(robot, first_joint, tool_link, world_from_target,
-                                                max_attempts=1, first_close=True)
+                                                max_attempts=1, first_close=True, **kwargs)
     for solution in solutions: # TODO: sort by distance
         set_configuration(robot, solution)
         yield get_joint_positions(robot, ik_joints)
+
+
+def either_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target, fixed_joints=[],
+                              use_pybullet=False, **kwargs):
+    if not use_pybullet and is_ik_compiled(ikfast_info):
+        return closest_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target, fixed_joints=fixed_joints, **kwargs)
+    return pybullet_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target, fixed_joints=[])
