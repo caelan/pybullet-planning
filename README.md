@@ -51,6 +51,7 @@ IKFast bindings are included for the following robots:
 * Franka Panda - `pybullet-planning$ (cd pybullet_tools/ikfast/franka_panda; python setup.py)`
 * MOVO - `pybullet-planning$ (cd pybullet_tools/ikfast/movo; python setup.py)`
 * PR2 - `pybullet-planning$ (cd pybullet_tools/ikfast/pr2; python setup.py)`
+<!-- `pybullet-planning$ ./setup_ikfast.sh` -->
 
 <!-- https://stackoverflow.com/questions/10382141/temporarily-change-current-working-directory-in-bash-to-run-a-command -->
 
