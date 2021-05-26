@@ -318,6 +318,19 @@ def safe_sample(collection, k=1):
         return collection
     return random.sample(collection, k)
 
+def is_hashable(value):
+    #return isinstance(value, Hashable) # TODO: issue with hashable and numpy 2.7.6
+    try:
+        hash(value)
+    except TypeError:
+        return False
+    return True
+
+def value_or_id(value):
+    if is_hashable(value):
+        return value
+    return id(value) # TODO: prefix that distinguishes as id
+
 class OrderedSet(collections.OrderedDict, collections.MutableSet):
     # TODO: https://stackoverflow.com/questions/1653970/does-python-have-an-ordered-set
     def __init__(self, seq=()): # known special case of set.__init__
@@ -451,14 +464,28 @@ def cached_fn(fn, cache=True, **global_kargs):
     #from functools import cache # # New in version 3.9
     #from functools import lru_cache as cache
     #@cache(maxsize=None, typed=False)
-    @cache_decorator
+
+    # @cache_decorator # TODO: only for class methods
+    # def wrapped(*args, **local_kwargs):
+    #     return normal(*args, **local_kwargs)
+
+    key_fn = id
+    #key_fn = value_or_id
+
+    cache = {}
     def wrapped(*args, **local_kwargs):
-        return normal(*args, **local_kwargs)
+        args_key = tuple(map(key_fn, args))
+        local_kwargs_key = frozenset({key: key_fn(value) for key, value in local_kwargs.items()}.items())
+        key = (args_key, local_kwargs_key)
+        if key not in cache:
+            cache[key] = normal(*args, **local_kwargs)
+        return cache[key]
+
     return wrapped
 
 def cache_decorator(function):
     """
-    A decorator for class methods, replaces @property
+    A decorator for class methods, replaces @property # TODO: only for class methods
     but will store and retrieve function return values
     in object cache.
     Parameters

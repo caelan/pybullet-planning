@@ -33,7 +33,6 @@ def create_custom_base_limits(robot, base_limits):
 def sample_placements(body_surfaces, obstacles=None, savers=[], min_distances={}):
     if obstacles is None:
         obstacles = OrderedSet(get_bodies()) - set(body_surfaces)
-    obstacles = list(obstacles)
     savers = list(savers) + [BodySaver(obstacle) for obstacle in obstacles]
     if not isinstance(min_distances, dict):
         min_distances = {body: min_distances for body in body_surfaces}
@@ -54,7 +53,7 @@ def sample_placements(body_surfaces, obstacles=None, savers=[], min_distances={}
                 if pairwise_collision(body, obstacle, max_distance=min_distance):
                     break
             else:
-                obstacles.append(body)
+                savers.append(BodySaver(body))
                 break
     for saver in savers:
         saver.restore()
@@ -143,6 +142,12 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
 
 ##################################################
 
+def compute_cost(robot, joints, path, resolutions=None):
+    if path is None:
+        return INF
+    return sum(get_distance_fn(robot, joints, weights=resolutions)(*pair)
+               for pair in get_pairs(path))
+
 def iterate_path(robot, joints, path, step_size=None): # 1e-2 | None
     if path is None:
         return
@@ -158,6 +163,28 @@ def iterate_path(robot, joints, path, step_size=None): # 1e-2 | None
             wait_for_duration(duration=step_size)
     wait_if_gui(message='Finish?')
 
+##################################################
+
+def test_aabb(robot):
+    base_link = link_from_name(robot, BASE_LINK_NAME)
+    region_aabb = AABB(lower=-np.ones(3), upper=+np.ones(3))
+    draw_aabb(region_aabb)
+    step_simulation()  # Need to call before get_bodies_in_region
+    # update_scene() # TODO: https://github.com/bulletphysics/bullet3/pull/3331
+    bodies = get_bodies_in_region(region_aabb)
+    print(len(bodies), bodies)
+    # https://github.com/bulletphysics/bullet3/search?q=broadphase
+    # https://github.com/bulletphysics/bullet3/search?p=1&q=getCachedOverlappingObjects&type=&utf8=%E2%9C%93
+    # https://andysomogyi.github.io/mechanica/bullet.html
+    # http://www.cs.kent.edu/~ruttan/GameEngines/lectures/Bullet_User_Manual
+
+    aabb = get_aabb(robot)
+    # aabb = get_subtree_aabb(robot, base_link)
+    draw_aabb(aabb)
+
+    for link in [BASE_LINK, base_link]:
+        print(link, get_collision_data(robot, link), pairwise_link_collision(robot, link, robot, link))
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cfree', action='store_true',
@@ -168,7 +195,7 @@ def main():
                         help='')
     parser.add_argument('-l', '--lock', action='store_false',
                         help='')
-    parser.add_argument('-s', '--seed', default=None, type=int,
+    parser.add_argument('-s', '--seed', default=None, type=int, # None | 1
                         help='The random seed to use.')
     parser.add_argument('-v', '--viewer', action='store_false',
                         help='')
@@ -186,10 +213,15 @@ def main():
     #########################
 
     robot, base_limits, goal_conf, obstacles = problem1()
-    draw_base_limits(base_limits)
     custom_limits = create_custom_base_limits(robot, base_limits)
     base_joints = joints_from_names(robot, BASE_JOINTS)
     base_link = link_from_name(robot, BASE_LINK_NAME)
+
+    draw_base_limits(base_limits)
+    # draw_pose(get_link_pose(robot, base_link), length=0.5)
+    for conf in [get_joint_positions(robot, base_joints), goal_conf]:
+        draw_pose(pose_from_pose2d(conf, z=DRAW_Z), length=DRAW_LENGTH)
+
     if args.cfree:
         obstacles = []
     # for obstacle in obstacles:
@@ -198,26 +230,7 @@ def main():
     #resolutions = np.array([0.05, 0.05, math.radians(10)])
     set_all_static() # Doesn't seem to affect
 
-    region_aabb = AABB(lower=-np.ones(3), upper=+np.ones(3))
-    draw_aabb(region_aabb)
-    step_simulation() # Need to call before get_bodies_in_region
-    #update_scene() # TODO: https://github.com/bulletphysics/bullet3/pull/3331
-    bodies = get_bodies_in_region(region_aabb)
-    print(len(bodies), bodies)
-    # https://github.com/bulletphysics/bullet3/search?q=broadphase
-    # https://github.com/bulletphysics/bullet3/search?p=1&q=getCachedOverlappingObjects&type=&utf8=%E2%9C%93
-    # https://andysomogyi.github.io/mechanica/bullet.html
-    # http://www.cs.kent.edu/~ruttan/GameEngines/lectures/Bullet_User_Manual
-
-    #draw_pose(get_link_pose(robot, base_link), length=0.5)
-    for conf in [get_joint_positions(robot, base_joints), goal_conf]:
-        draw_pose(pose_from_pose2d(conf, z=DRAW_Z), length=DRAW_LENGTH)
-    aabb = get_aabb(robot)
-    #aabb = get_subtree_aabb(robot, base_link)
-    draw_aabb(aabb)
-
-    for link in [BASE_LINK, base_link]:
-        print(link, get_collision_data(robot, link), pairwise_link_collision(robot, link, robot, link))
+    test_aabb(robot)
 
     #########################
 
@@ -226,6 +239,7 @@ def main():
     profiler = Profiler(field='tottime', num=50) # tottime | cumtime | None
     profiler.save()
     with LockRenderer(lock=args.lock):
+        # TODO: draw the search tree
         path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic, obstacles=obstacles,
                            custom_limits=custom_limits, resolutions=resolutions,
                            use_aabb=True, cache=True, max_distance=0.,
@@ -238,13 +252,14 @@ def main():
 
     solved = path is not None
     length = INF if path is None else len(path)
-    cost = sum(get_distance_fn(robot, base_joints, weights=resolutions)(*pair) for pair in get_pairs(path))
+    cost = compute_cost(robot, base_joints, path, resolutions=resolutions)
     print('Solved: {} | Length: {} | Cost: {:.3f} | Runtime: {:.3f} sec'.format(
         solved, length, cost, elapsed_time(start_time)))
     if path is None:
+        wait_if_gui()
         disconnect()
         return
-    iterate_path(robot, base_joints, path)
+    iterate_path(robot, base_joints, path, step_size=2e-2)
     disconnect()
 
 if __name__ == '__main__':
