@@ -105,10 +105,10 @@ def sample_tool_ik(robot, arm, tool_pose, nearby_conf=USE_ALL, max_attempts=25, 
             break
     return None
 
-def pr2_inverse_kinematics(robot, arm, gripper_pose, obstacles=[], custom_limits={}, **kwargs):
+def pr2_inverse_kinematics(robot, arm, gripper_pose, obstacles=[], custom_limits={}, use_pybullet=False, **kwargs):
     arm_link = get_gripper_link(robot, arm)
     arm_joints = get_arm_joints(robot, arm)
-    if is_ik_compiled():
+    if not use_pybullet and is_ik_compiled():
         ik_joints = get_torso_arm_joints(robot, arm)
         torso_arm_conf = sample_tool_ik(robot, arm, gripper_pose, custom_limits=custom_limits,
                                         torso_limits=USE_CURRENT, **kwargs)
