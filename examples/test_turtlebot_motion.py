@@ -15,8 +15,9 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     joint_from_name, safe_zip, draw_base_limits, BodySaver, WorldSaver, LockRenderer, elapsed_time, disconnect, flatten, \
     INF, wait_for_duration, get_unbuffered_aabb, draw_aabb, DEFAULT_AABB_BUFFER, get_link_pose, get_joint_positions, \
     get_subtree_aabb, get_pairs, get_distance_fn, get_aabb, set_all_static, step_simulation, get_bodies_in_region, \
-    AABB, update_scene, Profiler, pairwise_link_collision, BASE_LINK, get_collision_data, draw_pose2d, \
-    normalize_interval, wrap_angle, CIRCULAR_LIMITS, wrap_interval, Euler, rescale_interval, adjust_path
+    AABB, Profiler, pairwise_link_collision, BASE_LINK, get_collision_data, draw_pose2d, \
+    normalize_interval, wrap_angle, CIRCULAR_LIMITS, wrap_interval, Euler, rescale_interval, adjust_path, \
+    contact_collision, timer, update_scene, set_aabb_buffer, set_separating_axis_collisions, get_aabb
 
 BASE_LINK_NAME = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
@@ -124,7 +125,7 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     goal_conf = -initial_conf
 
     with HideOutput():
-        robot = load_model(TURTLEBOT_URDF)
+        robot = load_model(TURTLEBOT_URDF, merge=True, sat=False)
         base_joints = joints_from_names(robot, BASE_JOINTS)
         # base_link = child_link_from_joint(base_joints[-1])
         base_link = link_from_name(robot, BASE_LINK_NAME)
@@ -180,10 +181,23 @@ def test_aabb(robot):
 
     aabb = get_aabb(robot)
     # aabb = get_subtree_aabb(robot, base_link)
+    print(aabb)
     draw_aabb(aabb)
 
     for link in [BASE_LINK, base_link]:
         print(link, get_collision_data(robot, link), pairwise_link_collision(robot, link, robot, link))
+
+def test_caching(robot):
+    with timer(message='{}'):
+        #update_scene()
+        step_simulation()
+    with timer(message='{}'):
+        print(get_aabb(robot, link=None, only_collision=True))
+        #print(contact_collision())
+    for _ in range(5):
+        with timer(message='{}'):
+            print(get_aabb(robot, link=None, only_collision=True))
+            #print(contact_collision())
 
 def main():
     parser = argparse.ArgumentParser()
@@ -201,6 +215,8 @@ def main():
                         help='')
     args = parser.parse_args()
     connect(use_gui=args.viewer)
+    #set_aabb_buffer(buffer=1e-3)
+    #set_separating_axis_collisions()
 
     seed = args.seed
     #seed = 0
@@ -231,12 +247,14 @@ def main():
     set_all_static() # Doesn't seem to affect
 
     test_aabb(robot)
+    test_caching(robot)
+    #return
 
     #########################
 
     saver = WorldSaver()
     start_time = time.time()
-    profiler = Profiler(field='tottime', num=50) # tottime | cumtime | None
+    profiler = Profiler(field='cumtime', num=50) # tottime | cumtime | None
     profiler.save()
     with LockRenderer(lock=args.lock):
         # TODO: draw the search tree

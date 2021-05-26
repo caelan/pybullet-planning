@@ -432,6 +432,12 @@ def timeout(duration):
         # if the timeout is not reached
         signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
+@contextmanager
+def timer(message='Elapsed time: {:.3f} sec'):
+    start_time = time.time()
+    yield
+    print(message.format(elapsed_time(start_time)))
+
 def log_time(method):
     """
     A decorator for methods which will time the method
@@ -461,17 +467,19 @@ def cached_fn(fn, cache=True, **global_kargs):
     if not cache:
         return normal
 
-    #from functools import cache # # New in version 3.9
-    #from functools import lru_cache as cache
-    #@cache(maxsize=None, typed=False)
-
-    # @cache_decorator # TODO: only for class methods
-    # def wrapped(*args, **local_kwargs):
-    #     return normal(*args, **local_kwargs)
+    try:
+        #from functools import cache  # New in version 3.9
+        from functools import lru_cache as cache
+        @cache(maxsize=None, typed=False)
+        # @cache_decorator # TODO: only for class methods
+        def wrapped(*args, **local_kwargs):
+            return normal(*args, **local_kwargs)
+        return wrapped
+    except ImportError:
+        pass
 
     key_fn = id
     #key_fn = value_or_id
-
     cache = {}
     def wrapped(*args, **local_kwargs):
         args_key = tuple(map(key_fn, args))
@@ -480,7 +488,6 @@ def cached_fn(fn, cache=True, **global_kargs):
         if key not in cache:
             cache[key] = normal(*args, **local_kwargs)
         return cache[key]
-
     return wrapped
 
 def cache_decorator(function):
@@ -798,7 +805,7 @@ def get_model_info(body):
     key = (CLIENT, body)
     return INFO_FROM_BODY.get(key, None)
 
-def get_urdf_flags(cache=False, cylinder=False):
+def get_urdf_flags(cache=False, cylinder=False, merge=False, sat=False):
     # by default, Bullet disables self-collision
     # URDF_INITIALIZE_SAT_FEATURES
     # URDF_ENABLE_CACHED_GRAPHICS_SHAPES seems to help
@@ -809,6 +816,11 @@ def get_urdf_flags(cache=False, cylinder=False):
         flags |= p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
     if cylinder:
         flags |= p.URDF_USE_IMPLICIT_CYLINDER
+    if merge:
+        flags |= p.URDF_MERGE_FIXED_LINKS
+    if sat:
+        flags |= p.URDF_INITIALIZE_SAT_FEATURES
+    #flags |= p.URDF_USE_INERTIA_FROM_FILE
     return flags
 
 def load_pybullet(filename, fixed_base=False, scale=1., **kwargs):
@@ -832,12 +844,41 @@ def load_pybullet(filename, fixed_base=False, scale=1., **kwargs):
     INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, filename, fixed_base, scale)
     return body
 
-def set_caching(cache):
+def set_caching(cache=False):
+    # enableFileCaching: Set to 0 to disable file caching, such as .obj wavefront file loading
     p.setPhysicsEngineParameter(enableFileCaching=int(cache), physicsClientId=CLIENT)
+
+def set_aabb_buffer(buffer=0.):
+    # TODO: doesn't seem to work
+    # https://github.com/bulletphysics/bullet3/blob/5ae9a15ecac7bc7e71f1ec1b544a55135d7d7e32/examples/pybullet/examples/manyspheres.py#L21
+    # AABBs are extended by this number. Defaults to 0.02 in Bullet 2.x.
+    p.setPhysicsEngineParameter(contactBreakingThreshold=buffer, physicsClientId=CLIENT)
+
+def set_continuous_collision_penetration(penetration=0.):
+    # https://github.com/bulletphysics/bullet3/blob/0e124cb2f103c40de4afac6c100b7e8e1f5d9e15/examples/pybullet/examples/experimentalCcdSphereRadius.py
+    # If continuous collision detection (CCD) is enabled, CCD will not be used if the penetration is below this threshold.
+    p.setPhysicsEngineParameter(allowedCcdPenetration=penetration)
+    # p.setPhysicsEngineParameter(collisionFilterMode=0, contactBreakingThreshold=0.02, enableSAT=0,
+    #                             deterministicOverlappingPairs=0, allowedCcdPenetration=0)
+    # print(p.getPhysicsEngineParameters())
+
+def set_continuous_collision_radius(body, link, radius=0.):
+    # https://github.com/bulletphysics/bullet3/blob/0e124cb2f103c40de4afac6c100b7e8e1f5d9e15/examples/pybullet/examples/experimentalCcdSphereRadius.py
+    # radius of the sphere to perform continuous collision detection
+    p.changeDynamics(body, link, ccdSweptSphereRadius=radius)
+
+def set_collision_mask(body, link, group, mask=0):
+    # p.URDF_USE_SELF_COLLISION
+    # p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
+    # p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
+    return p.setCollisionFilterGroupMask(body, link, group, mask)
+
+def set_collision_pair_mask(body1, link1, body2, link2, enable=True):
+    return p.setCollisionFilterGroupMask(body1, link1, body2, link2, enableCollision=enable)
 
 def load_model_info(info):
     # TODO: disable file caching to reuse old filenames
-    # p.setPhysicsEngineParameter(enableFileCaching=0, physicsClientId=CLIENT)
+    #set_caching(cache=False)
     if info.path.endswith('.urdf'):
         return load_pybullet(info.path, fixed_base=info.fixed_base, scale=info.scale)
     if info.path.endswith('.obj'):
@@ -932,12 +973,12 @@ def get_time_step():
     # 'gravityAccelerationY', 'numSubSteps', 'fixedTimeStep'}
     return p.getPhysicsEngineParameters(physicsClientId=CLIENT)['fixedTimeStep']
 
-def enable_separating_axis_test():
-    p.setPhysicsEngineParameter(enableSAT=1, physicsClientId=CLIENT)
+def set_separating_axis_collisions(enable=True):
+    # https://github.com/bulletphysics/bullet3/blob/5ae9a15ecac7bc7e71f1ec1b544a55135d7d7e32/examples/pybullet/examples/satCollision.py
+    p.setPhysicsEngineParameter(enableSAT=int(enable), physicsClientId=CLIENT)
     #p.setCollisionFilterPair()
     #p.setCollisionFilterGroupMask()
     #p.setInternalSimFlags()
-    # enableFileCaching: Set to 0 to disable file caching, such as .obj wavefront file loading
     #p.getAPIVersion() # TODO: check that API is up-to-date
 
 def simulate_for_sim_duration(sim_duration, real_dt=0, frequency=INF):
@@ -1032,16 +1073,24 @@ def connect(use_gui=True, shadows=True, color=None, width=None, height=None):
     with HideOutput():
         #  --window_backend=2 --render_device=0'
         # options="--mp4=\"test.mp4\' --mp4fps=240"
+        # options="--minGraphicsUpdateTimeMs=16000"
         options = ''
         if color is not None:
-            options += '--background_color_red={} --background_color_green={} --background_color_blue={}'.format(*color)
+            options += ' --background_color_red={} --background_color_green={} --background_color_blue={}'.format(*color)
         if width is not None:
-            options += '--width={}'.format(width)
+            options += ' --width={}'.format(width)
         if height is not None:
-            options += '--height={}'.format(height)
+            options += ' --height={}'.format(height)
         sim_id = p.connect(method, options=options) # key=None,
         #sim_id = p.connect(p.GUI, options='--opengl2') if use_gui else p.connect(p.DIRECT)
+        # --mouse_move_multiplier=0.400000  (mouse sensitivity)
+        # --mouse_wheel_multiplier=0.400000 (mouse wheel sensitivity)
+        # --width=<int> width of the window in pixels
+        # --height=<int> height of the window, in pixels.
+        # --mp4=moviename.mp4 (records movie, requires ffmpeg)
+        # --mp4fps=<int> (for movie recording, set frames per second).
 
+    # TODO: p.bullet_client()
     assert 0 <= sim_id
     #sim_id2 = p.connect(p.SHARED_MEMORY)
     #print(sim_id, sim_id2)
@@ -1143,6 +1192,7 @@ def step_simulation():
 
 def update_scene():
     # TODO: https://github.com/bulletphysics/bullet3/pull/3331
+    # Always recomputes (no caching)
     p.performCollisionDetection(physicsClientId=CLIENT)
 
 def set_real_time(real_time):
@@ -1638,6 +1688,7 @@ def get_bodies():
 BodyInfo = namedtuple('BodyInfo', ['base_name', 'body_name'])
 
 def get_body_info(body):
+    # TODO: p.syncBodyInfo
     return BodyInfo(*p.getBodyInfo(body, physicsClientId=CLIENT))
 
 def get_base_name(body):
@@ -2320,11 +2371,14 @@ def get_faces_geometry(mesh, vertex_textures=None, vertex_normals=None, scale=1.
 NULL_ID = -1
 
 def create_collision_shape(geometry, pose=unit_pose()):
+    # TODO: removeCollisionShape
+    # https://github.com/bulletphysics/bullet3/blob/5ae9a15ecac7bc7e71f1ec1b544a55135d7d7e32/examples/pybullet/examples/getClosestPoints.py
     point, quat = pose
     collision_args = {
         'collisionFramePosition': point,
         'collisionFrameOrientation': quat,
         'physicsClientId': CLIENT,
+        #'flags': p.GEOM_FORCE_CONCAVE_TRIMESH,
     }
     collision_args.update(geometry)
     if 'length' in collision_args:
@@ -2332,6 +2386,14 @@ def create_collision_shape(geometry, pose=unit_pose()):
         collision_args['height'] = collision_args['length']
         del collision_args['length']
     return p.createCollisionShape(**collision_args)
+
+def create_heightfield(mesh):
+    raise NotImplementedError()
+    # https://github.com/bulletphysics/bullet3/blob/0e124cb2f103c40de4afac6c100b7e8e1f5d9e15/examples/pybullet/examples/heightfield.py
+    # p.GEOM_HEIGHTFIELD
+    # p.GEOM_MESH
+    # p.GEOM_FORCE_CONCAVE_TRIMESH
+    return p.createCollisionShape(p.GEOM_MESH, vertices=[], indices=[])
 
 def create_visual_shape(geometry, pose=unit_pose(), color=RED, specular=None):
     if (color is None): # or not has_gui():
@@ -2675,6 +2737,7 @@ def get_mesh_data(obj, link=BASE_LINK, shape_index=0, visual=True):
 
 def get_collision_data(body, link=BASE_LINK):
     # TODO: try catch
+    # TODO: cache
     return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link, physicsClientId=CLIENT)]
 
 def get_data_type(data):
@@ -2823,15 +2886,23 @@ def aabb_from_points(points):
 def aabb_union(aabbs):
     if not aabbs:
         return None
-    return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
+    if len(aabbs) == 1:
+        return aabbs[0]
+    #return aabb_from_points(np.vstack([aabb for aabb in aabbs]))
+    d = len(aabbs[0][0])
+    lower = [min(aabb[0][k] for aabb in aabbs) for k in range(d)]
+    upper = [max(aabb[1][k] for aabb in aabbs) for k in range(d)]
+    return AABB(lower, upper)
 
 def aabb_overlap(aabb1, aabb2):
     if (aabb1 is None) or (aabb2 is None):
         return False
     lower1, upper1 = aabb1
     lower2, upper2 = aabb2
-    return np.less_equal(lower1, upper2).all() and \
-           np.less_equal(lower2, upper1).all()
+    return all(l1 <= u2 for l1, u2 in zip(lower1, upper2)) and \
+           all(l2 <= u1 for l2, u1 in zip(lower2, upper1))
+    # return np.less_equal(lower1, upper2).all() and \
+    #        np.less_equal(lower2, upper1).all()
 
 def aabb_empty(aabb):
     lower, upper = aabb
@@ -2870,6 +2941,8 @@ def get_aabb(body, link=None, **kwargs):
     # Computes the AABB of the collision geometry
     if link is None:
         return aabb_union(get_aabbs(body, **kwargs))
+    # when you don't pass the link index, or use -1, you get the AABB of the base
+    # Always recomputes (no caching)
     return AABB(*p.getAABB(body, linkIndex=link, physicsClientId=CLIENT))
 
 get_lower_upper = get_aabb
@@ -2910,6 +2983,7 @@ def sample_aabb(aabb):
 def get_bodies_in_region(aabb):
     (lower, upper) = aabb
     #step_simulation() # Like visibility, need to step first
+    #update_scene()
     bodies = p.getOverlappingObjects(lower, upper, physicsClientId=CLIENT)
     return [] if bodies is None else sorted(bodies)
 
@@ -2956,12 +3030,11 @@ def scale_aabb(aabb, scale):
     return aabb_from_extent_center(new_extent, center)
 
 def buffer_aabb(aabb, buffer):
-    if aabb is None:
+    if (aabb is None) or (np.isscalar(buffer) and (buffer == 0.)):
         return aabb
     extent = get_aabb_extent(aabb)
     if np.isscalar(buffer):
-        if buffer == 0.:
-            return aabb
+        #buffer = buffer - DEFAULT_AABB_BUFFER # TODO: account for the default
         buffer = buffer * np.ones(len(extent))
     new_extent = np.add(2*buffer, extent)
     center = get_aabb_center(aabb)
@@ -3097,20 +3170,12 @@ MAX_DISTANCE = 0. # 0. | 1e-3
 
 CollisionPair = namedtuple('Collision', ['body', 'links'])
 
-def get_buffered_aabb(body, max_distance=MAX_DISTANCE, **kwargs):
-    body, links = parse_body(body, **kwargs)
-    return buffer_aabb(aabb_union(get_aabbs(body, links=links)), buffer=max_distance)
+def get_buffered_aabb(body, link=None, max_distance=MAX_DISTANCE, **kwargs):
+    body, links = parse_body(body, link=link)
+    return buffer_aabb(aabb_union(get_aabbs(body, links=links, **kwargs)), buffer=max_distance)
 
 def get_unbuffered_aabb(body, **kwargs):
     return get_buffered_aabb(body, max_distance=-DEFAULT_AABB_BUFFER/2., **kwargs)
-
-def contact_collision():
-    step_simulation()
-    return len(p.getContactPoints(physicsClientId=CLIENT)) != 0
-
-ContactResult = namedtuple('ContactResult', ['contactFlag', 'bodyUniqueIdA', 'bodyUniqueIdB',
-                                             'linkIndexA', 'linkIndexB', 'positionOnA', 'positionOnB',
-                                             'contactNormalOnB', 'contactDistance', 'normalForce'])
 
 def flatten_links(body, links=None):
     if links is None:
@@ -3144,6 +3209,17 @@ CollisionInfo = namedtuple('CollisionInfo',
                            lateralFrictionDir2
                            '''.split())
 
+def get_contact_points(**kwargs):
+    return [CollisionInfo(*info) for info in p.getContactPoints(physicsClientId=CLIENT, **kwargs)]
+
+def update_contact_points(**kwargs):
+    #step_simulation()
+    update_scene()
+    return get_contact_points(**kwargs)
+
+def contact_collision(**kwargs):
+    return len(update_contact_points(**kwargs)) != 0
+
 def draw_collision_info(collision_info, **kwargs):
     point1 = collision_info.positionOnA
     point2 = collision_info.positionOnB
@@ -3157,6 +3233,13 @@ def get_closest_points(body1, body2, link1=None, link2=None, max_distance=MAX_DI
     if use_aabb and not aabb_overlap(get_buffered_aabb(body1, link1, max_distance=max_distance/2.),
                                      get_buffered_aabb(body2, link2, max_distance=max_distance/2.)):
         return []
+    # TODO: https://github.com/bulletphysics/bullet3/blob/5ae9a15ecac7bc7e71f1ec1b544a55135d7d7e32/examples/pybullet/examples/getClosestPoints.py
+    # return p.getClosestPoints(bodyA=-1, bodyB=-1, distance=100, collisionShapeA=geom, collisionShapeB=geomBox,
+    #                           collisionShapePositionA=[0.5, 0, 1],
+    #                           collisionShapePositionB=basePositionB, collisionShapeOrientationB=baseOrientationB)
+    # if ((link1 is not None) and not get_collision_data(body1, link1)) or \
+    #         ((link2 is not None) and not get_collision_data(body2, link2)):
+    #     return []
     if (link1 is None) and (link2 is None):
         results = p.getClosestPoints(bodyA=body1, bodyB=body2, distance=max_distance, physicsClientId=CLIENT)
     elif link2 is None:
@@ -3460,7 +3543,8 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
                      custom_limits={}, use_aabb=False, cache=False, max_distance=MAX_DISTANCE, **kwargs):
     # TODO: convert most of these to keyword arguments
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
-    moving_links = frozenset(get_moving_links(body, joints))
+    moving_links = frozenset(link for link in get_moving_links(body, joints)
+                             if get_collision_data(body, link)) # TODO: propagate elsewhere
     attached_bodies = [attachment.child for attachment in attachments]
     moving_bodies = [CollisionPair(body, moving_links)] + list(map(parse_body, attached_bodies))
     #moving_bodies = list(flatten(flatten_links(*pair) for pair in moving_bodies)) # Introduces overhead
