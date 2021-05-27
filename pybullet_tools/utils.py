@@ -3578,13 +3578,20 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
                 #print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
                 if verbose: print(body, link1, body, link2)
                 return True
-        #step_simulation()
+
+        # #step_simulation()
+        # #update_scene()
         # for body1 in moving_bodies:
-        #     for body2, _ in get_bodies_in_region(get_moving_aabb(body1)):
-        #         if (body2 in obstacles) and pairwise_collision(body1, body2, **kwargs):
+        #     overlapping_pairs = [(body2, link2) for body2, link2 in get_bodies_in_region(get_moving_aabb(body1))
+        #                          if body2 in obstacles]
+        #     overlapping_bodies = {body2 for body2, _ in overlapping_pairs}
+        #     for body2 in overlapping_bodies:
+        #         if pairwise_collision(body1, body2, **kwargs):
         #             #print(get_body_name(body1), get_body_name(body2))
         #             if verbose: print(body1, body2)
         #             return True
+        # return False
+
         for body1, body2 in product(moving_bodies, obstacles):
             if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
                     and pairwise_collision(body1, body2, **kwargs):

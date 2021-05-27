@@ -19,7 +19,7 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     AABB, Profiler, pairwise_link_collision, BASE_LINK, get_collision_data, draw_pose2d, \
     normalize_interval, wrap_angle, CIRCULAR_LIMITS, wrap_interval, Euler, rescale_interval, adjust_path, \
     contact_collision, timer, update_scene, set_aabb_buffer, set_separating_axis_collisions, get_aabb, set_pose, \
-    Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize
+    Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION
 
 BASE_LINK_NAME = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
@@ -128,7 +128,7 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     goal_conf = -initial_conf
 
     with HideOutput():
-        robot = load_model(TURTLEBOT_URDF, merge=False, sat=False)
+        robot = load_model(TURTLEBOT_URDF, merge=True, sat=False)
         base_joints = joints_from_names(robot, BASE_JOINTS)
         # base_link = child_link_from_joint(base_joints[-1])
         base_link = link_from_name(robot, BASE_LINK_NAME)
@@ -191,7 +191,7 @@ def test_aabb(robot):
 
     #step_simulation()  # Need to call before get_bodies_in_region
     #update_scene()
-    for i in range(5):
+    for i in range(3):
         with timer(message='{:f}'):
             bodies = get_bodies_in_region(region_aabb) # This does cache some info
         print(i, len(bodies), bodies)
@@ -215,7 +215,7 @@ def test_caching(robot, obstacles):
     with timer(message='{:f}'):
         #print(get_aabb(robot, link=None, only_collision=True))
         print(contact_collision()) # 2.50339508057e-05
-    for _ in range(5):
+    for _ in range(3):
         with timer(message='{:f}'):
             #print(get_aabb(robot, link=None, only_collision=True)) # Recomputes each time
             print(contact_collision()) # 1.69277191162e-05
@@ -274,15 +274,17 @@ def main():
 
     draw_base_limits(base_limits)
     # draw_pose(get_link_pose(robot, base_link), length=0.5)
-    for conf in [get_joint_positions(robot, base_joints), goal_conf]:
+    start_conf = get_joint_positions(robot, base_joints)
+    for conf in [start_conf, goal_conf]:
         draw_pose(pose_from_pose2d(conf, z=DRAW_Z), length=DRAW_LENGTH)
 
     if args.cfree:
         obstacles = []
     # for obstacle in obstacles:
     #     draw_aabb(get_aabb(obstacle)) # Updates automatically
-    resolutions = None
+    #resolutions = None
     #resolutions = np.array([0.05, 0.05, math.radians(10)])
+    resolutions = 1.0*DEFAULT_RESOLUTION*np.ones(len(base_joints))
     set_all_static() # Doesn't seem to affect
 
     test_aabb(robot)
