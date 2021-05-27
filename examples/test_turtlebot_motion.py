@@ -18,7 +18,8 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     get_subtree_aabb, get_pairs, get_distance_fn, get_aabb, set_all_static, step_simulation, get_bodies_in_region, \
     AABB, Profiler, pairwise_link_collision, BASE_LINK, get_collision_data, draw_pose2d, \
     normalize_interval, wrap_angle, CIRCULAR_LIMITS, wrap_interval, Euler, rescale_interval, adjust_path, \
-    contact_collision, timer, update_scene, set_aabb_buffer, set_separating_axis_collisions, get_aabb, set_pose, Pose
+    contact_collision, timer, update_scene, set_aabb_buffer, set_separating_axis_collisions, get_aabb, set_pose, \
+    Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize
 
 BASE_LINK_NAME = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
@@ -190,8 +191,10 @@ def test_aabb(robot):
 
     #step_simulation()  # Need to call before get_bodies_in_region
     #update_scene()
-    bodies = get_bodies_in_region(region_aabb)
-    print(len(bodies), bodies)
+    for i in range(5):
+        with timer(message='{:f}'):
+            bodies = get_bodies_in_region(region_aabb) # This does cache some info
+        print(i, len(bodies), bodies)
     # https://github.com/bulletphysics/bullet3/search?q=broadphase
     # https://github.com/bulletphysics/bullet3/search?p=1&q=getCachedOverlappingObjects&type=&utf8=%E2%9C%93
     # https://andysomogyi.github.io/mechanica/bullet.html
@@ -205,17 +208,36 @@ def test_aabb(robot):
     for link in [BASE_LINK, base_link]:
         print(link, get_collision_data(robot, link), pairwise_link_collision(robot, link, robot, link))
 
-def test_caching(robot):
-    with timer(message='{}'):
+def test_caching(robot, obstacles):
+    with timer(message='{:f}'):
         #update_scene() # 5.19752502441e-05
         step_simulation() # 0.000210046768188
-    with timer(message='{}'):
+    with timer(message='{:f}'):
         #print(get_aabb(robot, link=None, only_collision=True))
         print(contact_collision()) # 2.50339508057e-05
     for _ in range(5):
-        with timer(message='{}'):
+        with timer(message='{:f}'):
             #print(get_aabb(robot, link=None, only_collision=True)) # Recomputes each time
             print(contact_collision()) # 1.69277191162e-05
+
+    print()
+    obstacle = obstacles[-1]
+    #for link in get_all_links(robot):
+    #    set_collision_pair_mask(robot, obstacle, link1=link, enable=False) # Doesn't seem to affect pairwise_collision
+    with timer('{:f}'):
+        print(pairwise_collision(robot, obstacle)) # 0.000031
+    links = get_all_links(robot)
+    links = [link for link in get_all_links(robot) if can_collide(robot, link)]
+    #links = randomize(links)
+    with timer('{:f}'):
+        print(any(pairwise_collision(robot, obstacle, link1=link) for link in links # 0.000179
+                  ))
+                  #if aabb_overlap(get_aabb(robot, link), get_aabb(obstacles[-1]))))
+                  #if can_collide(robot, link)))
+    with timer('{:f}'):
+        print(pairwise_collision(robot, obstacle))
+
+##################################################
 
 def main():
     parser = argparse.ArgumentParser()
@@ -249,7 +271,6 @@ def main():
     robot, base_limits, goal_conf, obstacles = problem1()
     custom_limits = create_custom_base_limits(robot, base_limits)
     base_joints = joints_from_names(robot, BASE_JOINTS)
-    base_link = link_from_name(robot, BASE_LINK_NAME)
 
     draw_base_limits(base_limits)
     # draw_pose(get_link_pose(robot, base_link), length=0.5)
@@ -265,7 +286,7 @@ def main():
     set_all_static() # Doesn't seem to affect
 
     test_aabb(robot)
-    test_caching(robot)
+    test_caching(robot, obstacles)
     #return
 
     #########################

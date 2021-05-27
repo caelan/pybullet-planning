@@ -868,15 +868,6 @@ def set_continuous_collision_radius(body, link, radius=0.):
     # radius of the sphere to perform continuous collision detection
     p.changeDynamics(body, link, ccdSweptSphereRadius=radius)
 
-def set_collision_mask(body, link, group, mask=0):
-    # p.URDF_USE_SELF_COLLISION
-    # p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
-    # p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
-    return p.setCollisionFilterGroupMask(body, link, group, mask)
-
-def set_collision_pair_mask(body1, link1, body2, link2, enable=True):
-    return p.setCollisionFilterGroupMask(body1, link1, body2, link2, enableCollision=enable)
-
 def load_model_info(info):
     # TODO: disable file caching to reuse old filenames
     #set_caching(cache=False)
@@ -3174,6 +3165,15 @@ def approximate_as_cylinder(body, **kwargs):
 MAX_DISTANCE = 0. # 0. | 1e-3
 
 CollisionPair = namedtuple('Collision', ['body', 'links'])
+
+def set_collision_mask(body, link, group, mask=0):
+    # p.URDF_USE_SELF_COLLISION
+    # p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
+    # p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
+    return p.setCollisionFilterGroupMask(body, link, group, mask)
+
+def set_collision_pair_mask(body1, body2, link1=BASE_LINK, link2=BASE_LINK, enable=True):
+    return p.setCollisionFilterPair(body1, link1, body2, link2, enableCollision=enable)
 
 def get_buffered_aabb(body, link=None, max_distance=MAX_DISTANCE, **kwargs):
     body, links = parse_body(body, link=link)
