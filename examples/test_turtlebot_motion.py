@@ -6,6 +6,7 @@ import numpy as np
 import time
 import math
 from collections import OrderedDict, defaultdict
+from itertools import combinations
 
 from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, \
     set_joint_positions, HideOutput, get_bodies, sample_placement, pairwise_collision, \
@@ -17,7 +18,7 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     get_subtree_aabb, get_pairs, get_distance_fn, get_aabb, set_all_static, step_simulation, get_bodies_in_region, \
     AABB, Profiler, pairwise_link_collision, BASE_LINK, get_collision_data, draw_pose2d, \
     normalize_interval, wrap_angle, CIRCULAR_LIMITS, wrap_interval, Euler, rescale_interval, adjust_path, \
-    contact_collision, timer, update_scene, set_aabb_buffer, set_separating_axis_collisions, get_aabb
+    contact_collision, timer, update_scene, set_aabb_buffer, set_separating_axis_collisions, get_aabb, set_pose, Pose
 
 BASE_LINK_NAME = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
@@ -33,7 +34,7 @@ def create_custom_base_limits(robot, base_limits):
 
 def sample_placements(body_surfaces, obstacles=None, savers=[], min_distances={}):
     if obstacles is None:
-        obstacles = OrderedSet(get_bodies()) - set(body_surfaces)
+        obstacles = set(get_bodies()) - set(body_surfaces)
     savers = list(savers) + [BodySaver(obstacle) for obstacle in obstacles]
     if not isinstance(min_distances, dict):
         min_distances = {body: min_distances for body in body_surfaces}
@@ -84,7 +85,7 @@ def plan_motion(robot, joints, goal_positions, attachments=[], obstacles=None, h
     moving_bodies = [robot] + attached_bodies
     if obstacles is None:
         obstacles = get_bodies()
-    obstacles = OrderedSet(obstacles) - set(moving_bodies)
+    obstacles = set(obstacles) - set(moving_bodies)
     if holonomic:
         return plan_joint_motion(robot, joints, goal_positions,
                                  attachments=attachments, obstacles=obstacles, **kwargs)
@@ -119,13 +120,14 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     for _ in range(n_obstacles):
         body = create_box(obst_width, obst_width, obst_height, color=GREY)
         initial_surfaces[body] = floor
-    obstacles = walls + list(initial_surfaces)
+    pillars = list(initial_surfaces)
+    obstacles = walls + pillars
 
     initial_conf = np.array([+floor_extent/3, -floor_extent/3, 3*PI/4])
     goal_conf = -initial_conf
 
     with HideOutput():
-        robot = load_model(TURTLEBOT_URDF, merge=True, sat=False)
+        robot = load_model(TURTLEBOT_URDF, merge=False, sat=False)
         base_joints = joints_from_names(robot, BASE_JOINTS)
         # base_link = child_link_from_joint(base_joints[-1])
         base_link = link_from_name(robot, BASE_LINK_NAME)
@@ -138,6 +140,16 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     sample_placements(initial_surfaces, obstacles=[robot] + walls,
                       savers=[BodySaver(robot, joints=base_joints, positions=goal_conf)],
                       min_distances=10e-2)
+
+    # The first calls appear to be the slowest
+    # times = []
+    # for body1, body2 in combinations(pillars, r=2):
+    #     start_time = time.time()
+    #     colliding = pairwise_collision(body1, body2)
+    #     runtime = elapsed_time(start_time)
+    #     print(colliding, runtime)
+    #     times.append(runtime)
+    # print(times)
 
     return robot, base_limits, goal_conf, obstacles
 
@@ -170,8 +182,14 @@ def test_aabb(robot):
     base_link = link_from_name(robot, BASE_LINK_NAME)
     region_aabb = AABB(lower=-np.ones(3), upper=+np.ones(3))
     draw_aabb(region_aabb)
-    step_simulation()  # Need to call before get_bodies_in_region
-    # update_scene() # TODO: https://github.com/bulletphysics/bullet3/pull/3331
+
+    # bodies = get_bodies_in_region(region_aabb)
+    # print(len(bodies), bodies)
+    # for body in get_bodies():
+    #     set_pose(body, Pose())
+
+    #step_simulation()  # Need to call before get_bodies_in_region
+    #update_scene()
     bodies = get_bodies_in_region(region_aabb)
     print(len(bodies), bodies)
     # https://github.com/bulletphysics/bullet3/search?q=broadphase
@@ -189,15 +207,15 @@ def test_aabb(robot):
 
 def test_caching(robot):
     with timer(message='{}'):
-        #update_scene()
-        step_simulation()
+        #update_scene() # 5.19752502441e-05
+        step_simulation() # 0.000210046768188
     with timer(message='{}'):
-        print(get_aabb(robot, link=None, only_collision=True))
-        #print(contact_collision())
+        #print(get_aabb(robot, link=None, only_collision=True))
+        print(contact_collision()) # 2.50339508057e-05
     for _ in range(5):
         with timer(message='{}'):
-            print(get_aabb(robot, link=None, only_collision=True))
-            #print(contact_collision())
+            #print(get_aabb(robot, link=None, only_collision=True)) # Recomputes each time
+            print(contact_collision()) # 1.69277191162e-05
 
 def main():
     parser = argparse.ArgumentParser()
@@ -258,7 +276,8 @@ def main():
     profiler.save()
     with LockRenderer(lock=args.lock):
         # TODO: draw the search tree
-        path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic, obstacles=obstacles,
+        path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic,
+                           obstacles=obstacles, self_collisions=False,
                            custom_limits=custom_limits, resolutions=resolutions,
                            use_aabb=True, cache=True, max_distance=0.,
                            restarts=2, iterations=20, smooth=20) # 20 | None

@@ -343,6 +343,7 @@ class OrderedSet(collections.OrderedDict, collections.MutableSet):
             for e in s:
                 self.add(e)
     def add(self, elem):
+        # TODO: AttributeError: 'OrderedSet' object has no attribute '_OrderedDict__root' for python2
         self[elem] = None
     def discard(self, elem):
         self.pop(elem, None)
@@ -2740,6 +2741,9 @@ def get_collision_data(body, link=BASE_LINK):
     # TODO: cache
     return [CollisionShapeData(*tup) for tup in p.getCollisionShapeData(body, link, physicsClientId=CLIENT)]
 
+def can_collide(body, link=BASE_LINK, **kwargs):
+    return len(get_collision_data(body, link=link, **kwargs)) != 0
+
 def get_data_type(data):
     return data.geometry_type if isinstance(data, CollisionShapeData) else data.visualGeometryType
 
@@ -2928,7 +2932,7 @@ def get_aabbs(body, links=None, only_collision=True):
         links = get_all_links(body)
     if only_collision:
         # TODO: return the null bounding box
-        links = [link for link in links if get_collision_data(body, link)]
+        links = [link for link in links if can_collide(body, link)]
     return [get_aabb(body, link=link) for link in links]
 
 def get_aabb(body, link=None, **kwargs):
@@ -2981,9 +2985,10 @@ def sample_aabb(aabb):
     return np.random.uniform(lower, upper)
 
 def get_bodies_in_region(aabb):
-    (lower, upper) = aabb
+    lower, upper = aabb
     #step_simulation() # Like visibility, need to step first
     #update_scene()
+    # TODO: verify that no longer need to call either of these
     bodies = p.getOverlappingObjects(lower, upper, physicsClientId=CLIENT)
     return [] if bodies is None else sorted(bodies)
 
@@ -3519,7 +3524,8 @@ def get_moving_pairs(body, moving_joints):
     Do not check all fixed and fixed pairs
     Check all moving pairs with a common
     """
-    moving_links = get_moving_links(body, moving_joints)
+    # TODO: compute connected components minus joint edges
+    moving_links = list(filter(lambda link: can_collide(body, link), get_moving_links(body, moving_joints)))
     for link1, link2 in combinations(moving_links, 2):
         ancestors1 = set(get_joint_ancestors(body, link1)) & set(moving_joints)
         ancestors2 = set(get_joint_ancestors(body, link2)) & set(moving_joints)
@@ -3527,8 +3533,8 @@ def get_moving_pairs(body, moving_joints):
             yield link1, link2
 
 def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=True):
-    moving_links = get_moving_links(body, joints)
-    fixed_links = list(set(get_links(body)) - set(moving_links))
+    moving_links = list(filter(lambda link: can_collide(body, link), get_moving_links(body, joints)))
+    fixed_links = list(filter(lambda link: can_collide(body, link), set(get_links(body)) - set(moving_links)))
     check_link_pairs = list(product(moving_links, fixed_links))
     if only_moving:
         check_link_pairs.extend(get_moving_pairs(body, joints))
@@ -3544,7 +3550,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
     # TODO: convert most of these to keyword arguments
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
     moving_links = frozenset(link for link in get_moving_links(body, joints)
-                             if get_collision_data(body, link)) # TODO: propagate elsewhere
+                             if can_collide(body, link)) # TODO: propagate elsewhere
     attached_bodies = [attachment.child for attachment in attachments]
     moving_bodies = [CollisionPair(body, moving_links)] + list(map(parse_body, attached_bodies))
     #moving_bodies = list(flatten(flatten_links(*pair) for pair in moving_bodies)) # Introduces overhead
