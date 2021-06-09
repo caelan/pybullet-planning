@@ -19,7 +19,7 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     AABB, Profiler, pairwise_link_collision, BASE_LINK, get_collision_data, draw_pose2d, \
     normalize_interval, wrap_angle, CIRCULAR_LIMITS, wrap_interval, Euler, rescale_interval, adjust_path, \
     contact_collision, timer, update_scene, set_aabb_buffer, set_separating_axis_collisions, get_aabb, set_pose, \
-    Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION
+    Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION, base_aligned_z
 
 BASE_LINK_NAME = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
@@ -135,6 +135,7 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
         set_all_color(robot, BLUE)
     dump_body(robot)
     set_point(robot, Point(z=stable_z(robot, floor)))
+    #set_point(robot, Point(z=base_aligned_z(robot)))
     draw_pose(Pose(), parent=robot, parent_link=base_link, length=0.5)
     set_joint_positions(robot, base_joints, initial_conf)
 

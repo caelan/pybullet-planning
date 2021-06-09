@@ -6,6 +6,7 @@ from collections import namedtuple
 
 import os
 import pybullet as p
+import numpy as np
 import time
 
 from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui, set_camera, load_pybullet, \
@@ -13,7 +14,7 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
     enable_gravity, step_simulation, GRAVITY, get_time_step, elapsed_time, control_joints, get_joint_intervals, \
     velocity_control_joints, PI, set_point, Point, STATIC_MASS, NULL_ID, unit_point, unit_quat, get_box_geometry, \
     create_shape, RED, BASE_LINK, set_camera_pose, Pose, get_aabb, approximate_as_prism, get_all_links, get_aabb_center, \
-    get_point, get_difference, set_joint_limits, set_collision_margin, base_aligned_z
+    get_point, get_difference, set_joint_limits, set_collision_margin, base_aligned_z, BLACK, get_length, draw_circle
 
 # bullet3/examples/pybullet/examples
 # experimentalCcdSphereRadius.py
@@ -73,16 +74,35 @@ def create_multi_body(base_link=None, links=[]):
         #physicsClientId=CLIENT,
     )
 
+def unzip(sequence):
+    return zip(*sequence)
 
-def create_door(width=0.1, length=1, height=2, mass=1, **kwargs):
+Shape = named_tuple('Shape', *zip(*[('geom', None), ('pose', Pose()), ('color', None)]))
+
+
+def create_door(width=0.1, length=1, height=2, mass=1, handle=True, **kwargs):
     # TODO: frame, hinge, cylinder on end, sliding door, handle, knob
     geometry = get_box_geometry(width, length, height)
     door_collision, door_visual = create_shape(
-        geometry, pose=Pose(Point(y=-length/2., z=height/2.)), color=RED)# , **kwargs)
+        geometry, pose=Pose(Point(y=-length/2., z=height/2.)), **kwargs)
     door_link = LinkInfo(mass=mass, collision_id=door_collision, visual_id=door_visual,
                          parent=0, joint_type=p.JOINT_REVOLUTE, joint_axis=[0, 0, 1])
+
     links = [door_link]
+    if handle:
+        side = 0.05
+        geometry = get_box_geometry(width=side, length=side, height=5*side)
+
+        #collision_id, visual_id = create_shape_array(geoms, poses, colors)
+
+        handle_collision, handle_visual = create_shape(
+            geometry, pose=Pose(Point(x=width/2+side/2, y=-3*length / 4., z=height / 2.)), color=BLACK)
+        handle_link = LinkInfo(mass=mass, collision_id=handle_collision, visual_id=handle_visual,
+                               parent=1, joint_type=p.JOINT_FIXED)
+        links.append(handle_link)
+
     body = create_multi_body(links=links)
+    #draw_circle(center=unit_point(), radius=width/2., parent=body, parent_link=0)
     #set_joint_limits(body, link=0, lower=-PI, upper=PI)
     return body
 
