@@ -1985,6 +1985,8 @@ def get_joint_limits(body, joint):
     joint_info = get_joint_info(body, joint)
     return joint_info.jointLowerLimit, joint_info.jointUpperLimit
 
+get_joint_interval = get_joint_limits # TODO: get box limits?
+
 def get_min_limit(body, joint):
     # TODO: rename to min_position
     return get_joint_limits(body, joint)[0]
@@ -1997,6 +1999,9 @@ def get_max_limit(body, joint):
 
 def get_max_limits(body, joints):
     return [get_max_limit(body, joint) for joint in joints]
+
+def get_joint_intervals(body, joints):
+    return get_min_limits(body, joints), get_max_limits(body, joints)
 
 def get_max_velocity(body, joint):
     return get_joint_info(body, joint).jointMaxVelocity
