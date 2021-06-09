@@ -1035,8 +1035,12 @@ def set_preview(enable):
     p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, enable, physicsClientId=CLIENT)
     p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, enable, physicsClientId=CLIENT)
     p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, enable, physicsClientId=CLIENT)
-    #p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING, True, physicsClientId=CLIENT)
     #p.configureDebugVisualizer(p.COV_ENABLE_WIREFRAME, True, physicsClientId=CLIENT)
+
+def synchronize_viewer():
+    # https://github.com/bulletphysics/bullet3/blob/5ae9a15ecac7bc7e71f1ec1b544a55135d7d7e32/examples/pybullet/gym/pybullet_examples/video_sync_mp4.py#L28
+    # synchronize the visualizer (rendering frames for the video mp4) with stepSimulation
+    p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING, True, physicsClientId=CLIENT)
 
 def enable_preview():
     set_preview(enable=True)
@@ -1067,7 +1071,7 @@ class LockRenderer(Saver):
         if self.state != CLIENTS[self.client]:
            set_renderer(enable=self.state)
 
-def connect(use_gui=True, shadows=True, color=None, width=None, height=None):
+def connect(use_gui=True, shadows=True, color=None, width=None, height=None, mp4=None, mp4fps=240):
     # Shared Memory: execute the physics simulation and rendering in a separate process
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/vrminitaur.py#L7
     # make sure to compile pybullet with PYBULLET_USE_NUMPY enabled
@@ -1077,16 +1081,17 @@ def connect(use_gui=True, shadows=True, color=None, width=None, height=None):
     method = p.GUI if use_gui else p.DIRECT
     with HideOutput():
         #  --window_backend=2 --render_device=0'
-        # options="--mp4=\"test.mp4\' --mp4fps=240"
         # options="--minGraphicsUpdateTimeMs=16000"
-        options = ''
+        options = []
+        if mp4 is not None:
+            options.append('--mp4="{}" --mp4fps={}'.format(mp4, mp4fps))
         if color is not None:
-            options += ' --background_color_red={} --background_color_green={} --background_color_blue={}'.format(*color)
+            options.append('--background_color_red={} --background_color_green={} --background_color_blue={}'.format(*color))
         if width is not None:
-            options += ' --width={}'.format(width)
+            options.append(' --width={}'.format(width))
         if height is not None:
-            options += ' --height={}'.format(height)
-        sim_id = p.connect(method, options=options) # key=None,
+            options.append(' --height={}'.format(height))
+        sim_id = p.connect(method, options=' '.join(options)) # key=None,
         #sim_id = p.connect(p.GUI, options='--opengl2') if use_gui else p.connect(p.DIRECT)
         # --mouse_move_multiplier=0.400000  (mouse sensitivity)
         # --mouse_wheel_multiplier=0.400000 (mouse wheel sensitivity)
@@ -1102,7 +1107,6 @@ def connect(use_gui=True, shadows=True, color=None, width=None, height=None):
     CLIENTS[sim_id] = True if use_gui else None
     if use_gui:
         # p.COV_ENABLE_PLANAR_REFLECTION
-        # p.COV_ENABLE_SINGLE_STEP_RENDERING
         disable_preview()
         p.configureDebugVisualizer(p.COV_ENABLE_TINY_RENDERER, False, physicsClientId=sim_id) # TODO: does this matter?
         p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, shadows, physicsClientId=sim_id)
@@ -1760,7 +1764,7 @@ def set_euler(body, euler):
 
 def set_position(body, x=None, y=None, z=None):
     # TODO: get_position
-    position = get_point(body)
+    position = list(get_point(body))
     for i, v in enumerate([x, y, z]):
         if v is not None:
             position[i] = v
@@ -1768,7 +1772,7 @@ def set_position(body, x=None, y=None, z=None):
     return position
 
 def set_orientation(body, roll=None, pitch=None, yaw=None):
-    orientation = get_euler(body)
+    orientation = list(get_euler(body))
     for i, v in enumerate([roll, pitch, yaw]):
         if v is not None:
             orientation[i] = v
@@ -2293,6 +2297,7 @@ def set_joint_limits(body, link, lower, upper, **kwargs):
     set_dynamics(body, link, jointLowerLimit=lower, jointUpperLimit=upper)
 
 def set_collision_margin(body, link=BASE_LINK, margin=0.):
+    # TODO: might only be for soft bodies
     set_dynamics(body, link, collisionMargin=margin)
 
 def set_mass(body, mass, link=BASE_LINK): # mass in kg
@@ -3044,6 +3049,12 @@ def get_aabb_extent(aabb):
 def get_center_extent(body, **kwargs):
     aabb = get_aabb(body, **kwargs)
     return get_aabb_center(aabb), get_aabb_extent(aabb)
+
+def get_aabb_base(aabb):
+    lower, upper = aabb
+    center = get_aabb_center(aabb)
+    center[2] = lower[2]
+    return center
 
 def aabb2d_from_aabb(aabb):
     (lower, upper) = aabb
@@ -3920,12 +3931,12 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
 
 # TODO: extend these to oobbs
 
+def base_aligned(body, target=np.zeros(3)):
+    return (target - get_aabb_base(get_aabb(body))) + get_point(body)
+
 def base_aligned_z(body, z=0.):
     # TODO: generalize to other dimensions and fraction along the dimension
-    target = np.array([0, 0, z])
-    aabb = get_aabb(body)
-    lower, upper = aabb
-    return (target - lower + get_point(body))[2]
+    return base_aligned(body, target=np.array([0, 0, z]))[2]
 
 def stable_z_on_aabb(body, aabb):
     center, extent = get_center_extent(body)
