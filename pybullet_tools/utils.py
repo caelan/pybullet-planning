@@ -912,9 +912,14 @@ def load_model(rel_path, pose=None, **kwargs):
 
 #TOOLS_VERSION = date.date()
 
-def get_version(): # year-month-0-day format
+def get_pybullet_version(): # year-month-0-day format
+    # TODO: check that API is up-to-date
+    # compiled_with_numpy()
     s = str(p.getAPIVersion(physicsClientId=CLIENT))
     return datetime.date(year=int(s[:4]), month=int(s[4:6]), day=int(s[7:9]))
+
+def compiled_with_numpy():
+    return bool(p.isNumpyEnabled())
 
 #####################################
 
@@ -984,7 +989,6 @@ def set_separating_axis_collisions(enable=True):
     #p.setCollisionFilterPair()
     #p.setCollisionFilterGroupMask()
     #p.setInternalSimFlags()
-    #p.getAPIVersion() # TODO: check that API is up-to-date
 
 def simulate_for_sim_duration(sim_duration, real_dt=0, frequency=INF):
     t0 = time.time()
@@ -1440,17 +1444,21 @@ def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, 
                                       cameraUpVector=up_vector, physicsClientId=CLIENT)
     projection_matrix = get_projection_matrix(width, height, vertical_fov, near, far)
 
-    # p.isNumpyEnabled() # copying pixels from C/C++ to Python can be really slow for large images, unless you compile PyBullet using NumPy
+    # assert compiled_with_numpy() # copying pixels from C/C++ to Python can be really slow for large images, unless you compile PyBullet using NumPy
     flags = get_image_flags(segment=segment, **kwargs)
     # DIRECT mode has no OpenGL, so it requires ER_TINY_RENDERER
     renderer = p.ER_TINY_RENDERER if tiny else p.ER_BULLET_HARDWARE_OPENGL
-    rgb, d, seg = p.getCameraImage(width, height,
-                                   viewMatrix=view_matrix,
-                                   projectionMatrix=projection_matrix,
-                                   shadow=False, # only applies to ER_TINY_RENDERER
-                                   flags=flags,
-                                   renderer=renderer,
-                                   physicsClientId=CLIENT)[2:]
+    width, height, rgb, d, seg = p.getCameraImage(width, height,
+                                                  viewMatrix=view_matrix,
+                                                  projectionMatrix=projection_matrix,
+                                                  shadow=False, # only applies to ER_TINY_RENDERER
+                                                  flags=flags,
+                                                  renderer=renderer,
+                                                  physicsClientId=CLIENT)
+    if not compiled_with_numpy():
+        rgb = np.reshape(rgb, [height, width, -1]) # 4
+        d = np.reshape(d, [height, width])
+        seg = np.reshape(seg, [height, width])
     
     depth = far * near / (far - (far - near) * d)
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/pointCloudFromCameraImage.py
@@ -3011,9 +3019,6 @@ def aabb_intersection(*aabbs):
         return None
     return aabb
 
-def get_subtree_aabb(body, root_link=BASE_LINK):
-    return aabb_union(get_aabb(body, link) for link in get_link_subtree(body, root_link))
-
 def get_aabbs(body, links=None, only_collision=True):
     if links is None:
         links = get_all_links(body)
@@ -3035,6 +3040,9 @@ def get_aabb(body, link=None, **kwargs):
     # when you don't pass the link index, or use -1, you get the AABB of the base
     # Always recomputes (no caching)
     return AABB(*p.getAABB(body, linkIndex=link, physicsClientId=CLIENT))
+
+def get_subtree_aabb(body, root_link=BASE_LINK, **kwargs):
+    return aabb_union(get_aabbs(body, links=get_link_subtree(body, root_link), **kwargs))
 
 get_lower_upper = get_aabb
 
@@ -3951,7 +3959,7 @@ def is_placed_on_aabb(body, bottom_aabb, above_epsilon=1e-2, below_epsilon=0.0):
     top_aabb = get_aabb(body) # TODO: approximate_as_prism
     top_z_min = top_aabb[0][2]
     bottom_z_max = bottom_aabb[1][2]
-    return ((bottom_z_max - below_epsilon) <= top_z_min <= (bottom_z_max + above_epsilon)) and \
+    return ((bottom_z_max - abs(below_epsilon)) <= top_z_min <= (bottom_z_max + abs(above_epsilon))) and \
            (aabb_contains_aabb(aabb2d_from_aabb(top_aabb), aabb2d_from_aabb(bottom_aabb)))
 
 def is_placement(body, surface, **kwargs):
