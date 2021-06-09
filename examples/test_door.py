@@ -10,28 +10,33 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
     HideOutput, draw_global_system, dump_body, get_sample_fn, get_movable_joints, set_joint_positions, \
     enable_gravity, step_simulation, GRAVITY, get_time_step, elapsed_time, control_joints, get_joint_intervals, \
     velocity_control_joints, PI, set_point, Point, STATIC_MASS, NULL_ID, unit_point, unit_quat, get_box_geometry, \
-    create_shape, RED, BASE_LINK, set_camera_pose
+    create_shape, RED, BASE_LINK, set_camera_pose, Pose, get_aabb, approximate_as_prism, get_all_links, get_aabb_center, \
+    get_point, get_difference, set_joint_limits, set_collision_margin
 
 # bullet3/examples/pybullet/examples
 # experimentalCcdSphereRadius.py
 # heightfield.py
 # signedDistanceField.py
 
-def create_door(width=1, length=0.1, height=2, mass=1, **kwargs):
+def create_door(width=0.1, length=1, height=2, mass=1, **kwargs):
+    # TODO: frame, hinge, cylinder on end, sliding door, handle, knob
+    # TODO: better way of creating these
     geometry = get_box_geometry(width, length, height)
-    collision_id, visual_id = create_shape(geometry, **kwargs)
+    door_collision, door_visual = create_shape(
+        geometry, pose=Pose(Point(y=-length/2., z=height/2.)), **kwargs)
     body = p.createMultiBody(
         baseMass=STATIC_MASS,
         baseCollisionShapeIndex=NULL_ID,
         baseVisualShapeIndex=NULL_ID,
-        basePosition=Point(z=height/2.),
+        #basePosition=Point(z=height/2.),
+        basePosition=unit_point(),
         baseOrientation=unit_quat(),
         #baseInertialFramePosition=unit_point(),
         #baseInertialFrameOrientation=unit_quat(),
         linkMasses=[mass],
-        linkCollisionShapeIndices=[collision_id],
-        linkVisualShapeIndices=[visual_id],
-        linkPositions=[unit_point()],
+        linkCollisionShapeIndices=[door_collision],
+        linkVisualShapeIndices=[door_visual],
+        linkPositions=[Point()],
         linkOrientations=[unit_quat()],
         linkInertialFramePositions=[unit_point()],
         linkInertialFrameOrientations=[unit_quat()],
@@ -40,6 +45,7 @@ def create_door(width=1, length=0.1, height=2, mass=1, **kwargs):
         linkJointAxis=[[0, 0, 1]],
         #physicsClientId=CLIENT,
     )
+    set_joint_limits(body, link=0, lower=-PI, upper=PI)
     return body
 
 def main():
@@ -60,15 +66,27 @@ def main():
     with HideOutput():
         plane = load_pybullet('plane.urdf', fixed_base=True)
         #plane = load_model('plane.urdf')
-        #door = load_pybullet('models/door.urdf', fixed_base=True) # From drake
-        #set_point(door, Point(z=-.1))
+        set_point(plane, Point(z=-1e-3))
 
-        door = create_door()
+        door = load_pybullet('models/door.urdf', fixed_base=True) # From drake
+        #set_point(door, Point(z=-.1))
+        #door = create_door()
+
         door_joints = get_movable_joints(door)
+        door_links = get_all_links(door)
+        aabb = get_aabb(door)
+        center = get_aabb_center(aabb)
+
+        print(approximate_as_prism(door, link=door_links[-1]))
+        origin = get_point(door) - center
+        origin[2] += aabb[0][2]
+        print(origin)
+        set_point(door, origin)
+        #set_collision_margin(door, link=0, margin=0.)
 
     dump_body(door)
     sample_fn = get_sample_fn(door, door_joints)
-    set_joint_positions(door, door_joints, sample_fn())
+    #set_joint_positions(door, door_joints, sample_fn())
     # while True:
     #     positions = sample_fn()
     #     set_joint_positions(door, door_joints, positions)
@@ -78,6 +96,7 @@ def main():
     #control_joints(door, door_joints, positions=lower)
     velocity_control_joints(door, door_joints, velocities=[PI / 4]) # Able to exceed limits
 
+    wait_if_gui('Begin?')
     enable_gravity()
     #p.setGravity(-GRAVITY, 0, 0)
     dt = get_time_step()

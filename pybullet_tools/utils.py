@@ -2254,6 +2254,14 @@ def set_dynamics(body, link=BASE_LINK, **kwargs):
     # TODO: iterate over all links
     p.changeDynamics(body, link, physicsClientId=CLIENT, **kwargs)
 
+def set_joint_limits(body, link, lower, upper, **kwargs):
+    # NOTE that at the moment, the joint limits are not updated in 'getJointInfo'!
+    # collisionMargin
+    set_dynamics(body, link, jointLowerLimit=lower, jointUpperLimit=upper)
+
+def set_collision_margin(body, link=BASE_LINK, margin=0.):
+    set_dynamics(body, link, collisionMargin=margin)
+
 def set_mass(body, mass, link=BASE_LINK): # mass in kg
     set_dynamics(body, link=link, mass=mass)
 
@@ -3833,6 +3841,13 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
 # Placements
 
 # TODO: extend these to oobbs
+
+def base_aligned_z(body, z=0.):
+    # TODO: generalize to other dimensions and fraction along the dimension
+    aabb = get_aabb(body)
+    lower, upper = aabb
+    center = get_aabb_center(aabb)
+    return (center[2] - get_point(body)) + (z - lower[2])
 
 def stable_z_on_aabb(body, aabb):
     center, extent = get_center_extent(body)
