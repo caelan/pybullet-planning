@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import pybullet as p
 import time
+import numpy as np
 
 from pybullet_tools.pr2_utils import TOP_HOLDING_LEFT_ARM, PR2_URDF, DRAKE_PR2_URDF, \
     SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, get_disabled_collisions, REST_LEFT_ARM, rightarm_from_leftarm
@@ -11,7 +12,7 @@ from pybullet_tools.utils import set_base_values, joint_from_name, quat_from_eul
     set_joint_positions, add_data_path, connect, plan_base_motion, plan_joint_motion, enable_gravity, \
     joint_controller, dump_body, load_model, joints_from_names, wait_if_gui, disconnect, get_joint_positions, \
     get_link_pose, link_from_name, HideOutput, get_pose, wait_if_gui, load_pybullet, set_quat, Euler, PI, RED, add_line, \
-    wait_for_duration, LockRenderer
+    wait_for_duration, LockRenderer, base_aligned_z, Point, set_point, get_aabb, stable_z_on_aabb, AABB
 
 # TODO: consider making this a function
 SLEEP = None # None | 0.05
@@ -125,6 +126,15 @@ def main(use_pr2_drake=True):
     with HideOutput():
         pr2 = load_model(pr2_urdf, fixed_base=True) # TODO: suppress warnings?
     dump_body(pr2)
+
+    z = base_aligned_z(pr2)
+    print(z)
+    #z = stable_z_on_aabb(pr2, AABB(np.zeros(3), np.zeros(3)))
+    print(z)
+
+    set_point(pr2, Point(z=z))
+    print(get_aabb(pr2))
+    wait_if_gui()
 
     base_start = (-2, -2, 0)
     base_goal = (2, 2, 0)

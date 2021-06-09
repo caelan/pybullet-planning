@@ -1594,6 +1594,9 @@ def tform_from_pose(pose):
     tform[:3,:3] = matrix_from_quat(quat)
     return tform
 
+def pose_from_point_quat(point, quat):
+    return point, quat
+
 def pose_from_tform(tform):
     return point_from_tform(tform), quat_from_matrix(matrix_from_tform(tform))
 
@@ -1741,6 +1744,23 @@ def set_quat(body, quat):
 
 def set_euler(body, euler):
     set_quat(body, quat_from_euler(euler))
+
+def set_position(body, x=None, y=None, z=None):
+    # TODO: get_position
+    position = get_point(body)
+    for i, v in enumerate([x, y, z]):
+        if v is not None:
+            position[i] = v
+    set_point(body, position)
+    return position
+
+def set_orientation(body, roll=None, pitch=None, yaw=None):
+    orientation = get_euler(body)
+    for i, v in enumerate([roll, pitch, yaw]):
+        if v is not None:
+            orientation[i] = v
+    set_euler(body, orientation)
+    return orientation
 
 def pose_from_pose2d(pose2d, z=0.):
     x, y, theta = pose2d
@@ -3844,10 +3864,10 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
 
 def base_aligned_z(body, z=0.):
     # TODO: generalize to other dimensions and fraction along the dimension
+    target = np.array([0, 0, z])
     aabb = get_aabb(body)
     lower, upper = aabb
-    center = get_aabb_center(aabb)
-    return (center[2] - get_point(body)) + (z - lower[2])
+    return (target - lower + get_point(body))[2]
 
 def stable_z_on_aabb(body, aabb):
     center, extent = get_center_extent(body)
