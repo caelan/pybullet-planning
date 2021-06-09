@@ -2,82 +2,21 @@
 
 from __future__ import print_function
 
-from collections import namedtuple
-
 import os
 import pybullet as p
-import numpy as np
 import time
 
-from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui, set_camera, load_pybullet, \
-    HideOutput, draw_global_system, dump_body, get_sample_fn, get_movable_joints, set_joint_positions, \
-    enable_gravity, step_simulation, GRAVITY, get_time_step, elapsed_time, control_joints, get_joint_intervals, \
-    velocity_control_joints, PI, set_point, Point, STATIC_MASS, NULL_ID, unit_point, unit_quat, get_box_geometry, \
-    create_shape, RED, BASE_LINK, set_camera_pose, Pose, get_aabb, approximate_as_prism, get_all_links, get_aabb_center, \
-    get_point, get_difference, set_joint_limits, set_collision_margin, base_aligned_z, BLACK, get_length, draw_circle
+from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui, load_pybullet, \
+    HideOutput, draw_global_system, dump_body, get_sample_fn, get_movable_joints, enable_gravity, step_simulation, \
+    get_time_step, elapsed_time, get_joint_intervals, \
+    velocity_control_joints, PI, set_point, Point, get_box_geometry, \
+    create_shape, set_camera_pose, Pose, get_all_links, base_aligned_z, BLACK, LinkInfo, create_multi_body
+
 
 # bullet3/examples/pybullet/examples
 # experimentalCcdSphereRadius.py
 # heightfield.py
 # signedDistanceField.py
-
-LINK_INFO_DEFAULT = [('mass', STATIC_MASS), ('collision_id', NULL_ID), ('visual_id', NULL_ID),
-                     ('point', unit_point()), ('quat', unit_quat()),
-                     ('inertial_point', unit_point()), ('inertial_quat', unit_quat()),
-                     ('parent', 0), ('joint_type', p.JOINT_FIXED), ('joint_axis', unit_point())]
-
-def named_tuple(name, fields, defaults=None):
-    NT = namedtuple(name, fields)
-    if defaults is not None:
-        assert len(fields) == len(defaults)
-        NT.__new__.__defaults__ = defaults
-    return NT
-
-LinkInfo = named_tuple('LinkInfo', *zip(*LINK_INFO_DEFAULT))
-
-def dict_from_kwargs(**kwargs):
-    return kwargs
-
-
-def create_multi_body(base_link=None, links=[]):
-    assert base_link or links
-    if base_link is None:
-        base_link = LinkInfo()
-    masses = [link.mass for link in links]
-    collision_ids = [link.collision_id for link in links]
-    visual_ids = [link.visual_id for link in links]
-    points = [link.point for link in links]
-    quats = [link.quat for link in links]
-    inertial_points = [link.inertial_point for link in links]
-    inertial_quats = [link.inertial_quat for link in links]
-    parents = [link.parent for link in links]
-    joint_types = [link.joint_type for link in links]
-    joint_axes = [link.joint_axis for link in links]
-    return p.createMultiBody(
-        baseMass=base_link.mass,
-        baseCollisionShapeIndex=base_link.collision_id,
-        baseVisualShapeIndex=base_link.visual_id,
-        basePosition=base_link.point,
-        baseOrientation=base_link.quat,
-        # baseInertialFramePosition=base_link.inertial_point,
-        # baseInertialFrameOrientation=base_link.inertial_quat,
-        linkMasses=masses,
-        linkCollisionShapeIndices=collision_ids,
-        linkVisualShapeIndices=visual_ids,
-        linkPositions=points,
-        linkOrientations=quats,
-        linkInertialFramePositions=inertial_points,
-        linkInertialFrameOrientations=inertial_quats,
-        linkParentIndices=parents,
-        linkJointTypes=joint_types,
-        linkJointAxis=joint_axes,
-        #physicsClientId=CLIENT,
-    )
-
-def unzip(sequence):
-    return zip(*sequence)
-
-Shape = named_tuple('Shape', *zip(*[('geom', None), ('pose', Pose()), ('color', None)]))
 
 
 def create_door(width=0.1, length=1, height=2, mass=1, handle=True, **kwargs):

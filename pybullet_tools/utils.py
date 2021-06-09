@@ -195,6 +195,12 @@ def list_paths(directory):
 
 ##################################################
 
+def dict_from_kwargs(**kwargs):
+    return kwargs
+
+def unzip(sequence):
+    return zip(*sequence)
+
 def safe_zip(sequence1, sequence2): # TODO: *args
     sequence1, sequence2 = list(sequence1), list(sequence2)
     assert len(sequence1) == len(sequence2)
@@ -330,6 +336,13 @@ def value_or_id(value):
     if is_hashable(value):
         return value
     return id(value) # TODO: prefix that distinguishes as id
+
+def named_tuple(name, fields, defaults=None):
+    NT = namedtuple(name, fields)
+    if defaults is not None:
+        assert len(fields) == len(defaults)
+        NT.__new__.__defaults__ = defaults
+    return NT
 
 class OrderedSet(collections.OrderedDict, collections.MutableSet):
     # TODO: https://stackoverflow.com/questions/1653970/does-python-have-an-ordered-set
@@ -2448,6 +2461,8 @@ def plural(word):
         return word
     return word + 's'
 
+Shape = named_tuple('Shape', *unzip([('geom', None), ('pose', Pose()), ('color', None)]))
+
 def create_shape_array(geoms, poses, colors=None):
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/pybullet.c
     # createCollisionShape: height
@@ -2481,9 +2496,52 @@ def create_shape_array(geoms, poses, colors=None):
 
 #####################################
 
+LinkInfo = named_tuple('LinkInfo', *unzip(
+    [('mass', STATIC_MASS), ('collision_id', NULL_ID), ('visual_id', NULL_ID),
+     ('point', unit_point()), ('quat', unit_quat()),
+     ('inertial_point', unit_point()), ('inertial_quat', unit_quat()),
+     ('parent', 0), ('joint_type', p.JOINT_FIXED), ('joint_axis', unit_point())]))
+
 def create_body(collision_id=NULL_ID, visual_id=NULL_ID, mass=STATIC_MASS):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
+
+def create_multi_body(base_link=None, links=[]):
+    assert base_link or links
+    if base_link is None:
+        base_link = LinkInfo()
+    masses = [link.mass for link in links]
+    collision_ids = [link.collision_id for link in links]
+    visual_ids = [link.visual_id for link in links]
+    points = [link.point for link in links]
+    quats = [link.quat for link in links]
+    inertial_points = [link.inertial_point for link in links]
+    inertial_quats = [link.inertial_quat for link in links]
+    parents = [link.parent for link in links]
+    joint_types = [link.joint_type for link in links]
+    joint_axes = [link.joint_axis for link in links]
+    return p.createMultiBody(
+        baseMass=base_link.mass,
+        baseCollisionShapeIndex=base_link.collision_id,
+        baseVisualShapeIndex=base_link.visual_id,
+        basePosition=base_link.point,
+        baseOrientation=base_link.quat,
+        # baseInertialFramePosition=base_link.inertial_point,
+        # baseInertialFrameOrientation=base_link.inertial_quat,
+        linkMasses=masses,
+        linkCollisionShapeIndices=collision_ids,
+        linkVisualShapeIndices=visual_ids,
+        linkPositions=points,
+        linkOrientations=quats,
+        linkInertialFramePositions=inertial_points,
+        linkInertialFrameOrientations=inertial_quats,
+        linkParentIndices=parents,
+        linkJointTypes=joint_types,
+        linkJointAxis=joint_axes,
+        #physicsClientId=CLIENT,
+    )
+
+#####################################
 
 CARTESIAN_TYPES = {
     'x': (p.JOINT_PRISMATIC, [1, 0, 0]),
