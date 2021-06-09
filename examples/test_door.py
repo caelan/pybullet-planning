@@ -10,7 +10,8 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
     HideOutput, draw_global_system, dump_body, get_sample_fn, get_movable_joints, enable_gravity, step_simulation, \
     get_time_step, elapsed_time, get_joint_intervals, \
     velocity_control_joints, PI, set_point, Point, get_box_geometry, \
-    create_shape, set_camera_pose, Pose, get_all_links, base_aligned_z, BLACK, LinkInfo, create_multi_body
+    create_shape, set_camera_pose, Pose, get_all_links, base_aligned_z, BLACK, LinkInfo, create_multi_body, \
+    Shape, create_shape_array, unzip, STATIC_MASS
 
 
 # bullet3/examples/pybullet/examples
@@ -19,26 +20,49 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
 # signedDistanceField.py
 
 
-def create_door(width=0.1, length=1, height=2, mass=1, handle=True, **kwargs):
-    # TODO: frame, hinge, cylinder on end, sliding door, handle, knob
+def create_door(width=0.08, length=1, height=2, mass=1, handle=True, frame=True, **kwargs):
+    # TODO: hinge, cylinder on end, sliding door, knob
     geometry = get_box_geometry(width, length, height)
+    hinge = 0 # -width/2
     door_collision, door_visual = create_shape(
-        geometry, pose=Pose(Point(y=-length/2., z=height/2.)), **kwargs)
+        geometry, pose=Pose(Point(x=hinge, y=-length/2., z=height/2.)), **kwargs)
     door_link = LinkInfo(mass=mass, collision_id=door_collision, visual_id=door_visual,
                          parent=0, joint_type=p.JOINT_REVOLUTE, joint_axis=[0, 0, 1])
 
     links = [door_link]
     if handle:
-        side = 0.05
-        geometry = get_box_geometry(width=side, length=side, height=5*side)
-
-        #collision_id, visual_id = create_shape_array(geoms, poses, colors)
-
-        handle_collision, handle_visual = create_shape(
-            geometry, pose=Pose(Point(x=width/2+side/2, y=-3*length / 4., z=height / 2.)), color=BLACK)
-        handle_link = LinkInfo(mass=mass, collision_id=handle_collision, visual_id=handle_visual,
-                               parent=1, joint_type=p.JOINT_FIXED)
+        side = 0.04
+        handle_height = 5*side
+        point = Point(x=width/2+side/2+side, y=-3*length / 4., z=height / 2.)
+        shapes = [
+            Shape(get_box_geometry(width=side, length=side, height=handle_height), color=BLACK),
+            Shape(get_box_geometry(width=side, length=side, height=side),
+                  pose=Pose(Point(x=-side, z=(handle_height - side)/2.)), color=BLACK),
+            Shape(get_box_geometry(width=side, length=side, height=side),
+                  pose=Pose(Point(x=-side, z=-(handle_height - side)/2.)), color=BLACK),
+        ]
+        handle_collision, handle_visual = create_shape_array(*unzip(shapes))
+        handle_link = LinkInfo(mass=1, collision_id=handle_collision, visual_id=handle_visual,
+                               point=point, parent=1, joint_type=p.JOINT_FIXED)
         links.append(handle_link)
+
+    if frame:
+        # TODO: could be part of the base link instead
+        pad = 0.1
+        #point = Point(x=width/2+side/2+side, y=-3*length / 4., z=height / 2.)
+        shapes = [
+            Shape(get_box_geometry(width=width, length=length+2*pad, height=pad),
+                  pose=Pose(Point(z=height/2.+pad/2.)), color=BLACK),
+            Shape(get_box_geometry(width=width, length=pad, height=height),
+                  pose=Pose(Point(y=(length + pad)/2.)), color=BLACK),
+            Shape(get_box_geometry(width=width, length=pad, height=height),
+                  pose=Pose(Point(y=-(length + pad) / 2.)), color=BLACK),
+        ]
+        frame_collision, frame_visual = create_shape_array(*unzip(shapes))
+        frame_link = LinkInfo(mass=STATIC_MASS, collision_id=frame_collision, visual_id=frame_visual,
+                              point=Point(y=-length/2., z=height/2.),
+                              parent=0, joint_type=p.JOINT_FIXED)
+        links.append(frame_link)
 
     body = create_multi_body(links=links)
     #draw_circle(center=unit_point(), radius=width/2., parent=body, parent_link=0)
