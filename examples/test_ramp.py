@@ -4,17 +4,20 @@ from __future__ import print_function
 
 import argparse
 import time
-
 import numpy as np
+
+from itertools import product
 
 from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui, load_pybullet, \
     draw_global_system, dump_body, enable_gravity, step_simulation, \
     get_time_step, elapsed_time, set_point, Point, set_camera_pose, set_position, create_box, BLUE, synchronize_viewer, \
-    set_renderer, irange, INF, create_cylinder, create_sphere, create_capsule, set_euler, get_velocity
+    set_renderer, irange, INF, create_cylinder, create_sphere, create_capsule, set_euler, get_velocity, create_faces, \
+    STATIC_MASS, mesh_from_points, RED
 
 
-def main(use_turtlebot=False):
+def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('-shape', default='box', choices=['box', 'sphere', 'cylinder', 'capsule'])
     parser.add_argument('-video', action='store_true')
     args = parser.parse_args()
     video = 'video.mp4' if args.video else None
@@ -32,20 +35,28 @@ def main(use_turtlebot=False):
     #plane = load_model('plane.urdf')
     set_point(plane, Point(z=-1e-3))
 
-    shape = 'capsule'
+    half = 0.5
+    vertices = [Point(s1*half, s2*half, 0) for s1, s2 in product([+1, -1], repeat=2)] + \
+               [Point(
+                   -half, s*half, half) for s in [+1, -1]]
+    mesh = mesh_from_points(vertices, under=True)
+    ramp = create_faces(mesh, mass=STATIC_MASS, color=RED)
+
+    # TODO: simulation parameters
+    # TODO: object dynamics parameters
     mass = 1
     color = BLUE
     side = 0.1
-    if shape == 'box':
+    if args.shape == 'box':
         obj = create_box(w=side, l=side, h=side, mass=mass, color=color)
-    elif shape == 'sphere':
+    elif args.shape == 'sphere':
         obj = create_sphere(radius=side, mass=mass, color=color)
-    elif shape == 'cylinder':
+    elif args.shape == 'cylinder':
         obj = create_cylinder(radius=side, height=side, mass=mass, color=color)
-    elif shape == 'capsule':
+    elif args.shape == 'capsule':
         obj = create_capsule(radius=side, height=side, mass=mass, color=color)
     else:
-        raise ValueError(shape)
+        raise ValueError(args.shape)
     set_euler(obj, np.random.uniform(0, np.math.radians(1), 3))
 
     #set_velocity(obj, linear=Point(x=-1))
