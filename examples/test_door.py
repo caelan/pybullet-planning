@@ -74,7 +74,7 @@ def create_door(width=0.08, length=1, height=2, mass=1, handle=True, frame=True,
 
 IGNORE_EXT = ['.png', '.gif', '.jpeg', '.py', '.mtl']
 
-def main(use_turtlebot=False):
+def main(use_turtlebot=True):
     parser = argparse.ArgumentParser()
     parser.add_argument('-video', action='store_true')
     args = parser.parse_args()
@@ -98,33 +98,32 @@ def main(use_turtlebot=False):
     start_x = +2
     target_x = -2
 
-    with HideOutput():
-        plane = load_pybullet('plane.urdf', fixed_base=True)
-        #plane = load_model('plane.urdf')
-        set_point(plane, Point(z=-1e-3))
+    plane = load_pybullet('plane.urdf', fixed_base=True)
+    #plane = load_model('plane.urdf')
+    set_point(plane, Point(z=-1e-3))
 
-        #door = load_pybullet('models/door.urdf', fixed_base=True) # From drake
-        #set_point(door, Point(z=-.1))
-        door = create_door()
+    #door = load_pybullet('models/door.urdf', fixed_base=True) # From drake
+    #set_point(door, Point(z=-.1))
+    door = create_door()
 
-        door_joints = get_movable_joints(door)
-        door_links = get_all_links(door)
-        #set_position(door, z=base_aligned_z(door))
-        set_point(door, base_aligned(door))
-        #set_collision_margin(door, link=0, margin=0.)
+    door_joints = get_movable_joints(door)
+    door_links = get_all_links(door)
+    #set_position(door, z=base_aligned_z(door))
+    set_point(door, base_aligned(door))
+    #set_collision_margin(door, link=0, margin=0.)
 
-        if not use_turtlebot:
-            side = 0.25
-            robot = create_box(w=side, l=side, h=side, mass=5., color=BLUE)
-            set_position(robot, x=start_x)
-            #set_velocity(robot, linear=Point(x=-1))
-        else:
-            robot = load_pybullet(TURTLEBOT_URDF, merge=True, fixed_base=True)
-            robot_joints = get_movable_joints(robot)[:3]
-            set_joint_positions(robot, robot_joints, [start_x, 0, PI])
-        set_all_color(robot, BLUE)
-        set_position(robot, z=base_aligned_z(robot))
-        robot_link = get_first_link(robot)
+    if not use_turtlebot:
+        side = 0.25
+        robot = create_box(w=side, l=side, h=side, mass=5., color=BLUE)
+        set_position(robot, x=start_x)
+        #set_velocity(robot, linear=Point(x=-1))
+    else:
+        robot = load_pybullet(TURTLEBOT_URDF, merge=True, fixed_base=True)
+        robot_joints = get_movable_joints(robot)[:3]
+        set_joint_positions(robot, robot_joints, [start_x, 0, PI])
+    set_all_color(robot, BLUE)
+    set_position(robot, z=base_aligned_z(robot))
+    robot_link = get_first_link(robot)
 
     #all_bodies = get_bodies()
     dump_body(door)
@@ -162,7 +161,6 @@ def main(use_turtlebot=False):
     for step in irange(INF):
         step_simulation()
         synchronize_viewer()
-        step += 1
         if elapsed_time(last_print) >= 1:
             last_print = time.time()
             print('Step: {} | Sim time: {:.3f} sec | Elapsed time: {:.3f} sec'.format(
