@@ -14,8 +14,9 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
     create_shape, set_camera_pose, Pose, get_all_links, base_aligned_z, BLACK, LinkInfo, create_multi_body, \
     Shape, create_shape_array, unzip, STATIC_MASS, get_aabb_extent, get_aabb, set_position, base_aligned, \
     create_box, BLUE, set_velocity, add_pose_constraint, get_pose, synchronize_viewer, get_velocity, get_bodies, \
-    get_distance, get_point, set_renderer
-
+    get_distance, get_point, set_renderer, get_cylinder_geometry, pairwise_collision, TURTLEBOT_URDF, set_joint_positions, \
+    set_all_color, control_joint, irange, INF
+#from examples.test_turtlebot_motion import BASE_JOINTS
 
 # bullet3/examples/pybullet/examples
 # experimentalCcdSphereRadius.py
@@ -34,15 +35,15 @@ def create_door(width=0.08, length=1, height=2, mass=1, handle=True, frame=True,
 
     links = [door_link]
     if handle:
-        side = 0.04
-        handle_height = 5*side
-        point = Point(x=width/2+side/2+side, y=-3*length / 4., z=height / 2.)
+        diameter = 0.04
+        handle_height = 5*diameter
+        point = Point(x=width/2+diameter/2+diameter, y=-3*length / 4., z=height / 2.)
         shapes = [
-            Shape(get_box_geometry(width=side, length=side, height=handle_height), color=BLACK),
-            Shape(get_box_geometry(width=side, length=side, height=side),
-                  pose=Pose(Point(x=-side, z=(handle_height - side)/2.)), color=BLACK),
-            Shape(get_box_geometry(width=side, length=side, height=side),
-                  pose=Pose(Point(x=-side, z=-(handle_height - side)/2.)), color=BLACK),
+            Shape(get_cylinder_geometry(radius=diameter/2, height=handle_height), color=BLACK),
+            Shape(get_cylinder_geometry(radius=diameter/2, height=diameter),
+                  pose=Pose(Point(x=-diameter, z=(handle_height - diameter)/2.)), color=BLACK),
+            Shape(get_cylinder_geometry(radius=diameter/2, height=diameter),
+                  pose=Pose(Point(x=-diameter, z=-(handle_height - diameter)/2.)), color=BLACK),
         ]
         handle_collision, handle_visual = create_shape_array(*unzip(shapes))
         handle_link = LinkInfo(mass=1, collision_id=handle_collision, visual_id=handle_visual,
@@ -51,15 +52,14 @@ def create_door(width=0.08, length=1, height=2, mass=1, handle=True, frame=True,
 
     if frame:
         # TODO: could be part of the base link instead
-        pad = 0.1
-        #point = Point(x=width/2+side/2+side, y=-3*length / 4., z=height / 2.)
+        side = 0.1
         shapes = [
-            Shape(get_box_geometry(width=width, length=length+2*pad, height=pad),
-                  pose=Pose(Point(z=height/2.+pad/2.)), color=BLACK),
-            Shape(get_box_geometry(width=width, length=pad, height=height),
-                  pose=Pose(Point(y=(length + pad)/2.)), color=BLACK),
-            Shape(get_box_geometry(width=width, length=pad, height=height),
-                  pose=Pose(Point(y=-(length + pad) / 2.)), color=BLACK),
+            Shape(get_box_geometry(width=width, length=length+2*side, height=side),
+                  pose=Pose(Point(z=height/2.+side/2.)), color=BLACK),
+            Shape(get_box_geometry(width=width, length=side, height=height),
+                  pose=Pose(Point(y=(length + side)/2.)), color=BLACK),
+            Shape(get_box_geometry(width=width, length=side, height=height),
+                  pose=Pose(Point(y=-(length + side) / 2.)), color=BLACK),
         ]
         frame_collision, frame_visual = create_shape_array(*unzip(shapes))
         frame_link = LinkInfo(mass=STATIC_MASS, collision_id=frame_collision, visual_id=frame_visual,
@@ -68,11 +68,11 @@ def create_door(width=0.08, length=1, height=2, mass=1, handle=True, frame=True,
         links.append(frame_link)
 
     body = create_multi_body(links=links)
-    #draw_circle(center=unit_point(), radius=width/2., parent=body, parent_link=0)
+    #draw_circle(center=unit_point(), diameter=width/2., parent=body, parent_link=0)
     #set_joint_limits(body, link=0, lower=-PI, upper=PI)
     return body
 
-def main():
+def main(use_turtlebot=True):
     parser = argparse.ArgumentParser()
     parser.add_argument('-video', action='store_true')
     args = parser.parse_args()
@@ -93,6 +93,9 @@ def main():
     draw_global_system()
     set_camera_pose(camera_point=Point(+2, -2, +2))
 
+    start_x = +2
+    target_x = -2
+
     with HideOutput():
         plane = load_pybullet('plane.urdf', fixed_base=True)
         #plane = load_model('plane.urdf')
@@ -108,14 +111,21 @@ def main():
         set_point(door, base_aligned(door))
         #set_collision_margin(door, link=0, margin=0.)
 
-        side = 0.25
-        robot = create_box(w=side, l=side, h=side, mass=5., color=BLUE)
-        set_point(robot, Point(x=+2, z=base_aligned_z(robot)))
-        #set_velocity(robot, linear=Point(x=-1))
+        if not use_turtlebot:
+            side = 0.25
+            robot = create_box(w=side, l=side, h=side, mass=5., color=BLUE)
+            set_position(robot, x=start_x)
+            #set_velocity(robot, linear=Point(x=-1))
+        else:
+            robot = load_pybullet(TURTLEBOT_URDF, merge=True, fixed_base=True)
+            robot_joints = get_movable_joints(robot)[:3]
+            set_joint_positions(robot, robot_joints, [start_x, 0, PI])
+        set_all_color(robot, BLUE)
+        set_position(robot, z=base_aligned_z(robot))
 
-    bodies = get_bodies()
-
+    all_bodies = get_bodies()
     dump_body(door)
+    dump_body(robot)
     sample_fn = get_sample_fn(door, door_joints)
     #set_joint_positions(door, door_joints, sample_fn())
     # while True:
@@ -127,32 +137,37 @@ def main():
     #control_joints(door, door_joints, positions=lower)
     #velocity_control_joints(door, door_joints, velocities=[PI / 4]) # Able to exceed limits
 
-    target_point, target_quat = map(list, get_pose(robot))
-    target_point[0] = -2
-    add_pose_constraint(robot, pose=(target_point, target_quat), max_force=200) # TODO: velocity constraint?
+    if not use_turtlebot:
+        target_point, target_quat = map(list, get_pose(robot))
+        target_point[0] = target_x
+        add_pose_constraint(robot, pose=(target_point, target_quat), max_force=200) # TODO: velocity constraint?
+    else:
+        control_joint(robot, robot_joints[0], position=target_x, velocity=0, velocity_scale=None, max_force=300)
 
+    set_renderer(enable=True)
     if video is None:
         wait_if_gui('Begin?')
-    set_renderer(enable=True)
     enable_gravity()
     #p.setGravity(-GRAVITY, 0, 0)
     dt = get_time_step()
-    print('Time step:', dt)
+    print('Time step: {:.6f} sec'.format(dt))
     #sleep_per_step = dt/2.
     sleep_per_step = 0.01
 
-    steps = 0
-    start_time = time.time()
-    while True:
+    start_time = last_print = time.time()
+    for step in irange(INF):
         step_simulation()
         synchronize_viewer()
-        steps += 1
-        print('Step: {} | Sim time: {:.3f} | Elapsed time: {:.3f}'.format(
-            steps, steps*dt, elapsed_time(start_time)))
+        step += 1
+        if elapsed_time(last_print) >= 1:
+            last_print = time.time()
+            print('Step: {} | Sim time: {:.3f} sec | Elapsed time: {:.3f} sec'.format(
+                step, step*dt, elapsed_time(start_time)))
         #if video is None:
         #   time.sleep(sleep_per_step)
-        if get_distance(target_point, get_point(robot)) < 1e-3: # TODO: velocity condition
-            break
+        #print(pairwise_collision(robot, door))
+        #if get_distance(target_point, get_point(robot)) < 1e-3: # TODO: velocity condition
+        #    break
 
     if video is None:
         wait_if_gui('Finish?')
