@@ -288,8 +288,8 @@ def main():
     resolutions = 1.0*DEFAULT_RESOLUTION*np.ones(len(base_joints))
     set_all_static() # Doesn't seem to affect
 
-    test_aabb(robot)
-    test_caching(robot, obstacles)
+    #test_aabb(robot)
+    #test_caching(robot, obstacles)
     #return
 
     #########################
@@ -304,7 +304,7 @@ def main():
                            obstacles=obstacles, self_collisions=False,
                            custom_limits=custom_limits, resolutions=resolutions,
                            use_aabb=True, cache=True, max_distance=0.,
-                           restarts=2, iterations=20, smooth=20) # 20 | None
+                           restarts=5, iterations=50, smooth=20) # 20 | None
         saver.restore()
     #wait_for_duration(duration=1e-3)
     profiler.restore()
