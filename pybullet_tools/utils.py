@@ -1075,7 +1075,7 @@ class LockRenderer(Saver):
         if self.state != CLIENTS[self.client]:
            set_renderer(enable=self.state)
 
-def connect(use_gui=True, shadows=True, color=None, width=None, height=None, mp4=None, mp4fps=240):
+def connect(use_gui=True, shadows=True, color=None, width=None, height=None, mp4=None, fps=120):
     # Shared Memory: execute the physics simulation and rendering in a separate process
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/vrminitaur.py#L7
     # make sure to compile pybullet with PYBULLET_USE_NUMPY enabled
@@ -1088,7 +1088,7 @@ def connect(use_gui=True, shadows=True, color=None, width=None, height=None, mp4
         # options="--minGraphicsUpdateTimeMs=16000"
         options = []
         if mp4 is not None:
-            options.append('--mp4="{}" --mp4fps={}'.format(mp4, mp4fps))
+            options.append('--mp4="{}" --fps={}'.format(mp4, fps))
         if color is not None:
             options.append('--background_color_red={} --background_color_green={} --background_color_blue={}'.format(*color))
         if width is not None:
@@ -1102,7 +1102,7 @@ def connect(use_gui=True, shadows=True, color=None, width=None, height=None, mp4
         # --width=<int> width of the window in pixels
         # --height=<int> height of the window, in pixels.
         # --mp4=moviename.mp4 (records movie, requires ffmpeg)
-        # --mp4fps=<int> (for movie recording, set frames per second).
+        # --fps=<int> (for movie recording, set frames per second).
 
     # TODO: p.bullet_client()
     assert 0 <= sim_id
@@ -2838,6 +2838,9 @@ def get_collision_data(body, link=BASE_LINK):
 
 def can_collide(body, link=BASE_LINK, **kwargs):
     return len(get_collision_data(body, link=link, **kwargs)) != 0
+
+def get_first_link(body):
+    return next(link for link in get_all_links(body) if can_collide(body, link))
 
 def get_data_type(data):
     return data.geometry_type if isinstance(data, CollisionShapeData) else data.visualGeometryType

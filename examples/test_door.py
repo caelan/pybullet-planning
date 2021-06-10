@@ -15,7 +15,7 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
     Shape, create_shape_array, unzip, STATIC_MASS, get_aabb_extent, get_aabb, set_position, base_aligned, \
     create_box, BLUE, set_velocity, add_pose_constraint, get_pose, synchronize_viewer, get_velocity, get_bodies, \
     get_distance, get_point, set_renderer, get_cylinder_geometry, pairwise_collision, TURTLEBOT_URDF, set_joint_positions, \
-    set_all_color, control_joint, irange, INF
+    set_all_color, control_joint, irange, INF, control_joints, get_first_link, point_from_pose, get_link_pose
 #from examples.test_turtlebot_motion import BASE_JOINTS
 
 # bullet3/examples/pybullet/examples
@@ -72,7 +72,9 @@ def create_door(width=0.08, length=1, height=2, mass=1, handle=True, frame=True,
     #set_joint_limits(body, link=0, lower=-PI, upper=PI)
     return body
 
-def main(use_turtlebot=True):
+IGNORE_EXT = ['.png', '.gif', '.jpeg', '.py', '.mtl']
+
+def main(use_turtlebot=False):
     parser = argparse.ArgumentParser()
     parser.add_argument('-video', action='store_true')
     args = parser.parse_args()
@@ -84,14 +86,14 @@ def main(use_turtlebot=True):
     print(data_path)
     print(sorted(name for name in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, name))))
     print(sorted(name for name in os.listdir(data_path) if not os.path.isdir(
-        os.path.join(data_path, name)) and (os.path.splitext(name)[1] not in ['.png', '.gif', '.jpeg', '.py', '.mtl'])))
+        os.path.join(data_path, name)) and (os.path.splitext(name)[1] not in IGNORE_EXT)))
     # TODO: recursively search
 
     robot_path = os.path.abspath(os.path.join(data_path, os.pardir, 'pybullet_robots'))
     print(robot_path)
 
     draw_global_system()
-    set_camera_pose(camera_point=Point(+2, -2, +2))
+    set_camera_pose(camera_point=Point(+1.5, -1.5, +1.5), target_point=Point(-1.5, +1.5, 0))
 
     start_x = +2
     target_x = -2
@@ -122,11 +124,12 @@ def main(use_turtlebot=True):
             set_joint_positions(robot, robot_joints, [start_x, 0, PI])
         set_all_color(robot, BLUE)
         set_position(robot, z=base_aligned_z(robot))
+        robot_link = get_first_link(robot)
 
-    all_bodies = get_bodies()
+    #all_bodies = get_bodies()
     dump_body(door)
     dump_body(robot)
-    sample_fn = get_sample_fn(door, door_joints)
+    #sample_fn = get_sample_fn(door, door_joints)
     #set_joint_positions(door, door_joints, sample_fn())
     # while True:
     #     positions = sample_fn()
@@ -142,7 +145,8 @@ def main(use_turtlebot=True):
         target_point[0] = target_x
         add_pose_constraint(robot, pose=(target_point, target_quat), max_force=200) # TODO: velocity constraint?
     else:
-        control_joint(robot, robot_joints[0], position=target_x, velocity=0, velocity_scale=None, max_force=300)
+        #control_joint(robot, robot_joints[0], position=target_x, velocity=0, velocity_scale=None, max_force=300)
+        control_joints(robot, robot_joints, positions=[target_x, 0, PI], max_force=300)
 
     set_renderer(enable=True)
     if video is None:
@@ -152,7 +156,7 @@ def main(use_turtlebot=True):
     dt = get_time_step()
     print('Time step: {:.6f} sec'.format(dt))
     #sleep_per_step = dt/2.
-    sleep_per_step = 0.01
+    #sleep_per_step = 0.01
 
     start_time = last_print = time.time()
     for step in irange(INF):
@@ -166,8 +170,8 @@ def main(use_turtlebot=True):
         #if video is None:
         #   time.sleep(sleep_per_step)
         #print(pairwise_collision(robot, door))
-        #if get_distance(target_point, get_point(robot)) < 1e-3: # TODO: velocity condition
-        #    break
+        if abs(target_x - point_from_pose(get_link_pose(robot, robot_link))[0]) < 1e-3: # TODO: velocity condition
+           break
 
     if video is None:
         wait_if_gui('Finish?')
