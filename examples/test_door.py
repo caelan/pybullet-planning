@@ -15,7 +15,8 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
     Shape, create_shape_array, unzip, STATIC_MASS, get_aabb_extent, get_aabb, set_position, base_aligned, \
     create_box, BLUE, set_velocity, add_pose_constraint, get_pose, synchronize_viewer, get_velocity, get_bodies, \
     get_distance, get_point, set_renderer, get_cylinder_geometry, pairwise_collision, TURTLEBOT_URDF, set_joint_positions, \
-    set_all_color, control_joint, irange, INF, control_joints, get_first_link, point_from_pose, get_link_pose
+    set_all_color, control_joint, irange, INF, control_joints, get_first_link, point_from_pose, get_link_pose, \
+    get_joint_velocities, get_max_velocities, get_max_force, get_max_forces, get_joint_torques, read
 #from examples.test_turtlebot_motion import BASE_JOINTS
 
 # bullet3/examples/pybullet/examples
@@ -26,6 +27,7 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
 
 def create_door(width=0.08, length=1, height=2, mass=1, handle=True, frame=True, **kwargs):
     # TODO: hinge, cylinder on end, sliding door, knob
+    # TODO: self collisions
     geometry = get_box_geometry(width, length, height)
     hinge = 0 # -width/2
     door_collision, door_visual = create_shape(
@@ -118,6 +120,8 @@ def main(use_turtlebot=True):
         set_position(robot, x=start_x)
         #set_velocity(robot, linear=Point(x=-1))
     else:
+        print(os.path.abspath(TURTLEBOT_URDF))
+        #print(read(TURTLEBOT_URDF))
         robot = load_pybullet(TURTLEBOT_URDF, merge=True, fixed_base=True)
         robot_joints = get_movable_joints(robot)[:3]
         set_joint_positions(robot, robot_joints, [start_x, 0, PI])
@@ -144,8 +148,15 @@ def main(use_turtlebot=True):
         target_point[0] = target_x
         add_pose_constraint(robot, pose=(target_point, target_quat), max_force=200) # TODO: velocity constraint?
     else:
-        #control_joint(robot, robot_joints[0], position=target_x, velocity=0, velocity_scale=None, max_force=300)
-        control_joints(robot, robot_joints, positions=[target_x, 0, PI], max_force=300)
+        # p.changeDynamics(robot, robot_joints[0], # Doesn't work
+        #                  maxJointVelocity=1,
+        #                  jointLimitForce=1,)
+        print('Max velocities:', get_max_velocities(robot, robot_joints))
+        print('Max forces:', get_max_forces(robot, robot_joints))
+        control_joint(robot, robot_joints[0], position=target_x, velocity=0,
+                      position_gain=None, velocity_scale=None, max_velocity=100, max_force=300)
+        #control_joints(robot, robot_joints, positions=[target_x, 0, PI], max_force=300)
+        #velocity_control_joints(robot, robot_joints, velocities=[-2., 0, 0]) #, max_force=300)
 
     set_renderer(enable=True)
     if video is None:
@@ -170,6 +181,10 @@ def main(use_turtlebot=True):
         #print(pairwise_collision(robot, door))
         if abs(target_x - point_from_pose(get_link_pose(robot, robot_link))[0]) < 1e-3: # TODO: velocity condition
            break
+        # print('Velocities:', get_joint_velocities(robot, robot_joints))
+        # #print('Torques:', get_joint_torques(robot, robot_joints))
+        # wait_if_gui()
+        # print()
 
     if video is None:
         wait_if_gui('Finish?')

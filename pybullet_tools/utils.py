@@ -1702,6 +1702,7 @@ def convex_combination(x, y, w=0.5):
 # Bodies
 
 def get_bodies():
+    # Note that all APIs already return body unique ids, so you typically never need to use getBodyUniqueId if you keep track of them
     return [p.getBodyUniqueId(i, physicsClientId=CLIENT)
             for i in range(p.getNumBodies(physicsClientId=CLIENT))]
 
@@ -1932,6 +1933,7 @@ def get_joint_reaction_force(body, joint):
     return get_joint_state(body, joint).jointReactionForces
 
 def get_joint_torque(body, joint):
+    # Note that this only applies in VELOCITY_CONTROL and POSITION_CONTROL
     return get_joint_state(body, joint).appliedJointMotorTorque
 
 ##########
@@ -2049,13 +2051,18 @@ def get_joint_intervals(body, joints):
     return get_min_limits(body, joints), get_max_limits(body, joints)
 
 def get_max_velocity(body, joint):
+    # Note that the maximum velocity is not used in actual motor control commands at the moment.
     return get_joint_info(body, joint).jointMaxVelocity
 
 def get_max_velocities(body, joints):
     return tuple(get_max_velocity(body, joint) for joint in joints)
 
 def get_max_force(body, joint):
+    # Note that this value is not automatically used. You can use maxForce in 'setJointMotorControl2'.
     return get_joint_info(body, joint).jointMaxForce
+
+def get_max_forces(body, joints):
+    return tuple(get_max_force(body, joint) for joint in joints)
 
 def get_joint_q_index(body, joint):
     return get_joint_info(body, joint).qIndex
@@ -2111,10 +2118,14 @@ get_num_links = get_num_joints
 get_links = get_joints # Does not include BASE_LINK
 
 def child_link_from_joint(joint):
-    return joint # link
+    # note that link index == joint index
+    link = joint
+    return link
 
 def parent_joint_from_link(link):
-    return link # joint
+    # note that link index == joint index
+    joint = link
+    return joint
 
 def get_all_links(body):
     return [BASE_LINK] + list(get_links(body))
@@ -2299,9 +2310,8 @@ def set_dynamics(body, link=BASE_LINK, **kwargs):
     # TODO: iterate over all links
     p.changeDynamics(body, link, physicsClientId=CLIENT, **kwargs)
 
-def set_joint_limits(body, link, lower, upper, **kwargs):
+def set_joint_limits(body, link, lower, upper):
     # NOTE that at the moment, the joint limits are not updated in 'getJointInfo'!
-    # collisionMargin
     set_dynamics(body, link, jointLowerLimit=lower, jointUpperLimit=upper)
 
 def set_collision_margin(body, link=BASE_LINK, margin=0.):
@@ -4197,7 +4207,8 @@ def get_grasp_pose(constraint):
 
 # Control
 
-def control_joint(body, joint, position=None, velocity=0., position_gain=None, velocity_scale=None, max_force=None):
+def control_joint(body, joint, position=None, velocity=0., position_gain=None,
+                  max_velocity=None, velocity_scale=None, max_force=None):
     if position is None:
         position = get_joint_position(body, joint)
     kwargs = {}
@@ -4212,6 +4223,8 @@ def control_joint(body, joint, position=None, velocity=0., position_gain=None, v
         kwargs.update({
             'maxVelocity': max_velocity,
         })
+    if max_velocity is not None:
+        kwargs.update(dict_from_kwargs(maxVelocity=max_velocity))
     if max_force is not None:
         #max_force = get_max_force(body, joint)
         kwargs.update({
@@ -4220,8 +4233,9 @@ def control_joint(body, joint, position=None, velocity=0., position_gain=None, v
     return p.setJointMotorControl2(bodyIndex=body, # bodyUniqueId
                                    jointIndex=joint,
                                    controlMode=p.POSITION_CONTROL,
+                                   #controlMode=p.PD_CONTROL, # STABLE_PD_CONTROL
                                    targetPosition=position,
-                                   targetVelocity=velocity,
+                                   targetVelocity=velocity, # Note that the targetVelocity is not the maximum joint velocity
                                    physicsClientId=CLIENT, **kwargs)
 
 def control_joints(body, joints, positions=None, velocities=None, position_gain=None, velocity_scale=None, max_force=None):
@@ -4351,11 +4365,14 @@ def simulate_controller(controller, max_time=np.inf): # Allow option to sleep ra
 
 def velocity_control_joints(body, joints, velocities):
     #kv = 0.3
+
+    #forces = 100*np.ones(len(joints)) # Doesn't seem to help
     return p.setJointMotorControlArray(body, joints, p.VELOCITY_CONTROL,
                                        targetVelocities=velocities,
-                                       physicsClientId=CLIENT,)
-                                       #velocityGains=[kv] * len(joints),)
-                                       #forces=forces)
+                                       physicsClientId=CLIENT,
+                                       #velocityGains=[0.25] * len(joints), # Determines acceleration
+                                       #forces=forces,
+                                       )
 
 #####################################
 
