@@ -29,7 +29,7 @@ from .transformations import quaternion_from_matrix, unit_vector, euler_from_qua
 directory = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(directory, '../motion'))
 from motion_planners.rrt_connect import birrt
-from motion_planners.meta import direct_path
+from motion_planners.meta import direct_path, solve
 
 #from ..motion.motion_planners.rrt_connect import birrt, direct_path
 
@@ -3668,7 +3668,18 @@ def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=Tru
                                                 (pair[::-1] not in disabled_collisions), check_link_pairs))
     return check_link_pairs
 
-def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
+def get_limits_fn(body, joints, custom_limits={}, verbose=False):
+    lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits)
+
+    def limits_fn(q):
+        if not all_between(lower_limits, q, upper_limits):
+            #print('Joint limits violated')
+            #if verbose: print(lower_limits, q, upper_limits)
+            return True
+        return False
+    return limits_fn
+
+def get_collision_fn(body, joints, obstacles=[], attachments=[], self_collisions=True, disabled_collisions=set(),
                      custom_limits={}, use_aabb=False, cache=False, max_distance=MAX_DISTANCE, **kwargs):
     # TODO: convert most of these to keyword arguments
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
@@ -3678,14 +3689,12 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
     moving_bodies = [CollisionPair(body, moving_links)] + list(map(parse_body, attached_bodies))
     #moving_bodies = list(flatten(flatten_links(*pair) for pair in moving_bodies)) # Introduces overhead
     #moving_bodies = [body] + [attachment.child for attachment in attachments]
-    lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits)
     get_obstacle_aabb = cached_fn(get_buffered_aabb, cache=cache, max_distance=max_distance/2., **kwargs)
+    limits_fn = get_limits_fn(body, joints, custom_limits=custom_limits)
     # TODO: sort bodies by bounding box size
 
     def collision_fn(q, verbose=False):
-        if not all_between(lower_limits, q, upper_limits):
-            #print('Joint limits violated')
-            if verbose: print(lower_limits, q, upper_limits)
+        if limits_fn(q):
             return True
         set_joint_positions(body, joints, q)
         for attachment in attachments:
@@ -3770,7 +3779,7 @@ def check_initial_end(start_conf, end_conf, collision_fn, verbose=True):
 def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
                       self_collisions=True, disabled_collisions=set(),
                       weights=None, resolutions=None, max_distance=MAX_DISTANCE,
-                      use_aabb=False, cache=True, custom_limits={}, **kwargs):
+                      use_aabb=False, cache=True, custom_limits={}, algorithm=None, **kwargs):
 
     assert len(joints) == len(end_conf)
     if (weights is None) and (resolutions is not None):
@@ -3786,7 +3795,10 @@ def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
 
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
-    return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
+
+    if algorithm is None:
+        return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
+    return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, algorithm=algorithm, **kwargs)
     #return plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn)
 
 plan_holonomic_motion = plan_joint_motion
@@ -3914,7 +3926,7 @@ def get_base_distance_fn(weights=1*np.ones(3)):
 
 def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
                      weights=1*np.ones(3), resolutions=0.05*np.ones(3),
-                     max_distance=MAX_DISTANCE, **kwargs):
+                     max_distance=MAX_DISTANCE, algorithm=None, **kwargs):
     def sample_fn():
         x, y = np.random.uniform(*base_limits)
         theta = np.random.uniform(*CIRCULAR_LIMITS)
@@ -3943,8 +3955,12 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
         return None
     if direct:
         return direct_path(start_conf, end_conf, extend_fn, collision_fn)
+
+    if algorithm is None:
+        return birrt(start_conf, end_conf, distance_fn,
+                     sample_fn, extend_fn, collision_fn, **kwargs)
     return birrt(start_conf, end_conf, distance_fn,
-                 sample_fn, extend_fn, collision_fn, **kwargs)
+                 sample_fn, extend_fn, collision_fn, algorithm=algorithm, **kwargs)
 
 #####################################
 

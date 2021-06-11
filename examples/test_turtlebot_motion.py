@@ -19,13 +19,29 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     AABB, Profiler, pairwise_link_collision, BASE_LINK, get_collision_data, draw_pose2d, \
     normalize_interval, wrap_angle, CIRCULAR_LIMITS, wrap_interval, Euler, rescale_interval, adjust_path, \
     contact_collision, timer, update_scene, set_aabb_buffer, set_separating_axis_collisions, get_aabb, set_pose, \
-    Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION, base_aligned_z
+    Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION, \
+    base_aligned_z, load_pybullet, get_collision_fn, get_custom_limits, get_limits_fn
+
+from motion_planners.trajectory.smooth import smooth_curve
+from motion_planners.trajectory.parabolic import solve_multi_linear
+from motion_planners.utils import waypoints_from_path, default_selector
+from motion_planners.trajectory.discretize import time_discretize_curve
+
+from pybullet_tools.retime import interpolate_path, sample_curve
 
 BASE_LINK_NAME = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
 DRAW_Z = 1e-3
 DRAW_LENGTH = 0.5
 MIN_AABB_VOLUME = DEFAULT_AABB_BUFFER**3
+
+MAX_VELOCITIES = np.array([1., 1., PI / 4])
+MAX_ACCELERATIONS = MAX_VELOCITIES / 0.25
+
+#MAX_VELOCITIES *= INF
+#MAX_ACCELERATIONS *= INF
+
+MIN_PROXIMITY = 1e-2
 
 ##################################################
 
@@ -127,12 +143,11 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     initial_conf = np.array([+floor_extent/3, -floor_extent/3, 3*PI/4])
     goal_conf = -initial_conf
 
-    with HideOutput():
-        robot = load_model(TURTLEBOT_URDF, merge=True, sat=False)
-        base_joints = joints_from_names(robot, BASE_JOINTS)
-        # base_link = child_link_from_joint(base_joints[-1])
-        base_link = link_from_name(robot, BASE_LINK_NAME)
-        set_all_color(robot, BLUE)
+    robot = load_pybullet(TURTLEBOT_URDF, merge=True, sat=False)
+    base_joints = joints_from_names(robot, BASE_JOINTS)
+    # base_link = child_link_from_joint(base_joints[-1])
+    base_link = link_from_name(robot, BASE_LINK_NAME)
+    set_all_color(robot, BLUE)
     dump_body(robot)
     set_point(robot, Point(z=stable_z(robot, floor)))
     #set_point(robot, Point(z=base_aligned_z(robot)))
@@ -163,12 +178,57 @@ def compute_cost(robot, joints, path, resolutions=None):
     return sum(get_distance_fn(robot, joints, weights=resolutions)(*pair)
                for pair in get_pairs(path))
 
-def iterate_path(robot, joints, path, step_size=None): # 1e-2 | None
+def get_curve_collision_fn(robot, joints, custom_limits={}, resolutions=None, v_max=None, a_max=None, **kawrgs):
+    collision_fn = get_collision_fn(robot, joints, custom_limits=custom_limits, **kawrgs)
+    limits_fn = get_limits_fn(robot, joints, custom_limits)
+
+    def curve_collision_fn(curve, t0, t1):
+        if curve is None:
+            return True
+        # TODO: can exactly compute limit violations
+        # if not check_spline(curve, v_max=max_velocities, a_max=None, verbose=False,
+        #                     #start_t=t0, end_t=t1,
+        #                     ):
+        #     return True
+        _, samples = time_discretize_curve(curve, verbose=False,
+                                           #start_t=t0, end_t=t1,
+                                           resolution=resolutions,
+                                           #max_velocities=v_max,
+                                           )
+        if any(map(limits_fn, samples)):
+           return True
+        if any(map(collision_fn, default_selector(samples))):
+           return True
+        return False
+    return curve_collision_fn
+
+def iterate_path(robot, joints, path, step_size=None, resolutions=None, **kwargs): # 1e-2 | None
     if path is None:
         return
     path = adjust_path(robot, joints, path)
+    waypoints = path
+    #waypoints = waypoints_from_path(path)
+    #curve = interpolate_path(robot, joints, waypoints, k=1, velocity_fraction=1) # TODO: no velocities in the URDF
+
+    curve = solve_multi_linear(waypoints, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS)
+    path = [conf for t, conf in sample_curve(curve, time_step=step_size)]
+    _, path = time_discretize_curve(curve, verbose=False, resolution=resolutions) # max_velocities=v_max,
+    print('Steps: {} | Start: {:.3f} | End: {:.3f} | Knots: {}'.format(
+        len(path), curve.x[0], curve.x[-1], len(curve.x)))
     with LockRenderer():
         handles = draw_path(path)
+
+    if True:
+        #curve_collision_fn = lambda *args, **kwargs: False
+        curve_collision_fn = get_curve_collision_fn(robot, joints, resolutions=resolutions, **kwargs)
+        with LockRenderer():
+            curve = smooth_curve(curve, MAX_VELOCITIES, MAX_ACCELERATIONS, curve_collision_fn, max_time=5) #, curve_collision_fn=[])
+        path = [conf for t, conf in sample_curve(curve, time_step=step_size)]
+        print('Steps: {} | Start: {:.3f} | End: {:.3f} | Knots: {}'.format(
+            len(path), curve.x[0], curve.x[-1], len(curve.x)))
+        with LockRenderer():
+            handles = draw_path(path)
+
     wait_if_gui(message='Begin?')
     for i, conf in enumerate(path):
         set_joint_positions(robot, joints, conf)
@@ -240,8 +300,10 @@ def test_caching(robot, obstacles):
 
 ##################################################
 
-def main():
+def main(use_2d=True):
     parser = argparse.ArgumentParser()
+    parser.add_argument('-a', '--algorithm', default=None, # choices=[],
+                        help='The motion planning algorithm to use.')
     parser.add_argument('-c', '--cfree', action='store_true',
                         help='When enabled, disables collision checking.')
     # parser.add_argument('-p', '--problem', default='test_pour', choices=sorted(problem_fn_from_name),
@@ -259,13 +321,16 @@ def main():
     #set_aabb_buffer(buffer=1e-3)
     #set_separating_axis_collisions()
 
-    seed = args.seed
     #seed = 0
     #seed = time.time()
+    seed = args.seed
+    if seed is None:
+        seed = random.randint(0, 10**3-1)
+    print('Seed:', seed)
     set_random_seed(seed=seed) # None: 2147483648 = 2**31
     set_numpy_seed(seed=seed)
-    print('Random seed:', get_random_seed(), random.random())
-    print('Numpy seed:', get_numpy_seed(), np.random.random())
+    #print('Random seed:', get_random_seed(), random.random())
+    #print('Numpy seed:', get_numpy_seed(), np.random.random())
 
     #########################
 
@@ -279,13 +344,15 @@ def main():
     for conf in [start_conf, goal_conf]:
         draw_pose(pose_from_pose2d(conf, z=DRAW_Z), length=DRAW_LENGTH)
 
+    #resolutions = None
+    #resolutions = np.array([0.05, 0.05, math.radians(10)])
+    resolutions = 1.*DEFAULT_RESOLUTION*np.ones(len(base_joints))
+    plan_joints = base_joints[:2] if use_2d else base_joints
+
     if args.cfree:
         obstacles = []
     # for obstacle in obstacles:
     #     draw_aabb(get_aabb(obstacle)) # Updates automatically
-    #resolutions = None
-    #resolutions = np.array([0.05, 0.05, math.radians(10)])
-    resolutions = 1.0*DEFAULT_RESOLUTION*np.ones(len(base_joints))
     set_all_static() # Doesn't seem to affect
 
     #test_aabb(robot)
@@ -300,11 +367,11 @@ def main():
     profiler.save()
     with LockRenderer(lock=args.lock):
         # TODO: draw the search tree
-        path = plan_motion(robot, base_joints, goal_conf, holonomic=args.holonomic,
+        path = plan_motion(robot, plan_joints, goal_conf[:len(plan_joints)], holonomic=args.holonomic,
                            obstacles=obstacles, self_collisions=False,
-                           custom_limits=custom_limits, resolutions=resolutions,
-                           use_aabb=True, cache=True, max_distance=0.,
-                           restarts=5, iterations=50, smooth=20) # 20 | None
+                           custom_limits=custom_limits, resolutions=resolutions[:len(plan_joints)],
+                           use_aabb=True, cache=True, max_distance=MIN_PROXIMITY,
+                           algorithm=args.algorithm, restarts=5, max_iterations=50, smooth=20) # 20 | None
         saver.restore()
     #wait_for_duration(duration=1e-3)
     profiler.restore()
@@ -313,14 +380,23 @@ def main():
 
     solved = path is not None
     length = INF if path is None else len(path)
-    cost = compute_cost(robot, base_joints, path, resolutions=resolutions)
+    cost = compute_cost(robot, base_joints, path, resolutions=resolutions[:len(plan_joints)])
     print('Solved: {} | Length: {} | Cost: {:.3f} | Runtime: {:.3f} sec'.format(
         solved, length, cost, elapsed_time(start_time)))
     if path is None:
         wait_if_gui()
         disconnect()
         return
-    iterate_path(robot, base_joints, path, step_size=2e-2)
+
+    with BodySaver(robot):
+        new_path = []
+        for conf in path:
+            set_joint_positions(robot, plan_joints, conf)
+            new_path.append(get_joint_positions(robot, base_joints))
+        path = new_path
+
+    iterate_path(robot, base_joints, path, step_size=2e-2, custom_limits=custom_limits, resolutions=resolutions,
+                 obstacles=obstacles, self_collisions=False, max_distance=MIN_PROXIMITY)
     disconnect()
 
 if __name__ == '__main__':
