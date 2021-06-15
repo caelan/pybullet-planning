@@ -109,10 +109,7 @@ STOVE_URDF = 'models/stove.urdf'
 
 SEPARATOR = '\n' + 50*'-' + '\n'
 
-#def inf_generator():
-#    return iter(int, 1)
-
-inf_generator = count
+inf_generator = count # count | lambda: iter(int, 1)
 
 List = lambda *args: list(args)
 Tuple = lambda *args: tuple(args)
@@ -975,7 +972,7 @@ def wait_for_duration(duration): #, dt=0):
 
 def simulate_for_duration(duration):
     dt = get_time_step()
-    for i in range(int(duration / dt)):
+    for i in range(int(math.ceil(duration / dt))):
         step_simulation()
 
 def get_time_step():
@@ -991,6 +988,7 @@ def set_separating_axis_collisions(enable=True):
     #p.setInternalSimFlags()
 
 def simulate_for_sim_duration(sim_duration, real_dt=0, frequency=INF):
+    # TODO: deprecate
     t0 = time.time()
     sim_dt = get_time_step()
     sim_time = 0
@@ -3432,7 +3430,8 @@ RayResult = namedtuple('RayResult', ['objectUniqueId', 'linkIndex',
 
 def ray_collision(ray):
     # TODO: be careful to disable gravity and set static masses for everything
-    step_simulation() # Needed for some reason
+    #step_simulation() # Needed for some reason
+    update_scene()
     start, end = ray
     result, = p.rayTest(start, end, physicsClientId=CLIENT)
     # TODO: assign hit_position to be the end?
@@ -3442,7 +3441,8 @@ def batch_ray_collision(rays, threads=1):
     assert 1 <= threads <= p.MAX_RAY_INTERSECTION_BATCH_SIZE
     if not rays:
         return []
-    step_simulation() # Needed for some reason
+    #step_simulation() # Needed for some reason
+    update_scene()
     ray_starts = [start for start, _ in rays]
     ray_ends = [end for _, end in rays]
     return [RayResult(*tup) for tup in p.rayTestBatch(
@@ -4380,6 +4380,7 @@ def trajectory_controller(body, joints, path, **kwargs):
             yield positions
 
 def simulate_controller(controller, max_time=np.inf): # Allow option to sleep rather than yield?
+    # TODO: deprecate
     sim_dt = get_time_step()
     sim_time = 0.0
     for _ in controller:
@@ -4400,7 +4401,40 @@ def velocity_control_joints(body, joints, velocities):
                                        #forces=forces,
                                        )
 
-#####################################
+##################################################
+
+def constant_controller(value=None):
+    # TODO: unify with /Users/caelan/Programs/open-world-tamp/open_world/simulation/control.py
+    return (value for _ in inf_generator())
+
+def timeout_controller(controller, max_steps=INF, max_duration=INF, time_step=None):
+    # TODO: condition controller that terminates upon condition
+    if time_step is None:
+        time_step = get_time_step()
+    steps = 0
+    duration = 0.
+    for output in controller:
+        if (steps >= max_steps) or (duration >= max_duration):
+            break # TODO: return the controller's status
+        yield output
+        steps += 1
+        duration += time_step
+
+def combine_controllers(controllers):
+    while controllers:
+        active_controllers = []
+        outputs = []
+        for controller in controllers:
+            try:
+                output = next(controller)
+                active_controllers.append(controller)
+            except StopIteration:
+                output = False
+            outputs.append(output)
+        yield outputs
+        controllers = active_controllers
+
+##################################################
 
 def compute_jacobian(robot, link, positions=None):
     joints = get_movable_joints(robot)

@@ -22,7 +22,7 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION, \
     base_aligned_z, load_pybullet, get_collision_fn, get_custom_limits, get_limits_fn, \
     get_joint_velocities, control_joint, get_time_step, remove_handles, Interval, get_distance, \
-    get_duration_fn, velocity_control_joint, get_max_velocities
+    get_duration_fn, velocity_control_joint, get_max_velocities, get_difference
 
 from motion_planners.trajectory.smooth import smooth_curve
 from motion_planners.trajectory.linear import solve_multi_linear, quickest_inf_accel
@@ -280,6 +280,8 @@ def find_closest(x0, curve, t_range=None, max_time=INF, max_iterations=INF, dist
                     iteration, closest_dist, t, elapsed_time(start_time)))
     return closest_dist, closest_t
 
+##################################################
+
 def max_velocity_control_joints(robot, joints, positions=None, velocities=None, max_velocities=None):
     if velocities is None:
         velocities = np.zeros(len(joints))
@@ -289,16 +291,72 @@ def max_velocity_control_joints(robot, joints, positions=None, velocities=None, 
         if positions is not None:
             control_joint(robot, joint=joint, position=positions[idx],
                           # velocity=0.,
-                          velocity=velocities[idx],
+                          velocity=velocities[idx], # if abs(velocities[idx]) > 1e-3 else 0,
                           # max_velocity=abs(velocities[idx]),
-                          max_velocity=abs(max_velocities[idx]),
-                          position_gain=None, velocity_scale=None, max_force=None)
+                          max_velocity=abs(max_velocities[idx]), # TODO: max_velocity and velocity==0 cause issues
+                          position_gain=10, velocity_scale=None, max_force=None)
         else:
             velocity_control_joint(robot, joint=joint, velocity=velocities[idx],
                                    max_velocity=abs(max_velocities[idx]),
                                    position_gain=None, velocity_scale=None, max_force=None)
 
-def follow_curve(robot, joints, curve, goal_t=None):
+def control_state(robot, joints, target_positions, target_velocities=None, position_tol=INF, velocity_tol=INF,
+                  max_velocities=None, verbose=True): # TODO: max_accelerations
+    if target_velocities is None:
+        target_velocities = np.zeros(len(joints))
+    if max_velocities is None:
+        max_velocities = get_max_velocities(robot, joints)
+    assert (max_velocities > 0).all()
+    max_velocity_control_joints(robot, joints, positions=target_positions, velocities=target_velocities,
+                                max_velocities=max_velocities)
+    for i in irange(INF):
+        current_positions = np.array(get_joint_positions(robot, joints))
+        position_error = get_distance(current_positions, target_positions, norm=INF)
+        current_velocities = np.array(get_joint_velocities(robot, joints))
+        velocity_error = get_distance(current_velocities, target_velocities, norm=INF)
+        if verbose:
+            # print('Positions: {} | Target positions: {}'.format(current_positions.round(N_DIGITS), target_positions.round(N_DIGITS)))
+            # print('Velocities: {} | Target velocities: {}'.format(current_velocities.round(N_DIGITS), target_velocities.round(N_DIGITS)))
+            print('Step: {} | Position error: {:.3f}/{:.3f} | Velocity error: {:.3f}/{:.3f}'.format(
+                i, position_error, position_tol, velocity_error, velocity_tol))
+        # TODO: draw the tolerance interval
+        if (position_error <= position_tol) and (velocity_error <= velocity_tol):
+            return # TODO: declare success or failure by yielding or throwing an exception
+        yield i
+
+def follow_curve(robot, joints, curve, goal_t=None, time_step=None, max_velocities=MAX_VELOCITIES, **kwargs):
+    if goal_t is None:
+        goal_t = curve.x[-1]
+    if time_step is None:
+        time_step = 10*get_time_step()
+    #distance_fn = get_distance_fn(robot, joints, weights=None, norm=2)
+    distance_fn = get_duration_fn(robot, joints, velocities=max_velocities, norm=INF) # get_distance
+    positions = np.array(get_joint_positions(robot, joints))
+    closest_dist, closest_t = find_closest(positions, curve, t_range=(curve.x[0], goal_t), max_time=1e-1,
+                                           max_iterations=INF, distance_fn=distance_fn, verbose=True)
+    print('Closest dist: {:.3f} | Closest time: {:.3f}'.format(closest_dist, closest_t))
+    target_t = closest_t
+    # TODO: condition based on closest_dist
+    while True:
+        print('\nTarget time: {:.3f} | Goal time: {}'.format(target_t, goal_t))
+        target_positions = curve(target_t)
+        target_velocities = curve(target_t, nu=1) # TODO: draw the velocity
+        #print('Positions: {} | Velocities: {}'.format(target_positions, target_velocities))
+        handles = draw_waypoint(target_positions)
+        is_goal = (target_t == goal_t)
+        position_tol = 1e-2 if is_goal else 1e-2
+        for output in control_state(robot, joints, target_positions=target_positions, target_velocities=target_velocities,
+                                    position_tol=position_tol, velocity_tol=INF, max_velocities=max_velocities, **kwargs):
+            yield output
+        remove_handles(handles)
+        target_t = min(goal_t, target_t + time_step)
+        if is_goal:
+            break
+
+##################################################
+
+def follow_curve_old(robot, joints, curve, goal_t=None):
+    # TODO: unify with /Users/caelan/Programs/open-world-tamp/open_world/simulation/control.py
     if goal_t is None:
         goal_t = curve.x[-1]
     time_step = get_time_step()
@@ -344,19 +402,41 @@ def follow_curve(robot, joints, curve, goal_t=None):
                                     max_velocities=MAX_VELOCITIES)
 
         #next_t = closest_t + time_step
-        next_p = current_p + current_v*time_step
-        step_simulation()
+        #next_p = current_p + current_v*time_step
+        yield target_t
         actual_p = np.array(get_joint_positions(robot, joints))
         actual_v = np.array(get_joint_velocities(robot, joints))
         next_p = current_p + actual_v*time_step
         print('Predicted: {} | Actual: {}'.format(next_p.round(N_DIGITS), actual_p.round(N_DIGITS)))
+        remove_handles(handles)
+
+##################################################
+
+def simulate_curve(robot, joints, curve):
+    #set_joint_positions(robot, joints, curve(random.uniform(curve.x[0], curve.x[-1])))
+    wait_if_gui(message='Begin?')
+    #controller = follow_curve_old(robot, joints, curve)
+    controller = follow_curve(robot, joints, curve)
+    for _ in controller:
+        step_simulation()
         #wait_if_gui()
         #wait_for_duration(duration=time_step)
         #time.sleep(time_step)
-        remove_handles(handles)
+    wait_if_gui(message='Finish?')
 
+def step_curve(robot, joints, path, step_size=None):
+    wait_if_gui(message='Begin?')
+    for i, conf in enumerate(path):
+        set_joint_positions(robot, joints, conf)
+        if step_size is None:
+            wait_if_gui(message='{}/{} Continue?'.format(i, len(path)))
+        else:
+            wait_for_duration(duration=step_size)
+    wait_if_gui(message='Finish?')
 
-def iterate_path(robot, joints, path, step_size=None, resolutions=None, **kwargs): # 1e-2 | None
+##################################################
+
+def iterate_path(robot, joints, path, simulate=True, step_size=None, resolutions=None, **kwargs): # 1e-2 | None
     if path is None:
         return
     path = adjust_path(robot, joints, path)
@@ -368,7 +448,6 @@ def iterate_path(robot, joints, path, step_size=None, resolutions=None, **kwargs
     #curve = interpolate_path(robot, joints, waypoints, k=1, velocity_fraction=1) # TODO: no velocities in the URDF
 
     curve = solve_multi_linear(waypoints, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS)
-    path = [conf for t, conf in sample_curve(curve, time_step=step_size)]
     _, path = time_discretize_curve(curve, verbose=False, resolution=resolutions) # max_velocities=v_max,
     print('Steps: {} | Start: {:.3f} | End: {:.3f} | Knots: {}'.format(
         len(path), curve.x[0], curve.x[-1], len(curve.x)))
@@ -388,20 +467,11 @@ def iterate_path(robot, joints, path, step_size=None, resolutions=None, **kwargs
         with LockRenderer():
             handles = draw_path(path)
 
-    #set_joint_positions(robot, joints, curve(random.uniform(curve.x[0], curve.x[-1])))
-    wait_if_gui(message='Begin?')
-    follow_curve(robot, joints, curve)
-    wait_if_gui(message='Finish?')
-    return
-
-    wait_if_gui(message='Begin?')
-    for i, conf in enumerate(path):
-        set_joint_positions(robot, joints, conf)
-        if step_size is None:
-            wait_if_gui(message='{}/{} Continue?'.format(i, len(path)))
-        else:
-            wait_for_duration(duration=step_size)
-    wait_if_gui(message='Finish?')
+    if simulate:
+        simulate_curve(robot, joints, curve)
+    else:
+        path = [conf for t, conf in sample_curve(curve, time_step=step_size)]
+        step_curve(robot, joints, path, step_size=step_size)
 
 ##################################################
 
@@ -466,6 +536,7 @@ def test_caching(robot, obstacles):
 ##################################################
 
 def main(use_2d=True):
+    np.set_printoptions(precision=N_DIGITS, suppress=True, threshold=3)  # , edgeitems=1) #, linewidth=1000)
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--algorithm', default=None, # choices=[],
                         help='The motion planning algorithm to use.')
