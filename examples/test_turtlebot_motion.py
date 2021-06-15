@@ -22,7 +22,7 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION, \
     base_aligned_z, load_pybullet, get_collision_fn, get_custom_limits, get_limits_fn, \
     get_joint_velocities, control_joint, get_time_step, remove_handles, Interval, get_distance, \
-    get_duration_fn, velocity_control_joint
+    get_duration_fn, velocity_control_joint, get_max_velocities
 
 from motion_planners.trajectory.smooth import smooth_curve
 from motion_planners.trajectory.linear import solve_multi_linear, quickest_inf_accel
@@ -45,6 +45,7 @@ MAX_ACCELERATIONS = MAX_VELOCITIES / 0.25
 #MAX_ACCELERATIONS *= INF
 
 MIN_PROXIMITY = 1e-2
+N_DIGITS = 5
 
 ##################################################
 
@@ -106,6 +107,13 @@ def draw_path(path2d, z=DRAW_Z, **kwargs):
     # TODO: line between orientations when there is a jump
     return list(flatten(draw_conf(pose2d, interval, base_z, **kwargs) for pose2d in path2d))
 
+def extract_full_path(robot, path_joints, path, all_joints):
+    with BodySaver(robot):
+        new_path = []
+        for conf in path:
+            set_joint_positions(robot, path_joints, conf)
+            new_path.append(get_joint_positions(robot, all_joints)) # TODO: do without assigning
+        return new_path
 
 def plan_motion(robot, joints, goal_positions, attachments=[], obstacles=None, holonomic=False, reversible=False, **kwargs):
     attached_bodies = [attachment.child for attachment in attachments]
@@ -272,24 +280,43 @@ def find_closest(x0, curve, t_range=None, max_time=INF, max_iterations=INF, dist
                     iteration, closest_dist, t, elapsed_time(start_time)))
     return closest_dist, closest_t
 
-def mpc_control(robot, joints, curve, goal_t=None):
+def max_velocity_control_joints(robot, joints, positions=None, velocities=None, max_velocities=None):
+    if velocities is None:
+        velocities = np.zeros(len(joints))
+    if max_velocities is None:
+        max_velocities = get_max_velocities(robot, joints)
+    for idx, joint in enumerate(joints):
+        if positions is not None:
+            control_joint(robot, joint=joint, position=positions[idx],
+                          # velocity=0.,
+                          velocity=velocities[idx],
+                          # max_velocity=abs(velocities[idx]),
+                          max_velocity=abs(max_velocities[idx]),
+                          position_gain=None, velocity_scale=None, max_force=None)
+        else:
+            velocity_control_joint(robot, joint=joint, velocity=velocities[idx],
+                                   max_velocity=abs(max_velocities[idx]),
+                                   position_gain=None, velocity_scale=None, max_force=None)
+
+def follow_curve(robot, joints, curve, goal_t=None):
     if goal_t is None:
         goal_t = curve.x[-1]
-    goal_x = curve(goal_t)
-    dt = get_time_step()
+    time_step = get_time_step()
+    target_step = 10*time_step
     #distance_fn = get_distance_fn(robot, joints, weights=None, norm=2)
     distance_fn = get_duration_fn(robot, joints, velocities=MAX_VELOCITIES, norm=INF)
     for i in irange(INF):
-        if (i % 10) != 0:
-            continue
-        positions = np.array(get_joint_positions(robot, joints))
-        velocities = np.array(get_joint_velocities(robot, joints))
-        goal_dist = distance_fn(positions, goal_x)
-        print('Positions: {} | Velocities: {} | Goal distance: {:.3f}'.format(positions, velocities, goal_dist))
+        # if (i % 10) != 0:
+        #     continue
+        current_p = np.array(get_joint_positions(robot, joints))
+        current_v = np.array(get_joint_velocities(robot, joints))
+        goal_dist = distance_fn(current_p, curve(goal_t))
+        print('Positions: {} | Velocities: {} | Goal distance: {:.3f}'.format(
+            current_p.round(N_DIGITS), current_v.round(N_DIGITS), goal_dist))
         if goal_dist < 1e-2:
             return True
 
-        # _, connection = mpc(positions, velocities, curve, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS,
+        # _, connection = mpc(current_p, current_v, curve, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS,
         #                     dt_max=1e-1, max_time=1e-1)
         # assert connection is not None
         # target_t = 0.5*connection.x[-1]
@@ -297,12 +324,13 @@ def mpc_control(robot, joints, curve, goal_t=None):
         # target_v = connection(target_t, nu=1)
         # #print(target_p)
 
-        closest_dist, closest_t = find_closest(positions, curve, t_range=None, max_time=1e-2,
+        closest_dist, closest_t = find_closest(current_p, curve, t_range=None, max_time=1e-2,
                                                max_iterations=INF, distance_fn=distance_fn, verbose=True)
-        target_t = min(closest_t + 1e-1, curve.x[-1])
+        target_t = min(closest_t + target_step, curve.x[-1])
         target_p = curve(target_t)
         #target_v = curve(target_t, nu=1)
         target_v = curve(closest_t, nu=1)
+
         #target_v = MAX_VELOCITIES
         #target_v = INF*np.zeros(len(joints))
 
@@ -310,17 +338,21 @@ def mpc_control(robot, joints, curve, goal_t=None):
         #times, confs = time_discretize_curve(curve, verbose=False, resolution=resolutions)  # max_velocities=v_max,
 
         # set_joint_positions(robot, joints, target_p)
-        for j, p, v in zip(joints, target_p, target_v):
-            if True:
-                control_joint(robot, joint=j, position=p,
-                              #velocity=v, #velocity=0.,
-                              #max_velocity=abs(v),
-                              position_gain=None, velocity_scale=None, max_force=None)
-            else:
-                velocity_control_joint(robot, joint=j, velocity=v) #, max_velocity=None)
+        max_velocity_control_joints(robot, joints,
+                                    positions=target_p,
+                                    velocities=target_v,
+                                    max_velocities=MAX_VELOCITIES)
+
+        #next_t = closest_t + time_step
+        next_p = current_p + current_v*time_step
         step_simulation()
+        actual_p = np.array(get_joint_positions(robot, joints))
+        actual_v = np.array(get_joint_velocities(robot, joints))
+        next_p = current_p + actual_v*time_step
+        print('Predicted: {} | Actual: {}'.format(next_p.round(N_DIGITS), actual_p.round(N_DIGITS)))
         #wait_if_gui()
-        #wait_for_duration(duration=dt)
+        #wait_for_duration(duration=time_step)
+        #time.sleep(time_step)
         remove_handles(handles)
 
 
@@ -343,21 +375,26 @@ def iterate_path(robot, joints, path, step_size=None, resolutions=None, **kwargs
     with LockRenderer():
         handles = draw_path(path)
 
-    if False:
+    smooth = True
+    if smooth:
         #curve_collision_fn = lambda *args, **kwargs: False
         curve_collision_fn = get_curve_collision_fn(robot, joints, resolutions=resolutions, **kwargs)
         with LockRenderer():
-            curve = smooth_curve(curve, MAX_VELOCITIES, MAX_ACCELERATIONS, curve_collision_fn, max_time=5) #, curve_collision_fn=[])
+            with BodySaver(robot):
+                curve = smooth_curve(curve, MAX_VELOCITIES, MAX_ACCELERATIONS, curve_collision_fn, max_time=5) #, curve_collision_fn=[])
         path = [conf for t, conf in sample_curve(curve, time_step=step_size)]
         print('Steps: {} | Start: {:.3f} | End: {:.3f} | Knots: {}'.format(
             len(path), curve.x[0], curve.x[-1], len(curve.x)))
         with LockRenderer():
             handles = draw_path(path)
 
+    #set_joint_positions(robot, joints, curve(random.uniform(curve.x[0], curve.x[-1])))
     wait_if_gui(message='Begin?')
-    mpc_control(robot, joints, curve)
-    wait_if_gui()
+    follow_curve(robot, joints, curve)
+    wait_if_gui(message='Finish?')
+    return
 
+    wait_if_gui(message='Begin?')
     for i, conf in enumerate(path):
         set_joint_positions(robot, joints, conf)
         if step_size is None:
@@ -518,13 +555,7 @@ def main(use_2d=True):
         disconnect()
         return
 
-    with BodySaver(robot):
-        new_path = []
-        for conf in path:
-            set_joint_positions(robot, plan_joints, conf)
-            new_path.append(get_joint_positions(robot, base_joints))
-        path = new_path
-
+    path = extract_full_path(robot, plan_joints, path, base_joints)
     iterate_path(robot, base_joints, path, step_size=2e-2, custom_limits=custom_limits, resolutions=resolutions,
                  obstacles=obstacles, self_collisions=False, max_distance=MIN_PROXIMITY)
     disconnect()
