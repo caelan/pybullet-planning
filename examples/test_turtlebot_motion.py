@@ -20,11 +20,13 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     normalize_interval, wrap_angle, CIRCULAR_LIMITS, wrap_interval, Euler, rescale_interval, adjust_path, \
     contact_collision, timer, update_scene, set_aabb_buffer, set_separating_axis_collisions, get_aabb, set_pose, \
     Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION, \
-    base_aligned_z, load_pybullet, get_collision_fn, get_custom_limits, get_limits_fn
+    base_aligned_z, load_pybullet, get_collision_fn, get_custom_limits, get_limits_fn, \
+    get_joint_velocities, control_joint, get_time_step, remove_handles
 
 from motion_planners.trajectory.smooth import smooth_curve
-from motion_planners.trajectory.parabolic import solve_multi_linear
-from motion_planners.utils import waypoints_from_path, default_selector
+from motion_planners.trajectory.linear import solve_multi_linear, quickest_inf_accel
+from motion_planners.trajectory.limits import check_spline
+from motion_planners.utils import waypoints_from_path, default_selector, irange
 from motion_planners.trajectory.discretize import time_discretize_curve
 
 from pybullet_tools.retime import interpolate_path, sample_curve
@@ -78,6 +80,15 @@ def sample_placements(body_surfaces, obstacles=None, savers=[], min_distances={}
         saver.restore()
     return True
 
+##################################################
+
+def draw_waypoint(conf, z=DRAW_Z):
+    return draw_pose(pose_from_pose2d(conf, z=z), length=DRAW_LENGTH)
+
+def draw_conf(pose2d, interval, base_z, **kwargs):
+    return draw_pose2d(pose2d, z=base_z + rescale_interval(
+        wrap_interval(pose2d[2], interval=interval), old_interval=interval, new_interval=(-0.5, 0.5)), **kwargs)
+
 def draw_path(path2d, z=DRAW_Z, **kwargs):
     if path2d is None:
         return []
@@ -92,9 +103,7 @@ def draw_path(path2d, z=DRAW_Z, **kwargs):
     draw_pose(pose_from_pose2d(start, z=base_z), length=1, **kwargs)
     # TODO: draw the current pose
     # TODO: line between orientations when there is a jump
-    return list(flatten(draw_pose2d(pose2d, z=base_z+rescale_interval(
-        wrap_interval(pose2d[2], interval=interval), old_interval=interval, new_interval=(-0.5, 0.5)), **kwargs)
-                        for pose2d in path2d))
+    return list(flatten(draw_conf(pose2d, interval, base_z, **kwargs) for pose2d in path2d))
 
 
 def plan_motion(robot, joints, goal_positions, attachments=[], obstacles=None, holonomic=False, reversible=False, **kwargs):
@@ -143,7 +152,7 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     initial_conf = np.array([+floor_extent/3, -floor_extent/3, 3*PI/4])
     goal_conf = -initial_conf
 
-    robot = load_pybullet(TURTLEBOT_URDF, merge=True, sat=False)
+    robot = load_pybullet(TURTLEBOT_URDF, fixed_base=True, merge=True, sat=False)
     base_joints = joints_from_names(robot, BASE_JOINTS)
     # base_link = child_link_from_joint(base_joints[-1])
     base_link = link_from_name(robot, BASE_LINK_NAME)
@@ -202,10 +211,80 @@ def get_curve_collision_fn(robot, joints, custom_limits={}, resolutions=None, v_
         return False
     return curve_collision_fn
 
+def mpc(x0, v0, curve, dt_max=0.5, max_time=INF, max_iterations=INF, v_max=None, **kwags):
+    from scipy.interpolate import CubicHermiteSpline
+    start_time = time.time()
+    best_cost, best_spline = INF, None
+    while elapsed_time(start_time) < max_time:
+        t1 = random.uniform(curve.x[0], curve.x[-1])
+        future = (curve.x[-1] - t1) # TODO: weighted
+        if future >= best_cost:
+            continue
+        x1 = curve(t1)
+        if (v_max is not None) and (max((x1 - x0) / v_max) > dt_max):
+            continue
+        # if quickest_inf_accel(x0, x1, v_max=v_max) > dt_max:
+        #     continue
+        v1 = curve(t1, nu=1)
+        #dt = dt_max
+        dt = random.uniform(0, dt_max)
+        times = [0., dt]
+        positions = [x0, x1]
+        velocities = [v0, v1]
+        spline = CubicHermiteSpline(times, positions, dydx=velocities)
+        if not check_spline(spline, **kwags):
+            continue
+        # TODO: optimize to find the closest on the path within a range
+
+        cost = future + (spline.x[-1] - spline.x[0])
+        if cost < best_cost:
+            best_cost, best_spline = cost, spline
+            print(best_cost, t1, elapsed_time(start_time))
+    return best_cost, best_spline
+
+def mpc_control(robot, joints, curve):
+    dt = get_time_step()
+    for i in irange(INF):
+        if (i % 10) != 0:
+            continue
+
+        positions = np.array(get_joint_positions(robot, joints))
+        velocities = np.array(get_joint_velocities(robot, joints))
+        print('Positions: {} | Velocities: {}'.format(positions, velocities))
+
+        _, connection = mpc(positions, velocities, curve, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS,
+                            dt_max=1e-1, max_time=1e-1)
+        assert connection is not None
+        target_t = 0.5*connection.x[-1]
+        target_p = connection(target_t)
+        target_v = connection(target_t, nu=1)
+        handles = draw_waypoint(target_p)
+        print(target_p)
+
+        # target_t = curve.x[-1]
+        # target_p = curve(target_t)
+        # target_v = MAX_VELOCITIES
+        #target_v = INF*np.zeros(len(joints))
+
+        #times, confs = time_discretize_curve(curve, verbose=False, resolution=resolutions)  # max_velocities=v_max,
+
+        # set_joint_positions(robot, joints, target_p)
+        for j, p, v in zip(joints, target_p, target_v):
+            control_joint(robot, joint=j, position=p, #velocity=v, #velocity=0.,
+                          position_gain=None, max_velocity=abs(v), velocity_scale=None, max_force=None)
+        step_simulation()
+        wait_if_gui()
+        wait_for_duration(duration=2*dt)
+        remove_handles(handles)
+
+
 def iterate_path(robot, joints, path, step_size=None, resolutions=None, **kwargs): # 1e-2 | None
     if path is None:
         return
     path = adjust_path(robot, joints, path)
+    with LockRenderer():
+        handles = draw_path(path)
+
     waypoints = path
     #waypoints = waypoints_from_path(path)
     #curve = interpolate_path(robot, joints, waypoints, k=1, velocity_fraction=1) # TODO: no velocities in the URDF
@@ -218,7 +297,7 @@ def iterate_path(robot, joints, path, step_size=None, resolutions=None, **kwargs
     with LockRenderer():
         handles = draw_path(path)
 
-    if True:
+    if False:
         #curve_collision_fn = lambda *args, **kwargs: False
         curve_collision_fn = get_curve_collision_fn(robot, joints, resolutions=resolutions, **kwargs)
         with LockRenderer():
@@ -230,6 +309,8 @@ def iterate_path(robot, joints, path, step_size=None, resolutions=None, **kwargs
             handles = draw_path(path)
 
     wait_if_gui(message='Begin?')
+    mpc_control(robot, joints, curve)
+
     for i, conf in enumerate(path):
         set_joint_positions(robot, joints, conf)
         if step_size is None:
@@ -314,6 +395,8 @@ def main(use_2d=True):
                         help='')
     parser.add_argument('-s', '--seed', default=None, type=int, # None | 1
                         help='The random seed to use.')
+    parser.add_argument('-n', '--num', default=10, type=int,
+                        help='The number of obstacles.')
     parser.add_argument('-v', '--viewer', action='store_false',
                         help='')
     args = parser.parse_args()
@@ -334,7 +417,7 @@ def main(use_2d=True):
 
     #########################
 
-    robot, base_limits, goal_conf, obstacles = problem1()
+    robot, base_limits, goal_conf, obstacles = problem1(n_obstacles=args.num)
     custom_limits = create_custom_base_limits(robot, base_limits)
     base_joints = joints_from_names(robot, BASE_JOINTS)
 
@@ -342,7 +425,7 @@ def main(use_2d=True):
     # draw_pose(get_link_pose(robot, base_link), length=0.5)
     start_conf = get_joint_positions(robot, base_joints)
     for conf in [start_conf, goal_conf]:
-        draw_pose(pose_from_pose2d(conf, z=DRAW_Z), length=DRAW_LENGTH)
+        draw_waypoint(conf)
 
     #resolutions = None
     #resolutions = np.array([0.05, 0.05, math.radians(10)])
@@ -353,7 +436,7 @@ def main(use_2d=True):
         obstacles = []
     # for obstacle in obstacles:
     #     draw_aabb(get_aabb(obstacle)) # Updates automatically
-    set_all_static() # Doesn't seem to affect
+    #set_all_static() # Doesn't seem to affect
 
     #test_aabb(robot)
     #test_caching(robot, obstacles)
