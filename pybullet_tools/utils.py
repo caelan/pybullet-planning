@@ -3537,13 +3537,14 @@ def get_default_weights(body, joints, weights=None):
     # TODO: use the energy resulting from the mass matrix here?
     return 1*np.ones(len(joints)) # TODO: use velocities here
 
-def get_distance_fn(body, joints, weights=None): #, norm=2):
+def get_distance_fn(body, joints, weights=None, norm=2):
     weights = get_default_weights(body, joints, weights)
     difference_fn = get_difference_fn(body, joints)
     def fn(q1, q2):
         diff = np.array(difference_fn(q2, q1))
-        return np.sqrt(np.dot(weights, diff * diff))
-        #return np.linalg.norm(np.multiply(weights * diff), ord=norm)
+        if norm == 2:
+            return np.sqrt(np.dot(weights, diff * diff))
+        return np.linalg.norm(np.multiply(weights, diff), ord=norm)
     return fn
 
 def get_duration_fn(body, joints, velocities=None, norm=INF):
@@ -4223,10 +4224,7 @@ def get_grasp_pose(constraint):
 
 # Control
 
-def control_joint(body, joint, position=None, velocity=0., position_gain=None,
-                  max_velocity=None, velocity_scale=None, max_force=None):
-    if position is None:
-        position = get_joint_position(body, joint)
+def get_control_joint_kwargs(body, joint, position_gain=None, max_velocity=None, velocity_scale=None, max_force=None):
     kwargs = {}
     if position_gain is not None:
         velocity_gain = 0.1*position_gain
@@ -4246,13 +4244,25 @@ def control_joint(body, joint, position=None, velocity=0., position_gain=None,
         kwargs.update({
             'force': max_force,
         })
+    return kwargs
+
+def control_joint(body, joint, position=None, velocity=0., **kwargs):
+    if position is None:
+        position = get_joint_position(body, joint) # TODO: remove?
+    joint_kwargs = get_control_joint_kwargs(body, joint, **kwargs)
     return p.setJointMotorControl2(bodyIndex=body, # bodyUniqueId
                                    jointIndex=joint,
                                    controlMode=p.POSITION_CONTROL,
                                    #controlMode=p.PD_CONTROL, # STABLE_PD_CONTROL
                                    targetPosition=position,
                                    targetVelocity=velocity, # Note that the targetVelocity is not the maximum joint velocity
-                                   physicsClientId=CLIENT, **kwargs)
+                                   physicsClientId=CLIENT, **joint_kwargs)
+
+def velocity_control_joint(body, joint, velocity=0., **kwargs):
+    joint_kwargs = get_control_joint_kwargs(body, joint, **kwargs)
+    return p.setJointMotorControl2(body, joint, p.VELOCITY_CONTROL,
+                                   targetVelocity=velocity, # Note that the targetVelocity is not the maximum joint velocity
+                                   physicsClientId=CLIENT, **joint_kwargs)
 
 def control_joints(body, joints, positions=None, velocities=None, position_gain=None, velocity_scale=None, max_force=None):
     if positions is None:

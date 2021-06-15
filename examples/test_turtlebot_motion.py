@@ -21,7 +21,8 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     contact_collision, timer, update_scene, set_aabb_buffer, set_separating_axis_collisions, get_aabb, set_pose, \
     Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION, \
     base_aligned_z, load_pybullet, get_collision_fn, get_custom_limits, get_limits_fn, \
-    get_joint_velocities, control_joint, get_time_step, remove_handles
+    get_joint_velocities, control_joint, get_time_step, remove_handles, Interval, get_distance, \
+    get_duration_fn, velocity_control_joint
 
 from motion_planners.trajectory.smooth import smooth_curve
 from motion_planners.trajectory.linear import solve_multi_linear, quickest_inf_accel
@@ -184,11 +185,11 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
 def compute_cost(robot, joints, path, resolutions=None):
     if path is None:
         return INF
-    return sum(get_distance_fn(robot, joints, weights=resolutions)(*pair)
-               for pair in get_pairs(path))
+    distance_fn = get_distance_fn(robot, joints, weights=resolutions) # TODO: get_duration_fn
+    return sum(distance_fn(*pair) for pair in get_pairs(path))
 
-def get_curve_collision_fn(robot, joints, custom_limits={}, resolutions=None, v_max=None, a_max=None, **kawrgs):
-    collision_fn = get_collision_fn(robot, joints, custom_limits=custom_limits, **kawrgs)
+def get_curve_collision_fn(robot, joints, custom_limits={}, resolutions=None, v_max=None, a_max=None, **kwargs):
+    collision_fn = get_collision_fn(robot, joints, custom_limits=custom_limits, **kwargs)
     limits_fn = get_limits_fn(robot, joints, custom_limits)
 
     def curve_collision_fn(curve, t0, t1):
@@ -211,11 +212,16 @@ def get_curve_collision_fn(robot, joints, custom_limits={}, resolutions=None, v_
         return False
     return curve_collision_fn
 
-def mpc(x0, v0, curve, dt_max=0.5, max_time=INF, max_iterations=INF, v_max=None, **kwags):
+##################################################
+
+def mpc(x0, v0, curve, dt_max=0.5, max_time=INF, max_iterations=INF, v_max=None, **kwargs):
+    assert (max_time < INF) or (max_iterations < INF)
     from scipy.interpolate import CubicHermiteSpline
     start_time = time.time()
     best_cost, best_spline = INF, None
-    while elapsed_time(start_time) < max_time:
+    for iteration in irange(max_iterations):
+        if elapsed_time(start_time) >= max_time:
+            break
         t1 = random.uniform(curve.x[0], curve.x[-1])
         future = (curve.x[-1] - t1) # TODO: weighted
         if future >= best_cost:
@@ -232,49 +238,89 @@ def mpc(x0, v0, curve, dt_max=0.5, max_time=INF, max_iterations=INF, v_max=None,
         positions = [x0, x1]
         velocities = [v0, v1]
         spline = CubicHermiteSpline(times, positions, dydx=velocities)
-        if not check_spline(spline, **kwags):
+        if not check_spline(spline, **kwargs):
             continue
         # TODO: optimize to find the closest on the path within a range
 
         cost = future + (spline.x[-1] - spline.x[0])
         if cost < best_cost:
             best_cost, best_spline = cost, spline
+            print('Iteration: {} | Cost: {:.3f} | T: {:.3f} | Time: {:.3f}'.format(
+                iteration, cost, t1, elapsed_time(start_time)))
             print(best_cost, t1, elapsed_time(start_time))
     return best_cost, best_spline
 
-def mpc_control(robot, joints, curve):
+def find_closest(x0, curve, t_range=None, max_time=INF, max_iterations=INF, distance_fn=None, verbose=False):
+    assert (max_time < INF) or (max_iterations < INF)
+    if t_range is None:
+        t_range = Interval(curve.x[0], curve.x[-1])
+    t_range = Interval(max(t_range[0], curve.x[0]), min(curve.x[-1], t_range[-1]))
+    if distance_fn is None:
+        distance_fn = get_distance
+    start_time = time.time()
+    closest_dist, closest_t = INF, None
+    for iteration in irange(max_iterations):
+        if elapsed_time(start_time) >= max_time:
+            break
+        t = random.uniform(*t_range) # TODO: halton
+        x = curve(t)
+        dist = distance_fn(x0, x)
+        if dist < closest_dist:
+            closest_dist, closest_t = dist, t
+            if verbose:
+                print('Iteration: {} | Dist: {:.3f} | T: {:.3f} | Time: {:.3f}'.format(
+                    iteration, closest_dist, t, elapsed_time(start_time)))
+    return closest_dist, closest_t
+
+def mpc_control(robot, joints, curve, goal_t=None):
+    if goal_t is None:
+        goal_t = curve.x[-1]
+    goal_x = curve(goal_t)
     dt = get_time_step()
+    #distance_fn = get_distance_fn(robot, joints, weights=None, norm=2)
+    distance_fn = get_duration_fn(robot, joints, velocities=MAX_VELOCITIES, norm=INF)
     for i in irange(INF):
         if (i % 10) != 0:
             continue
-
         positions = np.array(get_joint_positions(robot, joints))
         velocities = np.array(get_joint_velocities(robot, joints))
-        print('Positions: {} | Velocities: {}'.format(positions, velocities))
+        goal_dist = distance_fn(positions, goal_x)
+        print('Positions: {} | Velocities: {} | Goal distance: {:.3f}'.format(positions, velocities, goal_dist))
+        if goal_dist < 1e-2:
+            return True
 
-        _, connection = mpc(positions, velocities, curve, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS,
-                            dt_max=1e-1, max_time=1e-1)
-        assert connection is not None
-        target_t = 0.5*connection.x[-1]
-        target_p = connection(target_t)
-        target_v = connection(target_t, nu=1)
-        handles = draw_waypoint(target_p)
-        print(target_p)
+        # _, connection = mpc(positions, velocities, curve, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS,
+        #                     dt_max=1e-1, max_time=1e-1)
+        # assert connection is not None
+        # target_t = 0.5*connection.x[-1]
+        # target_p = connection(target_t)
+        # target_v = connection(target_t, nu=1)
+        # #print(target_p)
 
-        # target_t = curve.x[-1]
-        # target_p = curve(target_t)
-        # target_v = MAX_VELOCITIES
+        closest_dist, closest_t = find_closest(positions, curve, t_range=None, max_time=1e-2,
+                                               max_iterations=INF, distance_fn=distance_fn, verbose=True)
+        target_t = min(closest_t + 1e-1, curve.x[-1])
+        target_p = curve(target_t)
+        #target_v = curve(target_t, nu=1)
+        target_v = curve(closest_t, nu=1)
+        #target_v = MAX_VELOCITIES
         #target_v = INF*np.zeros(len(joints))
 
+        handles = draw_waypoint(target_p)
         #times, confs = time_discretize_curve(curve, verbose=False, resolution=resolutions)  # max_velocities=v_max,
 
         # set_joint_positions(robot, joints, target_p)
         for j, p, v in zip(joints, target_p, target_v):
-            control_joint(robot, joint=j, position=p, #velocity=v, #velocity=0.,
-                          position_gain=None, max_velocity=abs(v), velocity_scale=None, max_force=None)
+            if True:
+                control_joint(robot, joint=j, position=p,
+                              #velocity=v, #velocity=0.,
+                              #max_velocity=abs(v),
+                              position_gain=None, velocity_scale=None, max_force=None)
+            else:
+                velocity_control_joint(robot, joint=j, velocity=v) #, max_velocity=None)
         step_simulation()
-        wait_if_gui()
-        wait_for_duration(duration=2*dt)
+        #wait_if_gui()
+        #wait_for_duration(duration=dt)
         remove_handles(handles)
 
 
@@ -310,6 +356,7 @@ def iterate_path(robot, joints, path, step_size=None, resolutions=None, **kwargs
 
     wait_if_gui(message='Begin?')
     mpc_control(robot, joints, curve)
+    wait_if_gui()
 
     for i, conf in enumerate(path):
         set_joint_positions(robot, joints, conf)
