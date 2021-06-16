@@ -35,13 +35,43 @@ def create_object(shape, side=0.1, mass=1, color=BLUE):
         raise ValueError(shape)
     return obj
 
-def simulate():
-    pass
+##################################################
 
 def at_rest(obj, tol=1e-3):
     linear, angular = get_velocity(obj)
     return np.allclose(linear, 0, rtol=0, atol=tol) and \
            np.allclose(angular, 0, rtol=0, atol=tol)
+
+def rest_controller(obj, **kwargs):
+    for step in irange(INF):
+        if (step != 0) and at_rest(obj, **kwargs):
+            break
+        yield
+
+def is_empty(generator):
+    try:
+        next(generator)
+        return False
+    except StopIteration:
+        return True
+
+def simulate(controller=None, max_duration=INF, max_steps=INF, print_rate=1.):
+    enable_gravity()
+    dt = get_time_step()
+    print('Time step: {:.6f} sec'.format(dt))
+    start_time = last_print = time.time()
+    for step in irange(max_steps):
+        duration = step * dt
+        if duration >= max_duration:
+            break
+        if (controller is not None) and is_empty(controller):
+            break
+        step_simulation()
+        synchronize_viewer()
+        if elapsed_time(last_print) >= print_rate:
+            print('Sim step: {} | Sim time: {:.3f} sec | Elapsed time: {:.3f} sec'.format(
+                step, duration, elapsed_time(start_time)))
+            last_print = time.time()
 
 ##################################################
 
@@ -81,22 +111,7 @@ def main():
     set_renderer(enable=True)
     if video is None:
         wait_if_gui('Begin?')
-
-    enable_gravity()
-    dt = get_time_step()
-    print('Time step: {:.6f} sec'.format(dt))
-
-    start_time = last_print = time.time()
-    for step in irange(INF):
-        step_simulation()
-        synchronize_viewer()
-        if elapsed_time(last_print) >= 1:
-            last_print = time.time()
-            print('Step: {} | Sim time: {:.3f} sec | Elapsed time: {:.3f} sec'.format(
-                step, step*dt, elapsed_time(start_time)))
-        if at_rest(obj):
-            break
-
+    simulate(controller=rest_controller(obj))
     if video is None:
         wait_if_gui('Finish?')
     disconnect()
