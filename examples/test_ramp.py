@@ -14,6 +14,36 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
     set_renderer, irange, INF, create_cylinder, create_sphere, create_capsule, set_euler, get_velocity, create_faces, \
     STATIC_MASS, mesh_from_points, RED
 
+def create_ramp(half_extent=0.5):
+    vertices = [Point(s1 * half_extent, s2 * half_extent, 0) for s1, s2 in product([+1, -1], repeat=2)] + \
+               [Point(-half_extent, s * half_extent, half_extent) for s in [+1, -1]]
+    mesh = mesh_from_points(vertices, under=True)
+    return create_faces(mesh, mass=STATIC_MASS, color=RED)
+
+def create_object(shape, side=0.1, mass=1, color=BLUE):
+    # TODO: simulation parameters
+    # TODO: object dynamics parameters
+    if shape == 'box':
+        obj = create_box(w=side, l=side, h=side, mass=mass, color=color)
+    elif shape == 'sphere':
+        obj = create_sphere(radius=side, mass=mass, color=color)
+    elif shape == 'cylinder':
+        obj = create_cylinder(radius=side, height=side, mass=mass, color=color)
+    elif shape == 'capsule':
+        obj = create_capsule(radius=side, height=side, mass=mass, color=color)
+    else:
+        raise ValueError(shape)
+    return obj
+
+def simulate():
+    pass
+
+def at_rest(obj, tol=1e-3):
+    linear, angular = get_velocity(obj)
+    return np.allclose(linear, 0, rtol=0, atol=tol) and \
+           np.allclose(angular, 0, rtol=0, atol=tol)
+
+##################################################
 
 def main():
     parser = argparse.ArgumentParser()
@@ -35,30 +65,12 @@ def main():
     #plane = load_model('plane.urdf')
     set_point(plane, Point(z=-1e-3))
 
-    half = 0.5
-    vertices = [Point(s1*half, s2*half, 0) for s1, s2 in product([+1, -1], repeat=2)] + \
-               [Point(
-                   -half, s*half, half) for s in [+1, -1]]
-    mesh = mesh_from_points(vertices, under=True)
-    ramp = create_faces(mesh, mass=STATIC_MASS, color=RED)
+    ramp = create_ramp()
+    dump_body(ramp)
 
-    # TODO: simulation parameters
-    # TODO: object dynamics parameters
-    mass = 1
-    color = BLUE
-    side = 0.1
-    if args.shape == 'box':
-        obj = create_box(w=side, l=side, h=side, mass=mass, color=color)
-    elif args.shape == 'sphere':
-        obj = create_sphere(radius=side, mass=mass, color=color)
-    elif args.shape == 'cylinder':
-        obj = create_cylinder(radius=side, height=side, mass=mass, color=color)
-    elif args.shape == 'capsule':
-        obj = create_capsule(radius=side, height=side, mass=mass, color=color)
-    else:
-        raise ValueError(args.shape)
-    set_euler(obj, np.random.uniform(0, np.math.radians(1), 3))
-
+    obj = create_object(args.shape)
+    set_euler(obj, np.random.uniform(-np.math.radians(1), np.math.radians(1), 3))
+    set_point(obj, np.random.uniform(-1e-3, +1e-3, 3))
     #set_velocity(obj, linear=Point(x=-1))
     set_position(obj, z=2.)
     #set_position(obj, z=base_aligned_z(obj))
@@ -69,6 +81,7 @@ def main():
     set_renderer(enable=True)
     if video is None:
         wait_if_gui('Begin?')
+
     enable_gravity()
     dt = get_time_step()
     print('Time step: {:.6f} sec'.format(dt))
@@ -81,8 +94,7 @@ def main():
             last_print = time.time()
             print('Step: {} | Sim time: {:.3f} sec | Elapsed time: {:.3f} sec'.format(
                 step, step*dt, elapsed_time(start_time)))
-        linear, angular = get_velocity(obj)
-        if np.allclose(linear, 0, rtol=0, atol=1e-3) and np.allclose(angular, 0, rtol=0, atol=1e-3):
+        if at_rest(obj):
             break
 
     if video is None:
