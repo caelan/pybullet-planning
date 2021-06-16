@@ -3349,7 +3349,8 @@ def contact_collision(**kwargs):
 def draw_collision_info(collision_info, **kwargs):
     point1 = collision_info.positionOnA
     point2 = collision_info.positionOnB
-    #point1 = point2 + np.array(collision_info.contactNormalOnB)*collision_info.contactDistance
+    #direction = np.array(collision_info.contactNormalOnB)*collision_info.contactDistance
+    #assert np.allclose(point1, point2 + direction)
     handles = [add_line(point1, point2, **kwargs)]
     for point in [point1, point2]:
         handles.extend(draw_point(point, **kwargs))
@@ -4436,14 +4437,14 @@ def combine_controllers(controllers):
 
 ##################################################
 
-def compute_jacobian(robot, link, positions=None):
+def compute_jacobian(robot, link, point=unit_point(), positions=None, velocities=None, accelerations=None):
     joints = get_movable_joints(robot)
     if positions is None:
         positions = get_joint_positions(robot, joints)
-    assert len(joints) == len(positions)
-    velocities = [0.0] * len(positions)
-    accelerations = [0.0] * len(positions)
-    translate, rotate = p.calculateJacobian(robot, link, unit_point(), positions,
+    velocities = [0.0] * len(positions) if velocities is None else velocities
+    accelerations = [0.0] * len(positions) if accelerations is None else accelerations
+    assert len(joints) == len(positions) == len(velocities) == len(accelerations)
+    translate, rotate = p.calculateJacobian(robot, link, point, positions,
                                             velocities, accelerations, physicsClientId=CLIENT)
     #movable_from_joints(robot, joints)
     return list(zip(*translate)), list(zip(*rotate)) # len(joints) x 3
@@ -4548,6 +4549,15 @@ def get_pose_distance(pose1, pose2):
     pos_distance = get_distance(pos1, pos2)
     ori_distance = quat_angle_between(quat1, quat2)
     return pos_distance, ori_distance
+
+def interpolate_points(point1, point2, step_size=1e-2):
+    # TODO: get_position_waypoints
+    # TODO: refactor interpolate_poses to take num steps that's the larger of the two
+    num_steps = max(2, int(math.ceil(get_distance(point1, point2) / step_size)))
+    yield point1
+    for w in np.linspace(0, 1, num=num_steps, endpoint=True)[1:-1]:
+        yield convex_combination(point1, point2, w=w)
+    yield point2
 
 def interpolate_poses(pose1, pose2, pos_step_size=0.01, ori_step_size=np.pi/16):
     pos1, quat1 = pose1

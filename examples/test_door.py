@@ -6,6 +6,8 @@ import os
 import pybullet as p
 import time
 import argparse
+import numpy as np
+import math
 
 from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui, load_pybullet, \
     draw_global_system, dump_body, get_sample_fn, get_movable_joints, enable_gravity, step_simulation, \
@@ -16,7 +18,9 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
     create_box, BLUE, add_pose_constraint, get_pose, synchronize_viewer, set_renderer, get_cylinder_geometry, \
     TURTLEBOT_URDF, set_joint_positions, \
     set_all_color, control_joint, irange, INF, control_joints, get_first_link, point_from_pose, get_link_pose, \
-    get_max_velocities, get_max_forces
+    get_max_velocities, get_max_forces, interpolate, set_joint_position, get_joint_positions, get_closest_points, \
+    draw_collision_info, movable_from_joints, compute_jacobian, get_unit_vector, remove_handles, child_link_from_joint, \
+    set_configuration, unit_point, get_com_pose, get_link_inertial_pose, draw_pose, tform_point, invert
 from .test_ramp import condition_controller, simulate
 
 
@@ -64,6 +68,7 @@ def create_door(width=0.08, length=1, height=2, mass=1, handle=True, frame=True,
     hinge = 0 # -width/2
     door_collision, door_visual = create_shape(
         geometry, pose=Pose(Point(x=hinge, y=-length/2., z=height/2.)), **kwargs)
+    # TODO: center of mass
     door_link = LinkInfo(mass=mass, collision_id=door_collision, visual_id=door_visual,
                          parent=0, joint_type=p.JOINT_REVOLUTE, joint_axis=[0, 0, 1])
     links = [door_link]
@@ -114,10 +119,60 @@ def load_plane(z=-1e-3):
     add_data_path()
     plane = load_pybullet('plane.urdf', fixed_base=True)
     #plane = load_model('plane.urdf')
-    set_point(plane, Point(z=-1e-3))
+    if z is not None:
+        set_point(plane, Point(z=z))
     return plane
 
 ##################################################
+
+def test(robot, obst, max_iterations=100, step_size=math.radians(5), min_distance=2e-2, draw=True):
+    joints = get_movable_joints(robot)
+    target_link = child_link_from_joint(joints[-1])
+
+    # print(get_com_pose(robot, target_link))
+    # print(get_link_inertial_pose(robot, target_link))
+    # print(get_link_pose(robot, target_link))
+    # draw_pose(get_com_pose(robot, target_link))
+
+    success = False
+    start_time = time.time()
+    for iteration in range(max_iterations):
+        current_conf = np.array(get_joint_positions(robot, joints))
+        collision_infos = get_closest_points(robot, obst, link1=target_link, max_distance=INF)  # tool_link
+        collision_infos = sorted(collision_infos, key=lambda info: info.contactDistance)
+        collision_infos = collision_infos[:1] # TODO: average all these
+        handles = []
+        if draw:
+            for collision_info in collision_infos:
+                handles.extend(draw_collision_info(collision_info))
+            wait_if_gui()
+        [collision_info] = collision_infos[:1]
+        distance = collision_info.contactDistance
+        print('Iteration: {} | Collisions: {} | Distance: {:.3f} | Time: {:.3f}'.format(
+           iteration, len(collision_infos), distance, elapsed_time(start_time)))
+        if distance >= min_distance:
+            success = True
+            remove_handles(handles)
+            break
+        # TODO: convergence or decay in step size
+        direction = step_size * get_unit_vector(collision_info.contactNormalOnB) # B->A (already normalized)
+        contact_point = collision_info.positionOnA
+        com_pose = get_com_pose(robot, target_link) # TODO: use the real COM
+        local_point = tform_point(invert(com_pose), contact_point)
+        #local_point = unit_point()
+
+        translate, rotate = compute_jacobian(robot, target_link, point=local_point)
+        delta_conf = np.array([np.dot(translate[mj], direction) # + np.dot(rotate[mj], direction)
+                               for mj in movable_from_joints(robot, joints)])
+        new_conf = current_conf + delta_conf
+        set_joint_positions(robot, joints, new_conf)
+        if draw:
+            wait_if_gui()
+        remove_handles(handles)
+    print('Reachability: {} | Iteration: {} | Time: {:.3f}'.format(
+        success, iteration, elapsed_time(start_time)))
+    #quit()
+    return success
 
 def main(use_turtlebot=True):
     parser = argparse.ArgumentParser()
@@ -141,6 +196,7 @@ def main(use_turtlebot=True):
     #set_position(door, z=base_aligned_z(door))
     set_point(door, base_aligned(door))
     #set_collision_margin(door, link=0, margin=0.)
+    set_configuration(door, [math.radians(-5)])
     dump_body(door)
 
     ##########
@@ -187,10 +243,16 @@ def main(use_turtlebot=True):
     set_renderer(enable=True)
     #test_door(door)
 
+    num_steps = int(math.ceil(abs(target_x - start_x) / 1e-2))
+    for x in interpolate(start_x, target_x, num_steps=num_steps):
+        set_joint_position(robot, joint=robot_joints[0], value=x)
+        test(door, robot, draw=True)
+        wait_if_gui()
+
     if video is None:
         wait_if_gui('Begin?')
     simulate(controller=condition_controller(
-        lambda *args: abs(target_x - point_from_pose(get_link_pose(robot, robot_link))[0]) < 1e-3)) # TODO: velocity condition
+        lambda *args: abs(target_x - point_from_pose(get_link_pose(robot, robot_link))[0]) < 1e-3), sleep=0.01) # TODO: velocity condition
     # print('Velocities:', get_joint_velocities(robot, robot_joints))
     # print('Torques:', get_joint_torques(robot, robot_joints))
     if video is None:
