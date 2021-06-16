@@ -8,15 +8,18 @@ import time
 import argparse
 
 from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui, load_pybullet, \
-    HideOutput, draw_global_system, dump_body, get_sample_fn, get_movable_joints, enable_gravity, step_simulation, \
+    draw_global_system, dump_body, get_sample_fn, get_movable_joints, enable_gravity, step_simulation, \
     get_time_step, elapsed_time, get_joint_intervals, \
     velocity_control_joints, PI, set_point, Point, get_box_geometry, \
-    create_shape, set_camera_pose, Pose, get_all_links, base_aligned_z, BLACK, LinkInfo, create_multi_body, \
-    Shape, create_shape_array, unzip, STATIC_MASS, get_aabb_extent, get_aabb, set_position, base_aligned, \
-    create_box, BLUE, set_velocity, add_pose_constraint, get_pose, synchronize_viewer, get_velocity, get_bodies, \
-    get_distance, get_point, set_renderer, get_cylinder_geometry, pairwise_collision, TURTLEBOT_URDF, set_joint_positions, \
+    create_shape, set_camera_pose, Pose, base_aligned_z, BLACK, LinkInfo, create_multi_body, \
+    Shape, create_shape_array, unzip, STATIC_MASS, set_position, base_aligned, \
+    create_box, BLUE, add_pose_constraint, get_pose, synchronize_viewer, set_renderer, get_cylinder_geometry, \
+    TURTLEBOT_URDF, set_joint_positions, \
     set_all_color, control_joint, irange, INF, control_joints, get_first_link, point_from_pose, get_link_pose, \
-    get_joint_velocities, get_max_velocities, get_max_force, get_max_forces, get_joint_torques, read, BASE_LINK, inf_generator
+    get_max_velocities, get_max_forces
+from .test_ramp import condition_controller, simulate
+
+
 #from examples.test_turtlebot_motion import BASE_JOINTS
 
 # bullet3/examples/pybullet/examples
@@ -89,18 +92,32 @@ def test_door(door):
     control_joints(door, door_joints, positions=lower)
     velocity_control_joints(door, door_joints, velocities=[PI / 4]) # Able to exceed limits
 
-def condition_controller(condition):
-    #from itertools import takewhile
-    dt = get_time_step()
-    for step in irange(INF):
-        #duration = step*dt
-        if condition(step):
-           break
-        yield
-
 ##################################################
 
 IGNORE_EXT = ['.png', '.gif', '.jpeg', '.py', '.mtl']
+
+def list_pybullet_robots():
+    data_path = add_data_path()
+    robot_path = os.path.abspath(os.path.join(data_path, os.pardir, 'pybullet_robots'))
+    directories = sorted(name for name in os.listdir(robot_path) if os.path.isdir(os.path.join(robot_path, name)))
+    return directories
+
+def list_pybullet_data():
+    # TODO: recursively search
+    data_path = add_data_path()
+    #directories = sorted(name for name in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, name)))
+    files = sorted(name for name in os.listdir(data_path) if not os.path.isdir(
+        os.path.join(data_path, name)) and (os.path.splitext(name)[1] not in IGNORE_EXT))
+    return files
+
+def load_plane(z=-1e-3):
+    add_data_path()
+    plane = load_pybullet('plane.urdf', fixed_base=True)
+    #plane = load_model('plane.urdf')
+    set_point(plane, Point(z=-1e-3))
+    return plane
+
+##################################################
 
 def main(use_turtlebot=True):
     parser = argparse.ArgumentParser()
@@ -110,24 +127,14 @@ def main(use_turtlebot=True):
 
     connect(use_gui=True, mp4=video)
     set_renderer(enable=False)
-    data_path = add_data_path()
-    print(data_path)
-    print(sorted(name for name in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, name))))
-    print(sorted(name for name in os.listdir(data_path) if not os.path.isdir(
-        os.path.join(data_path, name)) and (os.path.splitext(name)[1] not in IGNORE_EXT)))
-    # TODO: recursively search
-
-    robot_path = os.path.abspath(os.path.join(data_path, os.pardir, 'pybullet_robots'))
-    print(robot_path)
+    # print(list_pybullet_data())
+    # print(list_pybullet_robots())
 
     draw_global_system()
     set_camera_pose(camera_point=Point(+1.5, -1.5, +1.5),
                     target_point=Point(-1.5, +1.5, 0))
 
-    plane = load_pybullet('plane.urdf', fixed_base=True)
-    #plane = load_model('plane.urdf')
-    set_point(plane, Point(z=-1e-3))
-
+    plane = load_plane()
     #door = load_pybullet('models/door.urdf', fixed_base=True) # From drake
     #set_point(door, Point(z=-.1))
     door = create_door()
@@ -136,8 +143,10 @@ def main(use_turtlebot=True):
     #set_collision_margin(door, link=0, margin=0.)
     dump_body(door)
 
+    ##########
+
     start_x = +2
-    target_x = -2
+    target_x = -start_x
     if not use_turtlebot:
         side = 0.25
         robot = create_box(w=side, l=side, h=side, mass=5., color=BLUE)
@@ -155,6 +164,8 @@ def main(use_turtlebot=True):
     robot_link = get_first_link(robot)
     dump_body(robot)
 
+    ##########
+
     if not use_turtlebot:
         target_point, target_quat = map(list, get_pose(robot))
         target_point[0] = target_x
@@ -171,37 +182,17 @@ def main(use_turtlebot=True):
         #control_joints(robot, robot_joints, positions=[target_x, 0, PI], max_force=300)
         #velocity_control_joints(robot, robot_joints, velocities=[-2., 0, 0]) #, max_force=300)
 
-    condition = lambda: abs(target_x - point_from_pose(get_link_pose(robot, robot_link))[0]) < 1e-3 # TODO: velocity condition
+    ##########
+
     set_renderer(enable=True)
     #test_door(door)
 
     if video is None:
         wait_if_gui('Begin?')
-    enable_gravity()
-    #p.setGravity(-GRAVITY, 0, 0)
-    dt = get_time_step()
-    print('Time step: {:.6f} sec'.format(dt))
-    #sleep_per_step = dt/2.
-    #sleep_per_step = 0.01
-
-    start_time = last_print = time.time()
-    for step in irange(INF):
-        step_simulation()
-        synchronize_viewer()
-        if elapsed_time(last_print) >= 1:
-            last_print = time.time()
-            print('Step: {} | Sim time: {:.3f} sec | Elapsed time: {:.3f} sec'.format(
-                step, step*dt, elapsed_time(start_time)))
-        #if video is None:
-        #   time.sleep(sleep_per_step)
-        #print(pairwise_collision(robot, door))
-        if condition():
-           break
-        # print('Velocities:', get_joint_velocities(robot, robot_joints))
-        # #print('Torques:', get_joint_torques(robot, robot_joints))
-        # wait_if_gui()
-        # print()
-
+    simulate(controller=condition_controller(
+        lambda *args: abs(target_x - point_from_pose(get_link_pose(robot, robot_link))[0]) < 1e-3)) # TODO: velocity condition
+    # print('Velocities:', get_joint_velocities(robot, robot_joints))
+    # print('Torques:', get_joint_torques(robot, robot_joints))
     if video is None:
         set_renderer(enable=True)
         wait_if_gui('Finish?')

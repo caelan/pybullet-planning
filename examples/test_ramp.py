@@ -37,16 +37,19 @@ def create_object(shape, side=0.1, mass=1, color=BLUE):
 
 ##################################################
 
+def condition_controller(condition):
+    #from itertools import takewhile
+    dt = get_time_step()
+    for step in irange(INF):
+        #duration = step*dt
+        if condition(step):
+           break
+        yield
+
 def at_rest(obj, tol=1e-3):
     linear, angular = get_velocity(obj)
     return np.allclose(linear, 0, rtol=0, atol=tol) and \
            np.allclose(angular, 0, rtol=0, atol=tol)
-
-def rest_controller(obj, **kwargs):
-    for step in irange(INF):
-        if (step != 0) and at_rest(obj, **kwargs):
-            break
-        yield
 
 def is_empty(generator):
     try:
@@ -115,7 +118,7 @@ def main():
     set_renderer(enable=True)
     if video is None:
         wait_if_gui('Begin?')
-    simulate(controller=rest_controller(obj))
+    simulate(controller=condition_controller(lambda step: (step != 0) and at_rest(obj)))
     if video is None:
         wait_if_gui('Finish?')
     disconnect()
