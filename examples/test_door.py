@@ -16,7 +16,7 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
     create_box, BLUE, set_velocity, add_pose_constraint, get_pose, synchronize_viewer, get_velocity, get_bodies, \
     get_distance, get_point, set_renderer, get_cylinder_geometry, pairwise_collision, TURTLEBOT_URDF, set_joint_positions, \
     set_all_color, control_joint, irange, INF, control_joints, get_first_link, point_from_pose, get_link_pose, \
-    get_joint_velocities, get_max_velocities, get_max_force, get_max_forces, get_joint_torques, read
+    get_joint_velocities, get_max_velocities, get_max_force, get_max_forces, get_joint_torques, read, BASE_LINK, inf_generator
 #from examples.test_turtlebot_motion import BASE_JOINTS
 
 # bullet3/examples/pybullet/examples
@@ -24,6 +24,35 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
 # heightfield.py
 # signedDistanceField.py
 
+
+def create_handle(width, length, height, diameter=0.04):
+    handle_height = 5 * diameter
+    point = Point(x=width / 2 + diameter / 2 + diameter, y=-3 * length / 4., z=height / 2.)
+    shapes = [
+        Shape(get_cylinder_geometry(radius=diameter / 2, height=handle_height), color=BLACK),
+        Shape(get_cylinder_geometry(radius=diameter / 2, height=diameter),
+              pose=Pose(Point(x=-diameter, z=(handle_height - diameter) / 2.)), color=BLACK),
+        Shape(get_cylinder_geometry(radius=diameter / 2, height=diameter),
+              pose=Pose(Point(x=-diameter, z=-(handle_height - diameter) / 2.)), color=BLACK),
+    ]
+    handle_collision, handle_visual = create_shape_array(*unzip(shapes))
+    return LinkInfo(mass=1, collision_id=handle_collision, visual_id=handle_visual,
+                    point=point, parent=1, joint_type=p.JOINT_FIXED)
+
+def create_frame(width, length, height, side=0.1):
+    # TODO: could be part of the base link instead
+    shapes = [
+        Shape(get_box_geometry(width=width, length=length + 2 * side, height=side),
+              pose=Pose(Point(z=height / 2. + side / 2.)), color=BLACK),
+        Shape(get_box_geometry(width=width, length=side, height=height),
+              pose=Pose(Point(y=(length + side) / 2.)), color=BLACK),
+        Shape(get_box_geometry(width=width, length=side, height=height),
+              pose=Pose(Point(y=-(length + side) / 2.)), color=BLACK),
+    ]
+    frame_collision, frame_visual = create_shape_array(*unzip(shapes))
+    return LinkInfo(mass=STATIC_MASS, collision_id=frame_collision, visual_id=frame_visual,
+                    point=Point(y=-length / 2., z=height / 2.),
+                    parent=0, joint_type=p.JOINT_FIXED)
 
 def create_door(width=0.08, length=1, height=2, mass=1, handle=True, frame=True, **kwargs):
     # TODO: hinge, cylinder on end, sliding door, knob
@@ -34,45 +63,42 @@ def create_door(width=0.08, length=1, height=2, mass=1, handle=True, frame=True,
         geometry, pose=Pose(Point(x=hinge, y=-length/2., z=height/2.)), **kwargs)
     door_link = LinkInfo(mass=mass, collision_id=door_collision, visual_id=door_visual,
                          parent=0, joint_type=p.JOINT_REVOLUTE, joint_axis=[0, 0, 1])
-
     links = [door_link]
     if handle:
-        diameter = 0.04
-        handle_height = 5*diameter
-        point = Point(x=width/2+diameter/2+diameter, y=-3*length / 4., z=height / 2.)
-        shapes = [
-            Shape(get_cylinder_geometry(radius=diameter/2, height=handle_height), color=BLACK),
-            Shape(get_cylinder_geometry(radius=diameter/2, height=diameter),
-                  pose=Pose(Point(x=-diameter, z=(handle_height - diameter)/2.)), color=BLACK),
-            Shape(get_cylinder_geometry(radius=diameter/2, height=diameter),
-                  pose=Pose(Point(x=-diameter, z=-(handle_height - diameter)/2.)), color=BLACK),
-        ]
-        handle_collision, handle_visual = create_shape_array(*unzip(shapes))
-        handle_link = LinkInfo(mass=1, collision_id=handle_collision, visual_id=handle_visual,
-                               point=point, parent=1, joint_type=p.JOINT_FIXED)
-        links.append(handle_link)
-
+        links.append(create_handle(width, length, height))
     if frame:
-        # TODO: could be part of the base link instead
-        side = 0.1
-        shapes = [
-            Shape(get_box_geometry(width=width, length=length+2*side, height=side),
-                  pose=Pose(Point(z=height/2.+side/2.)), color=BLACK),
-            Shape(get_box_geometry(width=width, length=side, height=height),
-                  pose=Pose(Point(y=(length + side)/2.)), color=BLACK),
-            Shape(get_box_geometry(width=width, length=side, height=height),
-                  pose=Pose(Point(y=-(length + side) / 2.)), color=BLACK),
-        ]
-        frame_collision, frame_visual = create_shape_array(*unzip(shapes))
-        frame_link = LinkInfo(mass=STATIC_MASS, collision_id=frame_collision, visual_id=frame_visual,
-                              point=Point(y=-length/2., z=height/2.),
-                              parent=0, joint_type=p.JOINT_FIXED)
-        links.append(frame_link)
-
+        links.append(create_frame(width, length, height))
     body = create_multi_body(links=links)
     #draw_circle(center=unit_point(), diameter=width/2., parent=body, parent_link=0)
     #set_joint_limits(body, link=0, lower=-PI, upper=PI)
     return body
+
+##################################################
+
+def test_door(door):
+    door_joints = get_movable_joints(door)
+
+    sample_fn = get_sample_fn(door, door_joints)
+    set_joint_positions(door, door_joints, sample_fn())
+    while True:
+        positions = sample_fn()
+        set_joint_positions(door, door_joints, positions)
+        wait_if_gui()
+
+    lower, upper = get_joint_intervals(door, door_joints)
+    control_joints(door, door_joints, positions=lower)
+    velocity_control_joints(door, door_joints, velocities=[PI / 4]) # Able to exceed limits
+
+def condition_controller(condition):
+    #from itertools import takewhile
+    dt = get_time_step()
+    for step in irange(INF):
+        #duration = step*dt
+        if condition(step):
+           break
+        yield
+
+##################################################
 
 IGNORE_EXT = ['.png', '.gif', '.jpeg', '.py', '.mtl']
 
@@ -95,10 +121,8 @@ def main(use_turtlebot=True):
     print(robot_path)
 
     draw_global_system()
-    set_camera_pose(camera_point=Point(+1.5, -1.5, +1.5), target_point=Point(-1.5, +1.5, 0))
-
-    start_x = +2
-    target_x = -2
+    set_camera_pose(camera_point=Point(+1.5, -1.5, +1.5),
+                    target_point=Point(-1.5, +1.5, 0))
 
     plane = load_pybullet('plane.urdf', fixed_base=True)
     #plane = load_model('plane.urdf')
@@ -107,41 +131,29 @@ def main(use_turtlebot=True):
     #door = load_pybullet('models/door.urdf', fixed_base=True) # From drake
     #set_point(door, Point(z=-.1))
     door = create_door()
-
-    door_joints = get_movable_joints(door)
-    door_links = get_all_links(door)
     #set_position(door, z=base_aligned_z(door))
     set_point(door, base_aligned(door))
     #set_collision_margin(door, link=0, margin=0.)
+    dump_body(door)
 
+    start_x = +2
+    target_x = -2
     if not use_turtlebot:
         side = 0.25
         robot = create_box(w=side, l=side, h=side, mass=5., color=BLUE)
         set_position(robot, x=start_x)
         #set_velocity(robot, linear=Point(x=-1))
     else:
-        print(os.path.abspath(TURTLEBOT_URDF))
-        #print(read(TURTLEBOT_URDF))
-        robot = load_pybullet(TURTLEBOT_URDF, merge=True, fixed_base=True)
+        turtlebot_urdf = os.path.abspath(TURTLEBOT_URDF)
+        print(turtlebot_urdf)
+        #print(read(turtlebot_urdf))
+        robot = load_pybullet(turtlebot_urdf, merge=True, fixed_base=True)
         robot_joints = get_movable_joints(robot)[:3]
         set_joint_positions(robot, robot_joints, [start_x, 0, PI])
     set_all_color(robot, BLUE)
     set_position(robot, z=base_aligned_z(robot))
     robot_link = get_first_link(robot)
-
-    #all_bodies = get_bodies()
-    dump_body(door)
     dump_body(robot)
-    #sample_fn = get_sample_fn(door, door_joints)
-    #set_joint_positions(door, door_joints, sample_fn())
-    # while True:
-    #     positions = sample_fn()
-    #     set_joint_positions(door, door_joints, positions)
-    #     wait_if_gui()
-
-    #lower, upper = get_joint_intervals(door, door_joints)
-    #control_joints(door, door_joints, positions=lower)
-    #velocity_control_joints(door, door_joints, velocities=[PI / 4]) # Able to exceed limits
 
     if not use_turtlebot:
         target_point, target_quat = map(list, get_pose(robot))
@@ -151,14 +163,18 @@ def main(use_turtlebot=True):
         # p.changeDynamics(robot, robot_joints[0], # Doesn't work
         #                  maxJointVelocity=1,
         #                  jointLimitForce=1,)
+        robot_joints = get_movable_joints(robot)[:3]
         print('Max velocities:', get_max_velocities(robot, robot_joints))
         print('Max forces:', get_max_forces(robot, robot_joints))
-        control_joint(robot, robot_joints[0], position=target_x, velocity=0,
+        control_joint(robot, joint=robot_joints[0], position=target_x, velocity=0,
                       position_gain=None, velocity_scale=None, max_velocity=100, max_force=300)
         #control_joints(robot, robot_joints, positions=[target_x, 0, PI], max_force=300)
         #velocity_control_joints(robot, robot_joints, velocities=[-2., 0, 0]) #, max_force=300)
 
+    condition = lambda: abs(target_x - point_from_pose(get_link_pose(robot, robot_link))[0]) < 1e-3 # TODO: velocity condition
     set_renderer(enable=True)
+    #test_door(door)
+
     if video is None:
         wait_if_gui('Begin?')
     enable_gravity()
@@ -179,7 +195,7 @@ def main(use_turtlebot=True):
         #if video is None:
         #   time.sleep(sleep_per_step)
         #print(pairwise_collision(robot, door))
-        if abs(target_x - point_from_pose(get_link_pose(robot, robot_link))[0]) < 1e-3: # TODO: velocity condition
+        if condition():
            break
         # print('Velocities:', get_joint_velocities(robot, robot_joints))
         # #print('Torques:', get_joint_torques(robot, robot_joints))
@@ -187,6 +203,7 @@ def main(use_turtlebot=True):
         # print()
 
     if video is None:
+        set_renderer(enable=True)
         wait_if_gui('Finish?')
     disconnect()
 

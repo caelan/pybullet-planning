@@ -12,7 +12,7 @@ from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui
     draw_global_system, dump_body, enable_gravity, step_simulation, \
     get_time_step, elapsed_time, set_point, Point, set_camera_pose, set_position, create_box, BLUE, synchronize_viewer, \
     set_renderer, irange, INF, create_cylinder, create_sphere, create_capsule, set_euler, get_velocity, create_faces, \
-    STATIC_MASS, mesh_from_points, RED
+    STATIC_MASS, mesh_from_points, RED, wait_for_duration
 
 def create_ramp(half_extent=0.5):
     vertices = [Point(s1 * half_extent, s2 * half_extent, 0) for s1, s2 in product([+1, -1], repeat=2)] + \
@@ -55,7 +55,7 @@ def is_empty(generator):
     except StopIteration:
         return True
 
-def simulate(controller=None, max_duration=INF, max_steps=INF, print_rate=1.):
+def simulate(controller=None, max_duration=INF, max_steps=INF, print_rate=1., sleep=None):
     enable_gravity()
     dt = get_time_step()
     print('Time step: {:.6f} sec'.format(dt))
@@ -72,6 +72,10 @@ def simulate(controller=None, max_duration=INF, max_steps=INF, print_rate=1.):
             print('Sim step: {} | Sim time: {:.3f} sec | Elapsed time: {:.3f} sec'.format(
                 step, duration, elapsed_time(start_time)))
             last_print = time.time()
+        if sleep is not None:
+            time.sleep(sleep)
+            #wait_for_duration(sleep)
+            #wait_if_gui()
 
 ##################################################
 
