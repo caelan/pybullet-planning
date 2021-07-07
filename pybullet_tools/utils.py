@@ -1564,6 +1564,10 @@ def quat_from_axis_angle(axis, angle): # axis-angle
 def unit_pose():
     return (unit_point(), unit_quat())
 
+def all_close(a, b, atol=1e-6, rtol=0.):
+    assert len(a) == len(b) # TODO: shape
+    return np.allclose(a, b, atol=atol, rtol=rtol)
+
 def get_length(vec, norm=2):
     return np.linalg.norm(vec, ord=norm)
 
@@ -3602,7 +3606,7 @@ def remove_redundant(path, tolerance=1e-3):
     new_path = [path[0]]
     for conf in path[1:]:
         difference = np.array(new_path[-1]) - np.array(conf)
-        if not np.allclose(np.zeros(len(difference)), difference, atol=tolerance, rtol=0):
+        if not all_close(np.zeros(len(difference)), difference, atol=tolerance):
             new_path.append(conf)
     return new_path
 
@@ -3618,7 +3622,7 @@ def waypoints_from_path(path, tolerance=1e-3):
     last_difference = get_unit_vector(difference_fn(last_conf, waypoints[-1]))
     for conf in path[2:]:
         difference = get_unit_vector(difference_fn(conf, waypoints[-1]))
-        if not np.allclose(last_difference, difference, atol=tolerance, rtol=0):
+        if not all_close(last_difference, difference, atol=tolerance):
             waypoints.append(last_conf)
             difference = get_unit_vector(difference_fn(conf, waypoints[-1]))
         last_conf = conf
@@ -4309,7 +4313,7 @@ def joint_controller(body, joints, target, tolerance=1e-3, timeout=INF, **kwargs
     time_elapsed = 0.
     control_joints(body, joints, target, **kwargs)
     positions = get_joint_positions(body, joints)
-    while not np.allclose(positions, target, atol=tolerance, rtol=0) and (time_elapsed < timeout):
+    while not all_close(positions, target, atol=tolerance) and (time_elapsed < timeout):
         yield positions
         time_elapsed += dt
         positions = get_joint_positions(body, joints)
@@ -4326,7 +4330,7 @@ def waypoint_joint_controller(body, joints, target, tolerance=1e-3, time_step=0.
     while time_elapsed < timeout: # TODO: timeout based on the distance
         positions = get_joint_positions(body, joints)
         remaining = duration_fn(positions, target)
-        if np.allclose(positions, target, atol=tolerance, rtol=0):
+        if all_close(positions, target, atol=tolerance):
             break
         #print(np.divide(get_joint_velocities(body, joints), get_max_velocities(body, joints)))
         w = min(remaining, time_step) / remaining
@@ -4362,7 +4366,7 @@ def joint_controller_hold2(body, joints, positions, velocities=None,
 
     current_conf = get_joint_positions(body, movable_joints)
     #forces = [get_max_force(body, joint) for joint in movable_joints]
-    while not np.allclose(current_conf, target_positions, atol=tolerance, rtol=0):
+    while not all_close(current_conf, target_positions, atol=tolerance):
         # TODO: only enforce velocity constraints at end
         p.setJointMotorControlArray(body, movable_joints, p.POSITION_CONTROL,
                                     targetPositions=target_positions,
@@ -4494,13 +4498,20 @@ def inverse_kinematics_helper(robot, link, target_pose, null_space=None):
         return None
     return kinematic_conf
 
-def is_pose_close(pose, target_pose, pos_tolerance=1e-3, ori_tolerance=1e-3*np.pi):
+def is_point_close(point1, point2, tolerance=1e-3):
+    return all_close(point1, point2, atol=tolerance)
+
+def is_quat_close(quat1, quat2, tolerance=1e-3*np.pi):
+    # TODO: normalize quats?
+    # Also could compute the inner product
+    return any(all_close(quat1, sign*np.array(quat2), atol=tolerance) for sign in [-1., +1])
+
+def is_pose_close(pose, target_pose, pos_tolerance=1e-3, ori_tolerance=1e-3*np.pi): # TODO: are_poses_close
     (point, quat) = pose
     (target_point, target_quat) = target_pose
-    if (target_point is not None) and not np.allclose(point, target_point, atol=pos_tolerance, rtol=0):
+    if (target_point is not None) and not is_point_close(point, target_point, tolerance=pos_tolerance):
         return False
-    if (target_quat is not None) and not np.allclose(quat, target_quat, atol=ori_tolerance, rtol=0):
-        # TODO: account for quaternion redundancy
+    if (target_quat is not None) and not is_quat_close(quat, target_quat, tolerance=ori_tolerance):
         return False
     return True
 
