@@ -3798,7 +3798,6 @@ def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
                                     use_aabb=use_aabb, cache=cache)
 
     start_conf = get_joint_positions(body, joints)
-
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
 
@@ -3892,9 +3891,9 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
                              self_collisions=True, disabled_collisions=set(),
                              weights=None, resolutions=None, reversible=True,
                              linear_tol=EPSILON, angular_tol=0.,
-                             max_distance=MAX_DISTANCE, use_aabb=False, cache=True, custom_limits={}, **kwargs):
+                             max_distance=MAX_DISTANCE, use_aabb=False, cache=True, custom_limits={}, algorithm=None, **kwargs):
 
-    assert len(joints) == len(end_conf)
+    assert len(joints) == len(end_conf) == 3
     sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
     distance_fn = get_nonholonomic_distance_fn(body, joints, weights=weights, reversible=reversible,
                                                linear_tol=linear_tol) #, angular_tol=angular_tol)
@@ -3908,7 +3907,10 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
     start_conf = get_joint_positions(body, joints)
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
-    return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
+
+    if algorithm is None:
+        return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
+    return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, algorithm=algorithm, **kwargs)
 
 plan_differential_motion = plan_nonholonomic_motion
 
@@ -3959,14 +3961,12 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
     start_conf = get_base_values(body)
     if not check_initial_end(start_conf, end_conf, collision_fn):
         return None
+
     if direct:
         return direct_path(start_conf, end_conf, extend_fn, collision_fn)
-
     if algorithm is None:
-        return birrt(start_conf, end_conf, distance_fn,
-                     sample_fn, extend_fn, collision_fn, **kwargs)
-    return birrt(start_conf, end_conf, distance_fn,
-                 sample_fn, extend_fn, collision_fn, algorithm=algorithm, **kwargs)
+        return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
+    return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, algorithm=algorithm, **kwargs)
 
 #####################################
 

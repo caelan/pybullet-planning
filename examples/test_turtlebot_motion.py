@@ -436,7 +436,7 @@ def step_curve(robot, joints, path, step_size=None):
 
 ##################################################
 
-def iterate_path(robot, joints, path, simulate=True, step_size=None, resolutions=None, **kwargs): # 1e-2 | None
+def iterate_path(robot, joints, path, simulate=True, step_size=None, resolutions=None, smooth=True, **kwargs): # 1e-2 | None
     if path is None:
         return
     path = adjust_path(robot, joints, path)
@@ -454,8 +454,8 @@ def iterate_path(robot, joints, path, simulate=True, step_size=None, resolutions
     with LockRenderer():
         handles = draw_path(path)
 
-    smooth = True
     if smooth:
+        # TODO: handle circular joints
         #curve_collision_fn = lambda *args, **kwargs: False
         curve_collision_fn = get_curve_collision_fn(robot, joints, resolutions=resolutions, **kwargs)
         with LockRenderer():
@@ -535,10 +535,10 @@ def test_caching(robot, obstacles):
 
 ##################################################
 
-def main(use_2d=True):
+def main():
     np.set_printoptions(precision=N_DIGITS, suppress=True, threshold=3)  # , edgeitems=1) #, linewidth=1000)
     parser = argparse.ArgumentParser()
-    parser.add_argument('-a', '--algorithm', default=None, # choices=[],
+    parser.add_argument('-a', '--algorithm', default='rrt_connect', # choices=[],
                         help='The motion planning algorithm to use.')
     parser.add_argument('-c', '--cfree', action='store_true',
                         help='When enabled, disables collision checking.')
@@ -552,6 +552,8 @@ def main(use_2d=True):
                         help='The random seed to use.')
     parser.add_argument('-n', '--num', default=10, type=int,
                         help='The number of obstacles.')
+    parser.add_argument('-o', '--orientation', action='store_true',
+                        help='')
     parser.add_argument('-v', '--viewer', action='store_false',
                         help='')
     args = parser.parse_args()
@@ -585,7 +587,8 @@ def main(use_2d=True):
     #resolutions = None
     #resolutions = np.array([0.05, 0.05, math.radians(10)])
     resolutions = 1.*DEFAULT_RESOLUTION*np.ones(len(base_joints))
-    plan_joints = base_joints[:2] if use_2d else base_joints
+    plan_joints = base_joints[:2] if not args.orientation else base_joints
+    holonomic = args.holonomic or (len(plan_joints) != 3)
 
     if args.cfree:
         obstacles = []
@@ -605,7 +608,7 @@ def main(use_2d=True):
     profiler.save()
     with LockRenderer(lock=args.lock):
         # TODO: draw the search tree
-        path = plan_motion(robot, plan_joints, goal_conf[:len(plan_joints)], holonomic=args.holonomic,
+        path = plan_motion(robot, plan_joints, goal_conf[:len(plan_joints)], holonomic=holonomic,
                            obstacles=obstacles, self_collisions=False,
                            custom_limits=custom_limits, resolutions=resolutions[:len(plan_joints)],
                            use_aabb=True, cache=True, max_distance=MIN_PROXIMITY,
