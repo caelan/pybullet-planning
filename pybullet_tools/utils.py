@@ -26,8 +26,15 @@ from contextlib import contextmanager
 
 from .transformations import quaternion_from_matrix, unit_vector, euler_from_quaternion, quaternion_slerp
 
-directory = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(directory, '../motion'))
+def join_paths(*paths):
+    return os.path.abspath(os.path.join(*paths))
+
+def get_parent_dir(file): # __file__
+    return os.path.abspath(os.path.dirname(file))
+
+sys.path.extend([
+    join_paths(get_parent_dir(__file__), os.pardir, 'motion'),
+])
 from motion_planners.rrt_connect import birrt
 from motion_planners.meta import direct_path, solve
 
@@ -185,6 +192,7 @@ def ensure_dir(f):
     d = os.path.dirname(f)
     if not os.path.exists(d):
         os.makedirs(d)
+    return d
 
 def list_paths(directory):
     return sorted(os.path.abspath(os.path.join(directory, filename))
@@ -630,6 +638,12 @@ CHROMATIC_COLORS = {
 
 COLOR_FROM_NAME = merge_dicts(ACHROMATIC_COLORS, CHROMATIC_COLORS)
 
+def to_8_bit(color):
+    return (MAX_RGB*np.array(color)).astype(int).tolist()
+
+def from_8_bit(color):
+    return (np.array(color).astype(float) / MAX_RGB).tolist()
+
 def remove_alpha(color):
     return RGB(*color[:3])
 
@@ -895,7 +909,7 @@ URDF_FLAGS = [p.URDF_USE_INERTIA_FROM_FILE,
 
 def get_model_path(rel_path): # TODO: add to search path
     directory = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(directory, '..', rel_path)
+    return os.path.join(directory, os.pardir, rel_path)
 
 def load_model(rel_path, pose=None, **kwargs):
     # TODO: error with loadURDF when loading MESH visual and CYLINDER collision
@@ -1346,10 +1360,15 @@ def set_camera_pose(camera_point, target_point=np.zeros(3)):
     p.resetDebugVisualizerCamera(distance, math.degrees(yaw), math.degrees(pitch),
                                  target_point, physicsClientId=CLIENT)
 
-def set_camera_pose2(world_from_camera, distance=2):
+def get_camera_target(world_from_camera, distance=+1):
     target_camera = np.array([0, 0, distance])
     target_world = tform_point(world_from_camera, target_camera)
+    return target_world
+
+def set_camera_pose2(world_from_camera, **kwargs):
+    # TODO: rename
     camera_world = point_from_pose(world_from_camera)
+    target_world = get_camera_target(world_from_camera, **kwargs)
     set_camera_pose(camera_world, target_world)
     #roll, pitch, yaw = euler_from_quat(quat_from_pose(world_from_camera))
     # TODO: assert that roll is about zero?
