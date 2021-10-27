@@ -5149,11 +5149,17 @@ def obj_file_from_mesh(mesh, under=True):
             s += '\nf {}'.format(' '.join(map(str, reversed(f))))
     return s
 
-def get_connected_components(vertices, edges):
+
+def adjacent_from_edges(edges):
     undirected_edges = defaultdict(set)
     for v1, v2 in edges:
         undirected_edges[v1].add(v2)
         undirected_edges[v2].add(v1)
+    return undirected_edges
+
+
+def get_connected_components(vertices, edges):
+    undirected_edges = adjacent_from_edges(edges)
     clusters = []
     processed = set()
     for v0 in vertices:
