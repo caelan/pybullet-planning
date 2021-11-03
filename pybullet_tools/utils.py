@@ -195,8 +195,7 @@ def ensure_dir(f):
     return d
 
 def list_paths(directory):
-    return sorted(os.path.abspath(os.path.join(directory, filename))
-                  for filename in os.listdir(directory))
+    return sorted(join_paths(directory, filename) for filename in os.listdir(directory))
 
 ##################################################
 
@@ -1340,6 +1339,34 @@ CameraInfo = namedtuple('CameraInfo', ['width', 'height', 'viewMatrix', 'project
 def get_camera():
     return CameraInfo(*p.getDebugVisualizerCamera(physicsClientId=CLIENT))
 
+def get_camera_pose():
+    # TODO: does not seem to update as the camera moves
+    info = get_camera()
+    #view_matrix = np.reshape(info.viewMatrix, [4, 4]).T
+    #return pose_from_tform(view_matrix)
+
+    # TODO: why are both view_matrix and pitch+yaw included then?
+    target_point = info.target
+    pitch = math.radians(info.pitch)
+    yaw = math.radians(info.yaw)
+    #yaw = yaw + np.pi/2
+    dist = info.dist
+    #dist = get_length(info.cameraForward)
+    #dist = 1.
+    
+    # euler = Euler(roll=0, pitch=pitch, yaw=yaw)
+    # target_pose = Pose(target_point, euler)
+    # camera_pose = multiply(target_pose, Pose(point=Point(x=-dist)))
+
+    view_matrix = compute_view_matrix(target_point, dist, yaw, pitch, roll=0., z_up=True)
+    #get_ray_from_to
+    camera_pose = pose_from_tform(view_matrix)
+    camera_quat = quat_from_pose(camera_pose)
+    camera_point = np.array(target_point) - dist * np.array(info.cameraForward)
+    camera_pose = (camera_point, camera_quat)
+    # TODO: need to doublecheck
+    return camera_pose
+
 def set_camera(yaw, pitch, distance, target_position=np.zeros(3)):
     # TODO: in degrees
     p.resetDebugVisualizerCamera(distance, yaw, pitch, target_position, physicsClientId=CLIENT)
@@ -1357,8 +1384,16 @@ def set_camera_pose(camera_point, target_point=np.zeros(3)):
     distance = np.linalg.norm(delta_point)
     yaw = get_yaw(delta_point) - np.pi/2 # TODO: hack
     pitch = get_pitch(delta_point)
+    #print(target_point, distance, yaw, pitch)
+    #euler = Euler(roll=yaw+np.pi/2, pitch=0, yaw=pitch)
+    #target_pose = Pose(target_point, euler)
+    #print(target_pose)
+    #camera_pose = multiply(target_pose, Pose(point=Point(x=-distance)))
+    #print(camera_pose)
     p.resetDebugVisualizerCamera(distance, math.degrees(yaw), math.degrees(pitch),
                                  target_point, physicsClientId=CLIENT)
+
+set_camera_target = set_camera_pose
 
 def get_camera_target(world_from_camera, distance=+1):
     target_camera = np.array([0, 0, distance])
@@ -1368,6 +1403,7 @@ def get_camera_target(world_from_camera, distance=+1):
 def set_camera_pose2(world_from_camera, **kwargs):
     # TODO: rename
     camera_world = point_from_pose(world_from_camera)
+    #print(euler_from_quat(quat_from_pose(world_from_camera)))
     target_world = get_camera_target(world_from_camera, **kwargs)
     set_camera_pose(camera_world, target_world)
     #roll, pitch, yaw = euler_from_quat(quat_from_pose(world_from_camera))
@@ -1453,12 +1489,30 @@ def extract_segmented(seg_image):
             segmented[r, c, :] = demask_pixel(pixel)
     return segmented
 
-def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, near=0.02, far=5.0,
+def compute_view_matrix(target_position, distance, yaw, pitch, roll=0., z_up=True):
+    view_matrix = p.computeViewMatrixFromYawPitchRoll(target_position, distance,
+                                                      math.degrees(yaw), math.degrees(pitch), math.degrees(roll),
+                                                      upAxisIndex=2 if z_up else 1, physicsClientId=CLIENT)
+
+    view_matrix = np.reshape(view_matrix, [4, 4]) #.T
+    view_matrix[:3, 3] = view_matrix[3, :3]
+    view_matrix[3, :3] = 0 # TODO: make a seperate method
+    #view_matrix[3, :3], view_matrix[:3, 3] = view_matrix[:3, 3], view_matrix[3, :3]
+    return view_matrix
+
+def get_image(camera_pos=None, target_pos=None, width=640, height=480, vertical_fov=60.0, near=0.02, far=5.0,
               tiny=False, segment=False, **kwargs):
-    # computeViewMatrixFromYawPitchRoll
     up_vector = [0, 0, 1] # up vector of the camera, in Cartesian world coordinates
-    view_matrix = p.computeViewMatrix(cameraEyePosition=camera_pos, cameraTargetPosition=target_pos,
-                                      cameraUpVector=up_vector, physicsClientId=CLIENT)
+    camera_flags = {}
+    view_matrix = None
+    if (camera_pos is None) or (target_pos is None):
+        # info = get_camera()
+        # view_matrix = info.viewMatrix
+        pass
+    else:
+        view_matrix = p.computeViewMatrix(cameraEyePosition=camera_pos, cameraTargetPosition=target_pos,
+                                          cameraUpVector=up_vector, physicsClientId=CLIENT)
+        camera_flags['viewMatrix'] = view_matrix
     projection_matrix = get_projection_matrix(width, height, vertical_fov, near, far)
 
     # assert compiled_with_numpy() # copying pixels from C/C++ to Python can be really slow for large images, unless you compile PyBullet using NumPy
@@ -1466,26 +1520,31 @@ def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, 
     # DIRECT mode has no OpenGL, so it requires ER_TINY_RENDERER
     renderer = p.ER_TINY_RENDERER if tiny else p.ER_BULLET_HARDWARE_OPENGL
     width, height, rgb, d, seg = p.getCameraImage(width, height,
-                                                  viewMatrix=view_matrix,
+                                                  #viewMatrix=view_matrix,
                                                   projectionMatrix=projection_matrix,
                                                   shadow=False, # only applies to ER_TINY_RENDERER
                                                   flags=flags,
                                                   renderer=renderer,
-                                                  physicsClientId=CLIENT)
+                                                  physicsClientId=CLIENT, **camera_flags)
     if not compiled_with_numpy():
         rgb = np.reshape(rgb, [height, width, -1]) # 4
         d = np.reshape(d, [height, width])
         seg = np.reshape(seg, [height, width])
-    
+
     depth = far * near / (far - (far - near) * d)
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/pointCloudFromCameraImage.py
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/getCameraImageTest.py
     segmented = None
     if segment:
         segmented = extract_segmented(seg)
-        
-    camera_tform = np.reshape(view_matrix, [4, 4])
+    #save_image(os.path.join(TEMP_DIR, 'rgb.png'), rgb) # [0, 255]
+
+    if view_matrix is None:
+        view_matrix = np.identity(4) # TODO: hack
+    camera_tform = np.reshape(view_matrix, [4, 4]) # TODO: transpose?
     camera_tform[:3, 3] = camera_pos
+    camera_tform[3, :3] = 0
+
     view_pose = multiply(pose_from_tform(camera_tform), Pose(euler=Euler(roll=PI)))
 
     focal_length = get_focal_lengths(height, vertical_fov) # TODO: horizontal_fov
@@ -1697,7 +1756,6 @@ def quat_combination(quat1, quat2, fraction=0.5):
     return quaternion_slerp(quat1, quat2, fraction)
 
 def quat_angle_between(quat0, quat1):
-    # #p.computeViewMatrixFromYawPitchRoll()
     # q0 = unit_vector(quat0[:4])
     # q1 = unit_vector(quat1[:4])
     # d = clip(np.dot(q0, q1), min_value=-1., max_value=+1.)
@@ -2149,6 +2207,7 @@ def parent_joint_from_link(link):
     return joint
 
 def get_all_links(body):
+    # TODO: deprecate get_links
     return [BASE_LINK] + list(get_links(body))
 
 def get_link_name(body, link):
@@ -2702,7 +2761,7 @@ def create_faces(mesh, scale=1., mass=STATIC_MASS, collision=True, color=GREY, *
 VisualShapeData = namedtuple('VisualShapeData', ['objectUniqueId', 'linkIndex',
                                                  'visualGeometryType', 'dimensions', 'meshAssetFileName',
                                                  'localVisualFrame_position', 'localVisualFrame_orientation',
-                                                 'rgbaColor']) # 'textureUniqueId'
+                                                 'rgbaColor', 'textureUniqueId'])
 
 UNKNOWN_FILE = 'unknown_file'
 
@@ -2730,8 +2789,15 @@ def visual_shape_from_data(data, client=None):
 
 def get_visual_data(body, link=BASE_LINK):
     # TODO: might require the viewer to be active
-    visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body, physicsClientId=CLIENT)]
-    return list(filter(lambda d: d.linkIndex == link, visual_data))
+    # TODO: does not work if not base link
+    #flags = 0
+    flags = p.VISUAL_SHAPE_DATA_TEXTURE_UNIQUE_IDS
+    # https://github.com/bulletphysics/bullet3/blob/9c37ca518541cd62f7b80a8099704b20e99d04b3/examples/pybullet/examples/draw_frames.py#L123
+    # https://github.com/bulletphysics/bullet3/blob/47c3f5e994fd3bfe1f44260853a8991a74a01c0f/examples/SharedMemory/b3RobotSimulatorClientAPI_NoDirect.cpp#L2593
+    #visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body, link, physicsClientId=CLIENT)]
+    visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body, flags, physicsClientId=CLIENT)]
+    return visual_data
+    #return list(filter(lambda d: d.linkIndex == link, visual_data))
 
 # object_unique_id and linkIndex seem to be noise
 CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'linkIndex',
@@ -3479,7 +3545,7 @@ def batch_ray_collision(rays, threads=1):
 def get_ray_from_to(mouseX, mouseY, farPlane=10000):
     # https://github.com/bulletphysics/bullet3/blob/afa4fb54505fd071103b8e2e8793c38fd40f6fb6/examples/pybullet/examples/pointCloudFromCameraImage.py
     # https://github.com/bulletphysics/bullet3/blob/afa4fb54505fd071103b8e2e8793c38fd40f6fb6/examples/pybullet/examples/addPlanarReflection.py
-    width, height, _, _, _, camForward, horizon, vertical, _, _, dist, camTarget = p.getDebugVisualizerCamera()
+    width, height, _, _, _, camForward, horizon, vertical, _, _, dist, camTarget = get_camera()
     rayFrom = camPos = np.array(camTarget) - dist * np.array(camForward)
     rayForward = farPlane*get_unit_vector(np.array(camTarget) - rayFrom)
     dHor = np.array(horizon) / float(width)
@@ -3822,7 +3888,8 @@ def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
 
     if algorithm is None:
         return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
-    return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, algorithm=algorithm, **kwargs)
+    return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn,
+                 algorithm=algorithm, weights=weights, **kwargs)
     #return plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn)
 
 plan_holonomic_motion = plan_joint_motion
@@ -3929,7 +3996,8 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
 
     if algorithm is None:
         return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
-    return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, algorithm=algorithm, **kwargs)
+    return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn,
+                 algorithm=algorithm, weights=weights, **kwargs)
 
 plan_differential_motion = plan_nonholonomic_motion
 
@@ -4783,6 +4851,8 @@ def add_line(start, end, color=BLACK, width=1, lifetime=None, parent=NULL_ID, pa
     return p.addUserDebugLine(start, end, lineColorRGB=color[:3], lineWidth=width,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
+
+draw_line = add_line
 
 def remove_debug(debug):
     p.removeUserDebugItem(debug, physicsClientId=CLIENT)

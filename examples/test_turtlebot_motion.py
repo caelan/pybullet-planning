@@ -87,16 +87,16 @@ def sample_placements(body_surfaces, obstacles=None, savers=[], min_distances={}
 def draw_waypoint(conf, z=DRAW_Z):
     return draw_pose(pose_from_pose2d(conf, z=z), length=DRAW_LENGTH)
 
-def draw_conf(pose2d, interval, base_z, **kwargs):
+def draw_conf(pose2d, interval, base_z=1., z_interval=Interval(-0.5, 0.5), **kwargs):
     return draw_pose2d(pose2d, z=base_z + rescale_interval(
-        wrap_interval(pose2d[2], interval=interval), old_interval=interval, new_interval=(-0.5, 0.5)), **kwargs)
+        wrap_interval(pose2d[2], interval=interval), old_interval=interval, new_interval=z_interval), **kwargs)
 
-def draw_path(path2d, z=DRAW_Z, **kwargs):
+def draw_path(path2d, z=DRAW_Z, base_z=1., **kwargs):
     if path2d is None:
         return []
     #return list(flatten(draw_pose(pose_from_pose2d(pose2d, z=z), **kwargs) for pose2d in path2d))
     #return list(flatten(draw_pose2d(pose2d, z=z, **kwargs) for pose2d in path2d))
-    base_z = 1.
+
     start = path2d[0]
     mid_yaw = start[2]
     #mid_yaw = wrap_interval(mid_yaw)
