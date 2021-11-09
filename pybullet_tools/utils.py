@@ -24,7 +24,7 @@ from itertools import product, combinations, count, cycle, islice
 from multiprocessing import TimeoutError
 from contextlib import contextmanager
 
-from .transformations import quaternion_from_matrix, unit_vector, euler_from_quaternion, quaternion_slerp
+from .transformations import quaternion_from_matrix, unit_vector, euler_from_quaternion, quaternion_slerp, random_quaternion
 
 def join_paths(*paths):
     return os.path.abspath(os.path.join(*paths))
@@ -1637,6 +1637,7 @@ def unit_quat():
 
 def quat_from_axis_angle(axis, angle): # axis-angle
     #return get_unit_vector(np.append(vec, [angle]))
+    #from transformations import quaternion_about_axis
     return np.append(math.sin(angle/2) * get_unit_vector(axis), [math.cos(angle / 2)])
 
 def unit_pose():
@@ -3783,6 +3784,7 @@ def get_collision_fn(body, joints, obstacles=[], attachments=[], self_collisions
     get_obstacle_aabb = cached_fn(get_buffered_aabb, cache=cache, max_distance=max_distance/2., **kwargs)
     limits_fn = get_limits_fn(body, joints, custom_limits=custom_limits)
     # TODO: sort bodies by bounding box size
+    # TODO: cluster together links that remain rigidly attached to reduce the number of checks
 
     def collision_fn(q, verbose=False):
         if limits_fn(q):
@@ -3973,6 +3975,69 @@ def get_nonholonomic_extend_fn(body, joints, resolutions=None, angular_tol=0., *
         return path
     return extend_fn
 
+def get_dubins_extend_fn(body, joints, turning_radius=1e-1, # meters
+                         step_size=0.5, # meters
+                         **kwargs):
+    assert len(joints) == 3
+    import dubins
+
+    def extend_fn(q1, q2):
+        dubins_path = dubins.shortest_path(q1, q2, turning_radius) # dubins.path
+        confs, times = dubins_path.sample_many(step_size)
+        return confs
+    return extend_fn
+
+def get_differential_extend_fn(body, joints, resolutions=None, **kwargs):
+    # https://github.com/AtsushiSakai/PythonRobotics/tree/master/PathPlanning/CubicSpline
+    assert len(joints) == 3
+    from scipy.interpolate import CubicHermiteSpline
+    from motion_planners.trajectory.retime import Curve
+    resolutions = get_default_resolutions(body, joints, resolutions)
+    angular_extend_fn = get_extend_fn(body, joints[2:], resolutions[2:])
+    dx = resolutions[0] # TODO: need to account for the y resolution (grid?)
+    # TODO: curvature
+    # TODO: time along the trajectory based on wheel velocity
+    # TODO: turn to look at the goal and then arc
+
+    def extend_fn(q1, q2):
+        # TODO: return empty sequence if no path
+        swap = q1[0] > q2[0]
+        if swap:
+            q1, q2 = q2, q1
+        x1, y1, theta1 = q1
+        x2, y2, theta2 = q2
+        if math.isclose(x1, x2):
+            if math.isclose(y1, y2):
+                path = [np.append(q1[:2], aq) for aq in angular_extend_fn(q1[2:], q2[2:])]
+                if swap:
+                    path = path[::-1]
+                return path
+            else:
+                print(q1, q2, y1, y2)
+                raise RuntimeError()
+
+        dydx1 = math.tan(theta1) # TODO: this can't be right
+        dydx2 = math.tan(theta2)
+        #assert -PI < theta1 < PI
+        #assert -PI < theta2 < PI
+        # TODO: dual-spline version that uses time
+        curve = Curve(CubicHermiteSpline(x=[x1, x2], y=[y1, y2], dydx=[dydx1, dydx2]))
+        # print(curve.poly)
+        # print(curve.poly.c.shape)
+        # print(curve) # ValueError: not enough values to unpack (expected 3, got 2)
+        derivative = curve.derivative()
+        path = []
+        for x in curve.sample_times(dt=dx):
+            y = curve.at(x)
+            dydx = derivative.at(x)
+            theta = math.atan(dydx) # atan2
+            q = [x, y, theta]
+            path.append(q)
+        if swap:
+            path = path[::-1]
+        return path
+    return extend_fn
+
 def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[],
                              self_collisions=True, disabled_collisions=set(),
                              weights=None, resolutions=None, reversible=True,
@@ -3997,7 +4062,7 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
     if algorithm is None:
         return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
     return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn,
-                 algorithm=algorithm, weights=weights, **kwargs)
+                 algorithm=algorithm, **kwargs) # weights=weights, Deliberately excluding for PRM
 
 plan_differential_motion = plan_nonholonomic_motion
 
@@ -4161,6 +4226,31 @@ def custom_limits_from_base_limits(robot, base_limits, yaw_limit=None):
             joint_from_name(robot, 'theta'): yaw_limit,
         })
     return custom_limits
+
+#####################################
+
+def sample_sphere_surface(d, uniform=True):
+    # TODO: hyperspherical coordinates
+    # https://en.wikipedia.org/wiki/N-sphere#Spherical_coordinates
+    while True:
+        v = np.random.randn(d)
+        r = np.sqrt(v.dot(v))
+        if not uniform or (r <= 1.): # TODO: shouldn't need this check?
+            return v / r
+
+def sample_sphere(d, **kwargs):
+    v = sample_sphere_surface(d, **kwargs)
+    r = np.random.rand()
+    return np.power(r, 1./d)*v
+
+def sample_subspace(d, m):
+    # TODO: linear spaces sampling method
+    # https://arxiv.org/abs/1810.06271
+    A = np.random.randn(m, d)
+    b = np.random.randn(m)
+    return A, b
+
+sample_quaternion = random_quaternion
 
 #####################################
 
@@ -4886,8 +4976,8 @@ def add_segments(points, closed=False, **kwargs): # TODO: draw_segments
         lines.append(add_line(points[-1], points[0], **kwargs))
     return lines
 
-def draw_link_name(body, link=BASE_LINK):
-    return add_text(get_link_name(body, link), position=(0, 0.2, 0),
+def draw_link_name(body, link=BASE_LINK, position=Point(y=0.2)):
+    return add_text(get_link_name(body, link), position=position,
                     parent=body, parent_link=link)
 
 def draw_pose(pose, length=0.1, d=3, **kwargs):

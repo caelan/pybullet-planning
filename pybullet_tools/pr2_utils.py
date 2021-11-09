@@ -604,7 +604,7 @@ def attach_viewcone(robot, head_name=HEAD_LINK_NAME, depth=MAX_VISUAL_DISTANCE,
         lines.append(add_line(p1, p2, color=color, parent=robot, parent_link=head_link, **kwargs))
     return lines
 
-def draw_viewcone(pose, depth=MAX_VISUAL_DISTANCE,
+def draw_viewcone(pose=Pose(), depth=MAX_VISUAL_DISTANCE,
                   camera_matrix=None, color=(1, 0, 0), **kwargs):
     # TODO: unify with attach_viewcone
     lines = []
