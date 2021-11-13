@@ -1025,12 +1025,15 @@ def wait_if_gui(*args, **kwargs):
     if has_gui():
         wait_for_user(*args, **kwargs)
 
-def is_unlocked():
-    return CLIENTS[CLIENT] is True
-
 def wait_if_unlocked(*args, **kwargs):
     if is_unlocked():
         wait_for_user(*args, **kwargs)
+
+def wait_unlocked(*args, **kwargs):
+    enable = get_renderer()
+    set_renderer(enable=True)
+    wait_for_user(*args, **kwargs)
+    set_renderer(enable)
 
 def wait_for_interrupt(max_time=np.inf):
     """
@@ -1057,6 +1060,13 @@ def synchronize_viewer():
     # synchronize the visualizer (rendering frames for the video mp4) with stepSimulation
     p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING, True, physicsClientId=CLIENT)
 
+def get_renderer():
+    client = CLIENT
+    return CLIENTS[client]
+
+def is_unlocked():
+    return get_renderer() is True
+
 def enable_preview():
     set_preview(enable=True)
 
@@ -1066,6 +1076,8 @@ def disable_preview():
 def set_renderer(enable):
     client = CLIENT
     if not has_gui(client):
+        return
+    if get_renderer() == enable:
         return
     CLIENTS[client] = enable
     p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, int(enable), physicsClientId=client)
@@ -1637,8 +1649,9 @@ def unit_quat():
 
 def quat_from_axis_angle(axis, angle): # axis-angle
     #return get_unit_vector(np.append(vec, [angle]))
-    #from transformations import quaternion_about_axis
-    return np.append(math.sin(angle/2) * get_unit_vector(axis), [math.cos(angle / 2)])
+    from transformations import quaternion_about_axis
+    return quaternion_about_axis(angle, axis)
+    #return np.append(math.sin(angle/2) * get_unit_vector(axis), [math.cos(angle / 2)])
 
 def unit_pose():
     return (unit_point(), unit_quat())
@@ -1672,6 +1685,12 @@ def get_unit_vector(vec):
 
 def z_rotation(theta):
     return quat_from_euler([0, 0, theta])
+
+def project_vector(vec1, vec2): # vec1 onto vec2
+    return np.dot(vec1, vec2) / get_length(vec2) * get_unit_vector(vec2)
+
+def orthogonal_vector(vec1, vec2):
+    return vec1 - project_vector(vec1, vec2)
 
 def matrix_from_quat(quat):
     return np.array(p.getMatrixFromQuaternion(quat, physicsClientId=CLIENT)).reshape(3, 3)
@@ -2303,6 +2322,9 @@ def get_link_ancestors(body, link):
         return []
     return get_link_ancestors(body, parent) + [parent]
 
+def get_length_depth(body, link):
+    return len(get_link_ancestors(body, link))
+
 def get_ordered_ancestors(robot, link):
     #return prune_fixed_joints(robot, get_link_ancestors(robot, link)[1:] + [link])
     return get_link_ancestors(robot, link)[1:] + [link]
@@ -2335,21 +2357,28 @@ def are_links_adjacent(body, link1, link2):
     return (get_link_parent(body, link1) == link2) or \
            (get_link_parent(body, link2) == link1)
 
+def get_joint_pair(body, joint):
+    child = child_link_from_joint(joint)
+    parent = parent_link_from_joint(body, joint)
+    return child, parent
+    #return parent, child
+
 def get_adjacent_links(body):
-    adjacent = set()
-    for link in get_links(body):
-        parent = get_link_parent(body, link)
-        adjacent.add((link, parent))
-        #adjacent.add((parent, link))
-    return adjacent
+    return {get_joint_pair(body, joint) for joint in get_joints(body)}
 
 def get_adjacent_fixed_links(body):
-    return list(filter(lambda item: not is_movable(body, item[0]),
-                       get_adjacent_links(body)))
+    return list(filter(lambda item: not is_movable(body, parent_joint_from_link(item[0])), get_adjacent_links(body)))
 
-def get_rigid_clusters(body):
-    return get_connected_components(vertices=get_all_links(body),
-                                    edges=get_adjacent_fixed_links(body))
+def get_rigid_clusters(body, links=None, joints=None):
+    # TODO: organize by root link
+    if links is None:
+        links = get_all_links(body)
+    if joints is None:
+        joints = get_movable_joints(body)
+    rigid_joints = set(get_joints(body)) - set(joints)
+    edges = {get_joint_pair(body, joint) for joint in rigid_joints}
+    #edges = get_adjacent_fixed_links(body)
+    return get_connected_components(vertices=links, edges=edges)
 
 def assign_link_colors(body, max_colors=3, alpha=1., s=0.5, **kwargs):
     # TODO: graph coloring
@@ -2807,7 +2836,8 @@ CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'link
 
 def collision_shape_from_data(data, body, link, client=None):
     client = get_client(client)
-    if (data.geometry_type == p.GEOM_MESH) and (data.filename == UNKNOWN_FILE):
+    filename = data.filename.decode(encoding='UTF-8')
+    if (data.geometry_type == p.GEOM_MESH) and (filename == UNKNOWN_FILE):
         return NULL_ID
     pose = multiply(get_joint_inertial_pose(body, link), get_data_pose(data))
     point, quat = pose
@@ -2817,7 +2847,7 @@ def collision_shape_from_data(data, body, link, client=None):
                                   # halfExtents=get_data_extents(data.geometry_type, data.dimensions),
                                   halfExtents=np.array(get_data_extents(data)) / 2,
                                   height=get_data_height(data),
-                                  fileName=data.filename.decode(encoding='UTF-8'),
+                                  fileName=filename,
                                   meshScale=get_data_scale(data),
                                   planeNormal=get_data_normal(data),
                                   flags=p.GEOM_FORCE_CONCAVE_TRIMESH,
@@ -3275,9 +3305,18 @@ def tform_oobb(affine, oobb):
     aabb, pose = oobb
     return OOBB(aabb, multiply(affine, pose))
 
-def aabb_from_oobb(oobb):
+def get_oobb_vertices(oobb):
     aabb, pose = oobb
-    return aabb_from_points(tform_points(pose, get_aabb_vertices(aabb)))
+    return tform_points(pose, get_aabb_vertices(aabb))
+
+def aabb_from_oobb(oobb):
+    return aabb_from_points(get_oobb_vertices(oobb))
+
+def recenter_oobb(oobb):
+    aabb, pose = oobb
+    extent = get_aabb_extent(aabb)
+    new_aabb = AABB(-extent/2., +extent/2.)
+    return OOBB(new_aabb, multiply(pose, Pose(point=get_aabb_center(aabb))))
 
 #####################################
 
@@ -3321,7 +3360,8 @@ def vertices_from_data(data):
 def oobb_from_data(data):
     link_from_data = get_data_pose(data)
     vertices_data = vertices_from_data(data)
-    return OOBB(aabb_from_points(vertices_data), link_from_data)
+    oobb = OOBB(aabb_from_points(vertices_data), link_from_data)
+    return recenter_oobb(oobb)
 
 def vertices_from_link(body, link=BASE_LINK, collision=True):
     # TODO: get_mesh_data(body, link=link)
@@ -4958,15 +4998,17 @@ def remove_handles(handles):
 def remove_all_debug():
     p.removeAllUserDebugItems(physicsClientId=CLIENT)
 
-def add_body_name(body, name=None, **kwargs):
+def add_body_name(body, name=None, link=BASE_LINK, **kwargs):
     if name is None:
         name = get_name(body)
     with PoseSaver(body):
         set_pose(body, unit_pose())
         lower, upper = get_aabb(body)
-    #position = (0, 0, upper[2])
-    position = upper
-    return add_text(name, position=position, parent=body, **kwargs)  # removeUserDebugItem
+        #position = (0, 0, upper[2])
+        position = upper
+        link_pose = get_link_pose(body, link)
+        position = tform_point(invert(link_pose), position)
+    return add_text(name, position=position, parent=body, parent_link=link, **kwargs)  # removeUserDebugItem
 
 def add_segments(points, closed=False, **kwargs): # TODO: draw_segments
     lines = []
@@ -4975,6 +5017,8 @@ def add_segments(points, closed=False, **kwargs): # TODO: draw_segments
     if closed:
         lines.append(add_line(points[-1], points[0], **kwargs))
     return lines
+
+draw_segments = add_segments
 
 def draw_link_name(body, link=BASE_LINK, position=Point(y=0.2)):
     return add_text(get_link_name(body, link), position=position,
