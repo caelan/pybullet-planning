@@ -850,14 +850,14 @@ def get_urdf_flags(cache=False, cylinder=False, merge=False, sat=False):
 def load_pybullet(filename, fixed_base=False, scale=1., **kwargs):
     # fixed_base=False implies infinite base mass
     with LockRenderer():
+        flags = get_urdf_flags(**kwargs)
         if filename.endswith('.urdf'):
-            flags = get_urdf_flags(**kwargs)
             body = p.loadURDF(filename, useFixedBase=fixed_base, flags=flags,
                               globalScaling=scale, physicsClientId=CLIENT)
         elif filename.endswith('.sdf'):
             body = p.loadSDF(filename, physicsClientId=CLIENT)
         elif filename.endswith('.xml'):
-            body = p.loadMJCF(filename, physicsClientId=CLIENT)
+            body = p.loadMJCF(filename, physicsClientId=CLIENT, flags=flags)
         elif filename.endswith('.bullet'):
             body = p.loadBullet(filename, physicsClientId=CLIENT)
         elif filename.endswith('.obj'):
@@ -2322,7 +2322,7 @@ def get_link_ancestors(body, link):
         return []
     return get_link_ancestors(body, parent) + [parent]
 
-def get_length_depth(body, link):
+def get_link_depth(body, link):
     return len(get_link_ancestors(body, link))
 
 def get_ordered_ancestors(robot, link):
@@ -2382,6 +2382,7 @@ def get_rigid_clusters(body, links=None, joints=None):
 
 def assign_link_colors(body, max_colors=3, alpha=1., s=0.5, **kwargs):
     # TODO: graph coloring
+    # TODO: use depth in tree of components
     components = sorted(map(list, get_rigid_clusters(body)),
                         key=np.average,
                         #key=min,
@@ -2873,7 +2874,10 @@ def clone_collision_shape(body, link, client=None):
         return NULL_ID
     assert (len(collision_data) == 1)
     # TODO: can do CollisionArray
-    return collision_shape_from_data(collision_data[0], body, link, client)
+    try:
+        return collision_shape_from_data(collision_data[0], body, link, client)
+    except p.error:
+        return NULL_ID
 
 def clone_body(body, links=None, collision=True, visual=True, client=None):
     # TODO: names are not retained
