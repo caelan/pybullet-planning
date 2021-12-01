@@ -1231,14 +1231,14 @@ def update_scene():
     # Always recomputes (no caching)
     p.performCollisionDetection(physicsClientId=CLIENT)
 
-def set_real_time(real_time):
-    p.setRealTimeSimulation(int(real_time), physicsClientId=CLIENT)
+def set_real_time(enable=True):
+    p.setRealTimeSimulation(enableRealTimeSimulation=int(enable), physicsClientId=CLIENT)
 
 def enable_real_time():
-    set_real_time(True)
+    set_real_time(enable=True)
 
 def disable_real_time():
-    set_real_time(False)
+    set_real_time(enable=False)
 
 def update_state():
     # TODO: this doesn't seem to automatically update still
@@ -1924,18 +1924,14 @@ def dump_joint(body, joint):
 def dump_link(body, link):
     joint = parent_joint_from_link(link)
     joint_name = JOINT_TYPES[get_joint_type(body, joint)] if is_fixed(body, joint) else get_joint_name(body, joint)
+    num_visual = len(get_visual_data(body, link)) # TODO: try/catch
     print('Link id: {} | Name: {} | Joint: {} | Parent: {} | Mass: {} | Collision: {} | Visual: {}'.format(
         link, get_link_name(body, link), joint_name,
         get_link_name(body, get_link_parent(body, link)), get_mass(body, link),
-        len(get_collision_data(body, link)), NULL_ID))  # len(get_visual_data(body, link))))
+        len(get_collision_data(body, link)), num_visual))
     # print(get_joint_parent_frame(body, link))
     # print(map(get_data_geometry, get_visual_data(body, link)))
     # print(map(get_data_geometry, get_collision_data(body, link)))
-
-def dump(*args, **kwargs):
-    load = 'poop'
-    print(load)
-    return load
 
 def dump_body(body, fixed=False, links=True):
     print('Body id: {} | Name: {} | Rigid: {} | Fixed: {}'.format(
@@ -1947,9 +1943,10 @@ def dump_body(body, fixed=False, links=True):
     if not links:
         return
     base_link = NULL_ID
+    num_visual = len(get_visual_data(body, base_link)) # TODO: try/catch
     print('Link id: {} | Name: {} | Mass: {} | Collision: {} | Visual: {}'.format(
         base_link, get_base_name(body), get_mass(body),
-        len(get_collision_data(body, base_link)), NULL_ID)) # len(get_visual_data(body, link))))
+        len(get_collision_data(body, base_link)), num_visual))
     for link in get_links(body):
         dump_link(body, link)
 
@@ -2707,7 +2704,7 @@ def create_flying_body(group, collision_id=NULL_ID, visual_id=NULL_ID, mass=STAT
     link_orientations = len(indices) * [unit_quat()]
     inertial_positions = len(indices) * [unit_point()]
     inertial_orientations = len(indices) * [unit_quat()]
-    axes = len(indices) * [unit_point()]
+    #axes = len(indices) * [unit_point()]
     axes = [CARTESIAN_TYPES[joint][1] for joint in group] + [unit_point()]
     # TODO: no way of specifying joint limits
 
@@ -2827,8 +2824,8 @@ def get_visual_data(body, link=BASE_LINK):
     # https://github.com/bulletphysics/bullet3/blob/47c3f5e994fd3bfe1f44260853a8991a74a01c0f/examples/SharedMemory/b3RobotSimulatorClientAPI_NoDirect.cpp#L2593
     #visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body, link, physicsClientId=CLIENT)]
     visual_data = [VisualShapeData(*tup) for tup in p.getVisualShapeData(body, flags, physicsClientId=CLIENT)]
-    return visual_data
-    #return list(filter(lambda d: d.linkIndex == link, visual_data))
+    #return visual_data
+    return list(filter(lambda d: d.linkIndex == link, visual_data))
 
 # object_unique_id and linkIndex seem to be noise
 CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'linkIndex',
@@ -2961,6 +2958,7 @@ def clone_world(client=None, exclude=[]):
 def get_mesh_data(obj, link=BASE_LINK, shape_index=0, visual=True):
     flags = 0 if visual else p.MESH_DATA_SIMULATION_MESH
     #collisionShapeIndex = shape_index
+    # https://github.com/bulletphysics/bullet3/blob/5ae9a15ecac7bc7e71f1ec1b544a55135d7d7e32/examples/pybullet/examples/deformable_anchor.py#L38
     return Mesh(*p.getMeshData(obj, linkIndex=link, flags=flags, physicsClientId=CLIENT))
 
 def get_collision_data(body, link=BASE_LINK):
@@ -2973,6 +2971,13 @@ def can_collide(body, link=BASE_LINK, **kwargs):
 
 def get_first_link(body):
     return next(link for link in get_all_links(body) if can_collide(body, link))
+
+def get_data_link(data):
+    if isinstance(data, CollisionShapeData):
+        body, link = data.object_unique_id, data.linkIndex
+    else:
+        body, link = data.objectUniqueId, data.linkIndex
+    return body, link
 
 def get_data_type(data):
     return data.geometry_type if isinstance(data, CollisionShapeData) else data.visualGeometryType
@@ -3334,10 +3339,15 @@ def vertices_from_data(data):
         extents = np.array(get_data_extents(data))
         aabb = aabb_from_extent_center(extents)
         vertices = get_aabb_vertices(aabb)
-    elif geometry_type in (p.GEOM_CYLINDER, p.GEOM_CAPSULE):
+    elif geometry_type == p.GEOM_CYLINDER:
         # TODO: p.URDF_USE_IMPLICIT_CYLINDER
         radius, height = get_data_radius(data), get_data_height(data)
         extents = np.array([2*radius, 2*radius, height])
+        aabb = aabb_from_extent_center(extents)
+        vertices = get_aabb_vertices(aabb)
+    elif geometry_type == p.GEOM_CAPSULE:
+        radius, height = get_data_radius(data), get_data_height(data)
+        extents = np.array([2 * radius, 2 * radius, 2 * radius + height])
         aabb = aabb_from_extent_center(extents)
         vertices = get_aabb_vertices(aabb)
     elif geometry_type == p.GEOM_SPHERE:
@@ -3379,10 +3389,20 @@ def vertices_from_link(body, link=BASE_LINK, collision=True):
         vertices.extend(apply_affine(get_data_pose(data), vertices_from_data(data)))
     return vertices
 
+def vertices_from_body(body, **kwargs):
+    # In global frame at the current
+    #if base_pose is None:
+    #    base_pose = get_pose(body)
+    vertices = []
+    for link in get_all_links(body):
+        link_pose = get_link_pose(body, link)
+        vertices.extend(tform_points(link_pose, vertices_from_link(body, link=link, **kwargs)))
+    return vertices
+
 OBJ_MESH_CACHE = {}
 
 def vertices_from_rigid(body, link=BASE_LINK):
-    assert implies(link == BASE_LINK, get_num_links(body) == 0)
+    assert implies(link == BASE_LINK, get_num_links(body) == 0) # TODO: why?
     try:
         vertices = vertices_from_link(body, link)
     except RuntimeError:
@@ -4171,6 +4191,7 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
 # TODO: extend these to oobbs
 
 def base_aligned(body, target=np.zeros(3)):
+    # TODO: apply elsewhere
     return (target - get_aabb_base(get_aabb(body))) + get_point(body)
 
 def base_aligned_z(body, z=0.):
@@ -5007,7 +5028,7 @@ def add_body_name(body, name=None, link=BASE_LINK, **kwargs):
         name = get_name(body)
     with PoseSaver(body):
         set_pose(body, unit_pose())
-        lower, upper = get_aabb(body)
+        lower, upper = get_aabb(body, only_collision=False)
         #position = (0, 0, upper[2])
         position = upper
         link_pose = get_link_pose(body, link)
@@ -5038,8 +5059,8 @@ def draw_pose(pose, length=0.1, d=3, **kwargs):
         handles.append(add_line(origin_world, axis_world, color=axis, **kwargs))
     return handles
 
-def draw_global_system(**kwargs):
-    return draw_pose(Pose(), length=1., **kwargs)
+def draw_global_system(length=1., **kwargs):
+    return draw_pose(Pose(), length=length, **kwargs)
 
 def draw_pose2d(pose2d, z=0., d=2, **kwargs):
     return draw_pose(pose_from_pose2d(pose2d, z), d=d, **kwargs)
@@ -5053,7 +5074,7 @@ def draw_base_limits(limits, z=1e-2, **kwargs):
 def get_circle_vertices(center, radius, n=24):
     vertices = []
     for i in range(n):
-        theta = i*2*math.pi/n
+        theta = i*2*math.pi/n # TODO: theta0
         unit = unit_from_theta(theta)
         if len(center) == 3:
             unit = np.append(unit, [0.])

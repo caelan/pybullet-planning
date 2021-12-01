@@ -774,9 +774,9 @@ def close_until_collision(robot, gripper_joints, bodies=[], open_conf=None, clos
         if any(pairwise_collision((robot, collision_links), body, **kwargs) for body in bodies):
             if i == 0:
                 return None
-            return close_path[i-1][0]
-    return close_path[-1][0]
-
+            return close_path[i-1]
+    return close_path[-1]
+    #return None # False
 
 def compute_grasp_width(robot, arm, body, grasp_pose, **kwargs):
     tool_link = get_gripper_link(robot, arm)
