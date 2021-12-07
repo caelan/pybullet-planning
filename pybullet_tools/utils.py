@@ -24,7 +24,8 @@ from itertools import product, combinations, count, cycle, islice
 from multiprocessing import TimeoutError
 from contextlib import contextmanager
 
-from .transformations import quaternion_from_matrix, unit_vector, euler_from_quaternion, quaternion_slerp, random_quaternion
+from pybullet_utils.transformations import quaternion_from_matrix, unit_vector, euler_from_quaternion, quaternion_slerp, \
+    random_quaternion, quaternion_about_axis
 
 def join_paths(*paths):
     return os.path.abspath(os.path.join(*paths))
@@ -1508,9 +1509,23 @@ def compute_view_matrix(target_position, distance, yaw, pitch, roll=0., z_up=Tru
 
     view_matrix = np.reshape(view_matrix, [4, 4]) #.T
     view_matrix[:3, 3] = view_matrix[3, :3]
-    view_matrix[3, :3] = 0 # TODO: make a seperate method
+    view_matrix[3, :3] = 0 # TODO: make a separate method
     #view_matrix[3, :3], view_matrix[:3, 3] = view_matrix[:3, 3], view_matrix[3, :3]
     return view_matrix
+
+def compute_camera_pose(camera_point, target_point=np.zeros(3)):
+    delta_point = np.array(target_point) - np.array(camera_point)
+    distance = np.linalg.norm(delta_point)
+    yaw = get_yaw(delta_point) - np.pi/2 # TODO: hack
+    pitch = get_pitch(delta_point)
+    #print(target_point, distance, yaw, pitch)
+    #euler = Euler(roll=yaw+np.pi/2, pitch=0, yaw=pitch)
+    #target_pose = Pose(target_point, euler)
+    #print(target_pose)
+    #camera_pose = multiply(target_pose, Pose(point=Point(x=-distance)))
+    #print(camera_pose)
+    view_matrix = compute_view_matrix(target_point, distance, yaw, pitch, roll=0., z_up=True)
+    return pose_from_tform(view_matrix)
 
 def get_image(camera_pos=None, target_pos=None, width=640, height=480, vertical_fov=60.0, near=0.02, far=5.0,
               tiny=False, segment=False, **kwargs):
@@ -1649,7 +1664,6 @@ def unit_quat():
 
 def quat_from_axis_angle(axis, angle): # axis-angle
     #return get_unit_vector(np.append(vec, [angle]))
-    from transformations import quaternion_about_axis
     return quaternion_about_axis(angle, axis)
     #return np.append(math.sin(angle/2) * get_unit_vector(axis), [math.cos(angle / 2)])
 
@@ -2174,6 +2188,7 @@ def get_joint_parent_frame(body, joint):
     return joint_info.parentFramePos, joint_info.parentFrameOrn
 
 def violates_limit(body, joint, value):
+    # TODO: custom limits
     if is_circular(body, joint):
         return False
     lower, upper = get_joint_limits(body, joint)
@@ -3199,9 +3214,15 @@ def get_center_extent(body, **kwargs):
     return get_aabb_center(aabb), get_aabb_extent(aabb)
 
 def get_aabb_base(aabb):
-    lower, upper = aabb
+    lower, _ = aabb
     center = get_aabb_center(aabb)
     center[2] = lower[2]
+    return center
+
+def get_aabb_top(aabb):
+    _, upper = aabb
+    center = get_aabb_center(aabb)
+    center[2] = upper[2]
     return center
 
 def aabb2d_from_aabb(aabb):
@@ -3389,13 +3410,14 @@ def vertices_from_link(body, link=BASE_LINK, collision=True):
         vertices.extend(apply_affine(get_data_pose(data), vertices_from_data(data)))
     return vertices
 
-def vertices_from_body(body, **kwargs):
+def vertices_from_body(body, base_pose=None, **kwargs):
     # In global frame at the current
-    #if base_pose is None:
-    #    base_pose = get_pose(body)
+    if base_pose is None:
+       base_pose = get_pose(body)
     vertices = []
     for link in get_all_links(body):
-        link_pose = get_link_pose(body, link)
+        relative_pose = get_relative_pose(body, link, link2=BASE_LINK)
+        link_pose = multiply(base_pose, relative_pose)
         vertices.extend(tform_points(link_pose, vertices_from_link(body, link=link, **kwargs)))
     return vertices
 
@@ -3635,6 +3657,8 @@ def sample_norm(mu, sigma, lower=0., upper=INF):
     if sigma == 0.:
         assert lower <= mu <= upper
         return mu
+    if sigma == INF:
+        return random.uniform(lower, upper)
     while True:
         x = random.gauss(mu=mu, sigma=sigma)
         if lower <= x <= upper:
