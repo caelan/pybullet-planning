@@ -22,7 +22,7 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION, \
     base_aligned_z, load_pybullet, get_collision_fn, get_custom_limits, get_limits_fn, \
     get_joint_velocities, control_joint, get_time_step, remove_handles, Interval, get_distance, \
-    get_duration_fn, velocity_control_joint, get_max_velocities, get_difference
+    get_duration_fn, velocity_control_joint, get_max_velocities, get_difference, plan_base_joint_motion
 
 from motion_planners.trajectory.smooth import smooth_curve
 from motion_planners.trajectory.linear import solve_multi_linear, quickest_inf_accel
@@ -114,21 +114,6 @@ def extract_full_path(robot, path_joints, path, all_joints):
             set_joint_positions(robot, path_joints, conf)
             new_path.append(get_joint_positions(robot, all_joints)) # TODO: do without assigning
         return new_path
-
-def plan_motion(robot, joints, goal_positions, attachments=[], obstacles=None, holonomic=False, reversible=False, **kwargs):
-    attached_bodies = [attachment.child for attachment in attachments]
-    moving_bodies = [robot] + attached_bodies
-    if obstacles is None:
-        obstacles = get_bodies()
-    obstacles = set(obstacles) - set(moving_bodies)
-    if holonomic:
-        return plan_joint_motion(robot, joints, goal_positions,
-                                 attachments=attachments, obstacles=obstacles, **kwargs)
-    # TODO: just sample the x, y waypoint and use the resulting orientation
-    # TODO: remove overlapping configurations/intervals due to circular joints
-    return plan_nonholonomic_motion(robot, joints, goal_positions, reversible=reversible,
-                                    linear_tol=1e-6, angular_tol=0.,
-                                    attachments=attachments, obstacles=obstacles, **kwargs)
 
 ##################################################
 
@@ -608,11 +593,11 @@ def main():
     profiler.save()
     with LockRenderer(lock=args.lock):
         # TODO: draw the search tree
-        path = plan_motion(robot, plan_joints, goal_conf[:len(plan_joints)], holonomic=holonomic,
-                           obstacles=obstacles, self_collisions=False,
-                           custom_limits=custom_limits, resolutions=resolutions[:len(plan_joints)],
-                           use_aabb=True, cache=True, max_distance=MIN_PROXIMITY,
-                           algorithm=args.algorithm, restarts=5, max_iterations=50, smooth=20) # 20 | None
+        path = plan_base_joint_motion(robot, plan_joints, goal_conf[:len(plan_joints)], holonomic=holonomic,
+                                      obstacles=obstacles, self_collisions=False,
+                                      custom_limits=custom_limits, resolutions=resolutions[:len(plan_joints)],
+                                      use_aabb=True, cache=True, max_distance=MIN_PROXIMITY,
+                                      algorithm=args.algorithm, restarts=5, max_iterations=50, smooth=20) # 20 | None
         saver.restore()
     #wait_for_duration(duration=1e-3)
     profiler.restore()
