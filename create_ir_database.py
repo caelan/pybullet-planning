@@ -4,18 +4,18 @@ import argparse
 import random
 import time
 
-from pybullet_tools.pr2_utils import set_arm_conf, get_other_arm, arm_conf, REST_LEFT_ARM, \
+from pybullet_planning.pybullet_tools.pr2_utils import set_arm_conf, get_other_arm, arm_conf, REST_LEFT_ARM, \
     get_carry_conf, get_gripper_link, GET_GRASPS, IR_FILENAME, get_database_file, DRAKE_PR2_URDF, \
     set_group_conf, get_group_conf, get_base_pose
-from pybullet_tools.utils import create_box, disconnect, add_data_path, connect, get_movable_joints, get_joint_positions, \
+from pybullet_planning.pybullet_tools.utils import create_box, disconnect, add_data_path, connect, get_movable_joints, get_joint_positions, \
     sample_placement, set_pose, multiply, invert, set_joint_positions, pairwise_collision, inverse_kinematics, \
     get_link_pose, get_body_name, write_pickle, uniform_pose_generator, set_base_values, \
     load_pybullet, HideOutput, wait_if_gui, draw_point, point_from_pose, has_gui, elapsed_time, \
     sub_inverse_kinematics, BodySaver
-from pybullet_tools.pr2_problems import create_table
-from pybullet_tools.ikfast.pr2.ik import pr2_inverse_kinematics, is_ik_compiled
-from pybullet_tools.ikfast.utils import USE_CURRENT
-from pybullet_tools.pr2_primitives import get_stable_gen, get_grasp_gen, get_ik_ir_gen
+from pybullet_planning.pybullet_tools.pr2_problems import create_table
+from pybullet_planning.pybullet_tools.ikfast.pr2.ik import pr2_inverse_kinematics, is_ik_compiled
+from pybullet_planning.pybullet_tools.ikfast.utils import USE_CURRENT
+from pybullet_planning.pybullet_tools.pr2_primitives import get_stable_gen, get_grasp_gen, get_ik_ir_gen
 
 def save_inverse_reachability(robot, arm, grasp_type, tool_link, gripper_from_base_list):
     # TODO: store value of torso and roll joint for the IK database. Sample the roll joint.

@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-from pybullet_tools.utils import clip, INF, \
+from pybullet_planning.pybullet_tools.utils import clip, INF, \
     waypoints_from_path, adjust_path, get_difference, get_pairs, get_max_velocities, get_duration_fn, wait_if_gui
 
 #ARM_SPEED = 0.15*np.pi # radians / sec

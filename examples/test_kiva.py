@@ -5,8 +5,8 @@ from __future__ import print_function
 import argparse
 import os
 
-from pybullet_tools.pr2_problems import create_floor
-from pybullet_tools.utils import connect, disconnect, wait_for_user, LockRenderer, stable_z, \
+from pybullet_planning.pybullet_tools.pr2_problems import create_floor
+from pybullet_planning.pybullet_tools.utils import connect, disconnect, wait_for_user, LockRenderer, stable_z, \
     load_model, ROOMBA_URDF, \
     HideOutput, set_point, Point, load_pybullet, get_model_path, set_color, get_all_links, \
     KIVA_SHELF_SDF, add_data_path, draw_pose, unit_pose, dump_body

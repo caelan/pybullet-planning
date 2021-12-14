@@ -5,11 +5,11 @@ from __future__ import print_function
 import json
 import os
 
-from pybullet_tools.parse_json import parse_pose, parse_robot, parse_region, parse_body
-from pybullet_tools.utils import connect, \
+from pybullet_planning.pybullet_tools.parse_json import parse_pose, parse_robot, parse_region, parse_body
+from pybullet_planning.pybullet_tools.utils import connect, \
     disconnect, wait_for_interrupt, point_from_pose, set_camera_pose, \
     reset_simulation, wait_if_gui
-from pybullet_tools.pr2_problems import Problem
+from pybullet_planning.pybullet_tools.pr2_problems import Problem
 
 BODY_FIELDS = [u'table_names', u'sink_names', u'stove_names']
 

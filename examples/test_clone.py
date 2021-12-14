@@ -2,8 +2,8 @@
 
 from __future__ import print_function
 
-from pybullet_tools.pr2_utils import PR2_GROUPS
-from pybullet_tools.utils import HideOutput, disconnect, set_base_values, joint_from_name, connect, wait_if_gui, \
+from pybullet_planning.pybullet_tools.pr2_utils import PR2_GROUPS
+from pybullet_planning.pybullet_tools.utils import HideOutput, disconnect, set_base_values, joint_from_name, connect, wait_if_gui, \
     dump_world, get_link_name, wait_if_gui, clone_body, get_link_parent, get_link_descendants, load_model
 
 

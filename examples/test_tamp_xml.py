@@ -12,11 +12,11 @@ import sys
 import numpy as np
 from lxml import etree
 
-from pybullet_tools.pr2_utils import DRAKE_PR2_URDF, set_group_conf
-from pybullet_tools.utils import STATIC_MASS, CLIENT, connect, \
+from pybullet_planning.pybullet_tools.pr2_utils import DRAKE_PR2_URDF, set_group_conf
+from pybullet_planning.pybullet_tools.utils import STATIC_MASS, CLIENT, connect, \
     disconnect, set_pose, wait_if_gui, load_model, HideOutput, base_values_from_pose, create_shape, \
     get_mesh_geometry, point_from_pose, set_camera_pose, draw_global_system
-from pybullet_tools.utils import quaternion_from_matrix
+from pybullet_planning.pybullet_tools.utils import quaternion_from_matrix
 
 # https://docs.python.org/3.5/library/xml.etree.elementtree.html
 # https://lxml.de/tutorial.html

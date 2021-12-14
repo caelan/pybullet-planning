@@ -7,7 +7,7 @@ import os
 import argparse
 sys.path.append(os.path.join(os.pardir, os.pardir, os.pardir))
 
-from pybullet_tools.ikfast.compile import compile_ikfast
+from pybullet_planning.pybullet_tools.ikfast.compile import compile_ikfast
 
 # Build C++ extension by running: 'python setup.py'
 # see: https://docs.python.org/3/extending/building.html

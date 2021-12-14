@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import numpy as np
 
-from pybullet_tools.utils import connect, disconnect, wait_for_user, create_box, dump_body, \
+from pybullet_planning.pybullet_tools.utils import connect, disconnect, wait_for_user, create_box, dump_body, \
     get_link_pose, euler_from_quat, RED, set_camera_pose, create_flying_body, create_shape, get_cylinder_geometry, \
     BLUE, get_movable_joints, get_links, SE3, set_joint_positions, \
     plan_joint_motion, add_line, GREEN, intrinsic_euler_from_quat
@@ -60,7 +60,7 @@ def main(group=SE3):
 
     # TODO: sample orientation uniformly at random
     # http://planning.cs.uiuc.edu/node198.html
-    #from pybullet_tools.transformations import random_quaternion
+    #from pybullet_planning.pybullet_tools.transformations import random_quaternion
     path = plan_joint_motion(robot, joints, final_conf, obstacles=obstacles,
                              self_collisions=False, custom_limits=custom_limits)
     if path is None:

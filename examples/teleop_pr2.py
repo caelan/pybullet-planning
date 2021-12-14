@@ -7,8 +7,8 @@ import sys
 import termios
 import tty
 
-from pybullet_tools.pr2_utils import PR2_GROUPS, DRAKE_PR2_URDF
-from pybullet_tools.utils import add_data_path, connect, enable_gravity, load_model, \
+from pybullet_planning.pybullet_tools.pr2_utils import PR2_GROUPS, DRAKE_PR2_URDF
+from pybullet_planning.pybullet_tools.utils import add_data_path, connect, enable_gravity, load_model, \
 	joints_from_names, load_pybullet, \
 	velocity_control_joints, disconnect, enable_real_time, HideOutput
 

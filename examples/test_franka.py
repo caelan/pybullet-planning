@@ -4,13 +4,13 @@ from __future__ import print_function
 
 import pybullet as p
 
-from pybullet_tools.utils import add_data_path, connect, dump_body, disconnect, wait_for_user, \
+from pybullet_planning.pybullet_tools.utils import add_data_path, connect, dump_body, disconnect, wait_for_user, \
     get_movable_joints, get_sample_fn, set_joint_positions, get_joint_name, LockRenderer, link_from_name, get_link_pose, \
     multiply, Pose, Point, interpolate_poses, HideOutput, draw_pose, set_camera_pose, load_pybullet, \
     assign_link_colors, add_line, point_from_pose, remove_handles, BLUE, INF
 
-from pybullet_tools.ikfast.franka_panda.ik import PANDA_INFO, FRANKA_URDF
-from pybullet_tools.ikfast.ikfast import get_ik_joints, either_inverse_kinematics, check_ik_solver
+from pybullet_planning.pybullet_tools.ikfast.franka_panda.ik import PANDA_INFO, FRANKA_URDF
+from pybullet_planning.pybullet_tools.ikfast.ikfast import get_ik_joints, either_inverse_kinematics, check_ik_solver
 
 
 def test_retraction(robot, info, tool_link, distance=0.1, **kwargs):

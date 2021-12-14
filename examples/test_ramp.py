@@ -8,7 +8,7 @@ import numpy as np
 
 from itertools import product
 
-from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui, load_pybullet, \
+from pybullet_planning.pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui, load_pybullet, \
     draw_global_system, dump_body, enable_gravity, step_simulation, \
     get_time_step, elapsed_time, set_point, Point, set_camera_pose, set_position, create_box, BLUE, synchronize_viewer, \
     set_renderer, irange, INF, create_cylinder, create_sphere, create_capsule, set_euler, get_velocity, create_faces, \

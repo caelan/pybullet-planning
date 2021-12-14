@@ -8,7 +8,7 @@ import math
 from collections import OrderedDict, defaultdict
 from itertools import combinations
 
-from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, \
+from pybullet_planning.pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, \
     set_joint_positions, HideOutput, get_bodies, sample_placement, pairwise_collision, \
     set_point, Point, create_box, stable_z, TAN, GREY, connect, PI, OrderedSet, \
     wait_if_gui, dump_body, set_all_color, BLUE, child_link_from_joint, link_from_name, draw_pose, Pose, pose_from_pose2d, \
@@ -30,7 +30,7 @@ from motion_planners.trajectory.limits import check_spline
 from motion_planners.utils import waypoints_from_path, default_selector, irange
 from motion_planners.trajectory.discretize import time_discretize_curve
 
-from pybullet_tools.retime import interpolate_path, sample_curve
+from pybullet_planning.pybullet_tools.retime import interpolate_path, sample_curve
 
 BASE_LINK_NAME = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']

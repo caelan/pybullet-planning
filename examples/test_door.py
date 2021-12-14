@@ -9,7 +9,7 @@ import argparse
 import numpy as np
 import math
 
-from pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui, load_pybullet, \
+from pybullet_planning.pybullet_tools.utils import add_data_path, connect, disconnect, wait_if_gui, load_pybullet, \
     draw_global_system, dump_body, get_sample_fn, get_movable_joints, enable_gravity, step_simulation, \
     get_time_step, elapsed_time, get_joint_intervals, \
     velocity_control_joints, PI, set_point, Point, get_box_geometry, \

@@ -5,7 +5,7 @@ from __future__ import print_function
 import time
 import numpy as np
 
-from pybullet_tools.utils import add_data_path, connect, enable_gravity, wait_if_gui, disconnect, create_sphere, set_point, Point, \
+from pybullet_planning.pybullet_tools.utils import add_data_path, connect, enable_gravity, wait_if_gui, disconnect, create_sphere, set_point, Point, \
     enable_real_time, dump_world, load_model, wait_if_gui, set_camera, stable_z, \
     set_color, get_lower_upper, wait_for_duration, simulate_for_duration, load_pybullet, \
     safe_zip, HideOutput, draw_global_system
