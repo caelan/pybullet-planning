@@ -25,7 +25,7 @@ from pybullet_planning.pybullet_tools.utils import add_data_path, connect, disco
 from .test_ramp import condition_controller, simulate
 
 
-#from examples.test_turtlebot_motion import BASE_JOINTS
+#from pybullet_planning.examples.test_turtlebot_motion import BASE_JOINTS
 
 # bullet3/examples/pybullet/examples
 # experimentalCcdSphereRadius.py
