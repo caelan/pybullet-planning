@@ -38,6 +38,7 @@ sys.path.extend([
 ])
 from motion_planners.rrt_connect import birrt
 from motion_planners.meta import direct_path, solve
+from motion_planners.utils import RRT_SMOOTHING
 
 #from ..motion.motion_planners.rrt_connect import birrt, direct_path
 
@@ -1353,6 +1354,8 @@ def get_camera():
     return CameraInfo(*p.getDebugVisualizerCamera(physicsClientId=CLIENT))
 
 def get_camera_pose():
+    if not has_gui():
+        return None
     # TODO: does not seem to update as the camera moves
     info = get_camera()
     #view_matrix = np.reshape(info.viewMatrix, [4, 4]).T
@@ -4153,6 +4156,24 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
                  algorithm=algorithm, **kwargs) # weights=weights, Deliberately excluding for PRM
 
 plan_differential_motion = plan_nonholonomic_motion
+
+def plan_base_joint_motion(robot, joints, goal_positions, attachments=[], obstacles=None,
+                           holonomic=False, reversible=False, smooth=None, **kwargs):
+    if obstacles is None:
+        obstacles = get_bodies()
+    attached_bodies = [attachment.child for attachment in attachments]
+    moving_bodies = [robot] + attached_bodies
+    obstacles = list(set(obstacles) - set(moving_bodies))
+    if smooth is None:
+        smooth = RRT_SMOOTHING if holonomic else 0
+    if holonomic:
+        return plan_joint_motion(robot, joints, goal_positions,
+                                 attachments=attachments, obstacles=obstacles, smooth=smooth, **kwargs)
+    # TODO: just sample the x, y waypoint and use the resulting orientation
+    # TODO: remove overlapping configurations/intervals due to circular joints
+    return plan_nonholonomic_motion(robot, joints, goal_positions, reversible=reversible,
+                                    linear_tol=1e-6, angular_tol=0.,
+                                    attachments=attachments, obstacles=obstacles, smooth=smooth, **kwargs)
 
 #####################################
 
