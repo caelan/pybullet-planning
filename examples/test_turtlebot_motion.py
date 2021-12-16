@@ -22,13 +22,17 @@ from pybullet_planning.pybullet_tools.utils import load_model, TURTLEBOT_URDF, j
     Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION, \
     base_aligned_z, load_pybullet, get_collision_fn, get_custom_limits, get_limits_fn, \
     get_joint_velocities, control_joint, get_time_step, remove_handles, Interval, get_distance, \
-    get_duration_fn, velocity_control_joint, get_max_velocities, get_difference
+    get_duration_fn, velocity_control_joint, get_max_velocities, get_difference, plan_base_joint_motion, \
+    UNBOUNDED_LIMITS, get_difference_fn
 
-from motion_planners.trajectory.smooth import smooth_curve
+from motion_planners.trajectory.smooth import smooth_curve, smooth_cubic
 from motion_planners.trajectory.linear import solve_multi_linear, quickest_inf_accel
 from motion_planners.trajectory.limits import check_spline
 from motion_planners.utils import waypoints_from_path, default_selector, irange
-from motion_planners.trajectory.discretize import time_discretize_curve
+from motion_planners.trajectory.discretize import time_discretize_curve, sample_discretize_curve
+#from motion_planners.tkinter.samplers import get_cost_fn
+#from motion_planners.lazy_prm import ROADMAPS # TODO: draw roadmap
+from motion_planners.primitives import get_duration_fn
 
 from pybullet_planning.pybullet_tools.retime import interpolate_path, sample_curve
 
@@ -115,21 +119,6 @@ def extract_full_path(robot, path_joints, path, all_joints):
             new_path.append(get_joint_positions(robot, all_joints)) # TODO: do without assigning
         return new_path
 
-def plan_motion(robot, joints, goal_positions, attachments=[], obstacles=None, holonomic=False, reversible=False, **kwargs):
-    attached_bodies = [attachment.child for attachment in attachments]
-    moving_bodies = [robot] + attached_bodies
-    if obstacles is None:
-        obstacles = get_bodies()
-    obstacles = set(obstacles) - set(moving_bodies)
-    if holonomic:
-        return plan_joint_motion(robot, joints, goal_positions,
-                                 attachments=attachments, obstacles=obstacles, **kwargs)
-    # TODO: just sample the x, y waypoint and use the resulting orientation
-    # TODO: remove overlapping configurations/intervals due to circular joints
-    return plan_nonholonomic_motion(robot, joints, goal_positions, reversible=reversible,
-                                    linear_tol=1e-6, angular_tol=0.,
-                                    attachments=attachments, obstacles=obstacles, **kwargs)
-
 ##################################################
 
 def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
@@ -149,10 +138,12 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     set_point(wall3, Point(x=floor_extent/2., z=wall_side/2.))
     wall4 = create_box(wall_side, floor_extent + wall_side, wall_side, color=GREY)
     set_point(wall4, Point(x=-floor_extent/2., z=wall_side/2.))
-    walls = [wall1, wall2, wall3, wall4]
+    wall5 = create_box(obst_width, obst_width, obst_height, color=GREY)
+    set_point(wall5, Point(z=obst_height / 2.))
+    walls = [wall1, wall2, wall3, wall4, wall5]
 
     initial_surfaces = OrderedDict()
-    for _ in range(n_obstacles):
+    for _ in range(n_obstacles - 1):
         body = create_box(obst_width, obst_width, obst_height, color=GREY)
         initial_surfaces[body] = floor
     pillars = list(initial_surfaces)
@@ -436,9 +427,11 @@ def step_curve(robot, joints, path, step_size=None):
 
 ##################################################
 
-def iterate_path(robot, joints, path, simulate=True, step_size=None, resolutions=None, smooth=True, **kwargs): # 1e-2 | None
+def iterate_path(robot, joints, path, simulate=False, step_size=None, resolutions=None, smooth=False, **kwargs): # 1e-2 | None
     if path is None:
         return
+    #assert holonomic
+    saver = WorldSaver()
     path = adjust_path(robot, joints, path)
     with LockRenderer():
         handles = draw_path(path)
@@ -447,8 +440,13 @@ def iterate_path(robot, joints, path, simulate=True, step_size=None, resolutions
     #waypoints = waypoints_from_path(path)
     #curve = interpolate_path(robot, joints, waypoints, k=1, velocity_fraction=1) # TODO: no velocities in the URDF
 
-    curve = solve_multi_linear(waypoints, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS)
-    _, path = time_discretize_curve(curve, verbose=False, resolution=resolutions) # max_velocities=v_max,
+    if True:
+        curve = solve_multi_linear(waypoints, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS)
+    else:
+        collision_fn = get_collision_fn(robot, joints, **kwargs) # TODO: custom_limits=custom_limits
+        curve = smooth_cubic(path, collision_fn, resolutions, MAX_VELOCITIES, MAX_ACCELERATIONS)
+    #_, path = time_discretize_curve(curve, verbose=False, resolution=resolutions) # max_velocities=v_max,
+    _, path = sample_discretize_curve(curve, resolutions)
     print('Steps: {} | Start: {:.3f} | End: {:.3f} | Knots: {}'.format(
         len(path), curve.x[0], curve.x[-1], len(curve.x)))
     with LockRenderer():
@@ -459,8 +457,10 @@ def iterate_path(robot, joints, path, simulate=True, step_size=None, resolutions
         #curve_collision_fn = lambda *args, **kwargs: False
         curve_collision_fn = get_curve_collision_fn(robot, joints, resolutions=resolutions, **kwargs)
         with LockRenderer():
-            with BodySaver(robot):
-                curve = smooth_curve(curve, MAX_VELOCITIES, MAX_ACCELERATIONS, curve_collision_fn, max_time=5) #, curve_collision_fn=[])
+            with Profiler():
+                curve = smooth_curve(curve, MAX_VELOCITIES, MAX_ACCELERATIONS,
+                                     curve_collision_fn, max_time=5) #, curve_collision_fn=[])
+            saver.restore()
         path = [conf for t, conf in sample_curve(curve, time_step=step_size)]
         print('Steps: {} | Start: {:.3f} | End: {:.3f} | Knots: {}'.format(
             len(path), curve.x[0], curve.x[-1], len(curve.x)))
@@ -548,6 +548,8 @@ def main():
                         help='')
     parser.add_argument('-l', '--lock', action='store_false',
                         help='')
+    parser.add_argument('-r', '--reversible', action='store_true',
+                        help='')
     parser.add_argument('-s', '--seed', default=None, type=int, # None | 1
                         help='The random seed to use.')
     parser.add_argument('-n', '--num', default=10, type=int,
@@ -586,10 +588,14 @@ def main():
 
     #resolutions = None
     #resolutions = np.array([0.05, 0.05, math.radians(10)])
-    resolutions = 1.*DEFAULT_RESOLUTION*np.ones(len(base_joints))
     plan_joints = base_joints[:2] if not args.orientation else base_joints
-    holonomic = args.holonomic or (len(plan_joints) != 3)
+    d = len(plan_joints)
+    holonomic = args.holonomic or (d != 3)
+    resolutions = 1.*DEFAULT_RESOLUTION*np.ones(d) # TODO: default resolutions, velocities, accelerations fns
+    cost_fn = get_duration_fn(get_difference_fn(robot, plan_joints),
+                              v_max=MAX_VELOCITIES[:d], a_max=MAX_ACCELERATIONS[:d])
 
+    # TODO: check that taking shortest turning direction (reversible affecting?)
     if args.cfree:
         obstacles = []
     # for obstacle in obstacles:
@@ -602,20 +608,28 @@ def main():
 
     #########################
 
+    # TODO: filter if straight-line path is feasible
     saver = WorldSaver()
+    wait_for_duration(duration=1e-2)
     start_time = time.time()
-    profiler = Profiler(field='cumtime', num=50) # tottime | cumtime | None
-    profiler.save()
     with LockRenderer(lock=args.lock):
-        # TODO: draw the search tree
-        path = plan_motion(robot, plan_joints, goal_conf[:len(plan_joints)], holonomic=holonomic,
-                           obstacles=obstacles, self_collisions=False,
-                           custom_limits=custom_limits, resolutions=resolutions[:len(plan_joints)],
-                           use_aabb=True, cache=True, max_distance=MIN_PROXIMITY,
-                           algorithm=args.algorithm, restarts=5, max_iterations=50, smooth=20) # 20 | None
+        with Profiler(field='cumtime', num=25): # tottime | cumtime | None
+            # TODO: draw the search tree
+            path = plan_base_joint_motion(
+                robot, plan_joints, goal_conf[:d],
+                holonomic=holonomic, reversible=args.reversible,
+                obstacles=obstacles, self_collisions=False, custom_limits=custom_limits,
+                use_aabb=True, cache=True, max_distance=MIN_PROXIMITY,
+                resolutions=resolutions, weights=np.reciprocal(resolutions), # TODO: use KDTrees
+                circular={2: UNBOUNDED_LIMITS if holonomic else CIRCULAR_LIMITS},
+                cost_fn=cost_fn,
+                algorithm=args.algorithm, verbose=True,
+                restarts=5, max_iterations=50,
+                smooth=100, smooth_time=1, # None | 100 | INF
+            )
         saver.restore()
+    # TODO: draw ROADMAPS
     #wait_for_duration(duration=1e-3)
-    profiler.restore()
 
     #########################
 
@@ -630,7 +644,8 @@ def main():
         return
 
     path = extract_full_path(robot, plan_joints, path, base_joints)
-    iterate_path(robot, base_joints, path, step_size=2e-2, custom_limits=custom_limits, resolutions=resolutions,
+    iterate_path(robot, base_joints, path, step_size=2e-2, custom_limits=custom_limits,
+                 resolutions=DEFAULT_RESOLUTION*np.ones(3), # resolutions
                  obstacles=obstacles, self_collisions=False, max_distance=MIN_PROXIMITY)
     disconnect()
 

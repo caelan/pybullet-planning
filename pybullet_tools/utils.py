@@ -1753,7 +1753,9 @@ def rescale_interval(value, old_interval=UNIT_LIMITS, new_interval=UNIT_LIMITS):
 
 def wrap_interval(value, interval=UNIT_LIMITS):
     lower, upper = interval
-    assert lower <= upper
+    if (lower == -INF) and (+INF == upper):
+        return value
+    assert -INF < lower <= upper < +INF
     return (value - lower) % (upper - lower) + lower
 
 def interval_distance(value1, value2, interval=UNIT_LIMITS):
@@ -1771,7 +1773,11 @@ def wrap_angle(theta, **kwargs):
     return wrap_interval(theta, interval=circular_interval(**kwargs))
 
 def circular_difference(theta2, theta1, **kwargs):
-    return wrap_angle(theta2 - theta1, **kwargs)
+    interval = circular_interval(**kwargs)
+    #extent = get_interval_extent(interval) # TODO: combine with motion_planners
+    extent = get_aabb_extent(interval)
+    diff_interval = Interval(-extent/2, +extent/2)
+    return wrap_interval(theta2 - theta1, interval=diff_interval)
 
 def base_values_from_pose(pose, tolerance=1e-3):
     (point, quat) = pose
@@ -3749,7 +3755,7 @@ def get_refine_fn(body, joints, num_steps=0):
         for i in range(num_steps):
             positions = (1. / (num_steps - i)) * np.array(difference_fn(q2, q)) + q
             q = tuple(positions)
-            #q = tuple(wrap_positions(body, joints, positions))
+            #q = tuple(wrap_positions(body, joints, positions)) # TODO: need wrap - issue with adjust path though
             yield q
     return fn
 
@@ -4066,11 +4072,12 @@ def get_nonholonomic_extend_fn(body, joints, resolutions=None, angular_tol=0., *
         return path
     return extend_fn
 
-def get_dubins_extend_fn(body, joints, turning_radius=1e-1, # meters
-                         step_size=0.5, # meters
+def get_dubins_extend_fn(body, joints, turning_radius=1e-3, # meters
+                         step_size=0.01, # meters
                          **kwargs):
     assert len(joints) == 3
     import dubins
+    # TODO: reversible (Reeds-Shepp curves)
 
     def extend_fn(q1, q2):
         dubins_path = dubins.shortest_path(q1, q2, turning_radius) # dubins.path
@@ -4141,6 +4148,7 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
                                                linear_tol=linear_tol) #, angular_tol=angular_tol)
     extend_fn = get_nonholonomic_extend_fn(body, joints, resolutions=resolutions, reversible=reversible,
                                            linear_tol=linear_tol, angular_tol=angular_tol)
+    extend_fn = get_dubins_extend_fn(body, joints, resolutions=resolutions, reversible=reversible)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments,
                                     self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, max_distance=max_distance,
@@ -4153,27 +4161,25 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
     if algorithm is None:
         return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
     return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn,
-                 algorithm=algorithm, **kwargs) # weights=weights, Deliberately excluding for PRM
+                 algorithm=algorithm, **kwargs) # weights=weights, # TODO: deliberately excluding for PRM unless circular
 
 plan_differential_motion = plan_nonholonomic_motion
 
 def plan_base_joint_motion(robot, joints, goal_positions, attachments=[], obstacles=None,
-                           holonomic=False, reversible=False, smooth=None, **kwargs):
+                           holonomic=False, reversible=False, **kwargs):
     if obstacles is None:
         obstacles = get_bodies()
     attached_bodies = [attachment.child for attachment in attachments]
     moving_bodies = [robot] + attached_bodies
     obstacles = list(set(obstacles) - set(moving_bodies))
-    if smooth is None:
-        smooth = RRT_SMOOTHING if holonomic else 0
     if holonomic:
         return plan_joint_motion(robot, joints, goal_positions,
-                                 attachments=attachments, obstacles=obstacles, smooth=smooth, **kwargs)
+                                 attachments=attachments, obstacles=obstacles, **kwargs)
     # TODO: just sample the x, y waypoint and use the resulting orientation
     # TODO: remove overlapping configurations/intervals due to circular joints
     return plan_nonholonomic_motion(robot, joints, goal_positions, reversible=reversible,
                                     linear_tol=1e-6, angular_tol=0.,
-                                    attachments=attachments, obstacles=obstacles, smooth=smooth, **kwargs)
+                                    attachments=attachments, obstacles=obstacles, **kwargs)
 
 #####################################
 
@@ -5048,6 +5054,7 @@ def add_text(text, position=unit_point(), color=BLACK, lifetime=None, parent=NUL
 
 def add_line(start, end, color=BLACK, width=1, lifetime=None, parent=NULL_ID, parent_link=BASE_LINK):
     assert (len(start) == 3) and (len(end) == 3)
+    #time.sleep(1e-3) # When too many lines are added within a short period of time, the following error can occur
     return p.addUserDebugLine(start, end, lineColorRGB=color[:3], lineWidth=width,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
