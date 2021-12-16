@@ -4161,27 +4161,25 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
     if algorithm is None:
         return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
     return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn,
-                 algorithm=algorithm, **kwargs) # weights=weights, Deliberately excluding for PRM
+                 algorithm=algorithm, **kwargs) # weights=weights, # TODO: deliberately excluding for PRM unless circular
 
 plan_differential_motion = plan_nonholonomic_motion
 
 def plan_base_joint_motion(robot, joints, goal_positions, attachments=[], obstacles=None,
-                           holonomic=False, reversible=False, smooth=None, **kwargs):
+                           holonomic=False, reversible=False, **kwargs):
     if obstacles is None:
         obstacles = get_bodies()
     attached_bodies = [attachment.child for attachment in attachments]
     moving_bodies = [robot] + attached_bodies
     obstacles = list(set(obstacles) - set(moving_bodies))
-    if smooth is None:
-        smooth = RRT_SMOOTHING if holonomic else 0
     if holonomic:
         return plan_joint_motion(robot, joints, goal_positions,
-                                 attachments=attachments, obstacles=obstacles, smooth=smooth, **kwargs)
+                                 attachments=attachments, obstacles=obstacles, **kwargs)
     # TODO: just sample the x, y waypoint and use the resulting orientation
     # TODO: remove overlapping configurations/intervals due to circular joints
     return plan_nonholonomic_motion(robot, joints, goal_positions, reversible=reversible,
                                     linear_tol=1e-6, angular_tol=0.,
-                                    attachments=attachments, obstacles=obstacles, smooth=smooth, **kwargs)
+                                    attachments=attachments, obstacles=obstacles, **kwargs)
 
 #####################################
 
@@ -5056,6 +5054,7 @@ def add_text(text, position=unit_point(), color=BLACK, lifetime=None, parent=NUL
 
 def add_line(start, end, color=BLACK, width=1, lifetime=None, parent=NULL_ID, parent_link=BASE_LINK):
     assert (len(start) == 3) and (len(end) == 3)
+    #time.sleep(1e-3) # When too many lines are added within a short period of time, the following error can occur
     return p.addUserDebugLine(start, end, lineColorRGB=color[:3], lineWidth=width,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)

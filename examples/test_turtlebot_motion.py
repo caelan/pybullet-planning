@@ -22,7 +22,8 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION, \
     base_aligned_z, load_pybullet, get_collision_fn, get_custom_limits, get_limits_fn, \
     get_joint_velocities, control_joint, get_time_step, remove_handles, Interval, get_distance, \
-    get_duration_fn, velocity_control_joint, get_max_velocities, get_difference, plan_base_joint_motion, UNBOUNDED_LIMITS
+    get_duration_fn, velocity_control_joint, get_max_velocities, get_difference, plan_base_joint_motion, \
+    UNBOUNDED_LIMITS, get_difference_fn
 
 from motion_planners.trajectory.smooth import smooth_curve
 from motion_planners.trajectory.linear import solve_multi_linear, quickest_inf_accel
@@ -31,6 +32,7 @@ from motion_planners.utils import waypoints_from_path, default_selector, irange
 from motion_planners.trajectory.discretize import time_discretize_curve
 #from motion_planners.tkinter.samplers import get_cost_fn
 #from motion_planners.lazy_prm import ROADMAPS # TODO: draw roadmap
+from motion_planners.primitives import get_duration_fn
 
 from pybullet_tools.retime import interpolate_path, sample_curve
 
@@ -136,10 +138,12 @@ def problem1(n_obstacles=10, wall_side=0.1, obst_width=0.25, obst_height=0.5):
     set_point(wall3, Point(x=floor_extent/2., z=wall_side/2.))
     wall4 = create_box(wall_side, floor_extent + wall_side, wall_side, color=GREY)
     set_point(wall4, Point(x=-floor_extent/2., z=wall_side/2.))
-    walls = [wall1, wall2, wall3, wall4]
+    wall5 = create_box(obst_width, obst_width, obst_height, color=GREY)
+    set_point(wall5, Point(z=obst_height / 2.))
+    walls = [wall1, wall2, wall3, wall4, wall5]
 
     initial_surfaces = OrderedDict()
-    for _ in range(n_obstacles):
+    for _ in range(n_obstacles - 1):
         body = create_box(obst_width, obst_width, obst_height, color=GREY)
         initial_surfaces[body] = floor
     pillars = list(initial_surfaces)
@@ -577,10 +581,12 @@ def main():
 
     #resolutions = None
     #resolutions = np.array([0.05, 0.05, math.radians(10)])
-    resolutions = 1.*DEFAULT_RESOLUTION*np.ones(len(base_joints))
     plan_joints = base_joints[:2] if not args.orientation else base_joints
-    holonomic = args.holonomic or (len(plan_joints) != 3)
-    #cost_fn = get_cost_fn()
+    d = len(plan_joints)
+    holonomic = args.holonomic or (d != 3)
+    resolutions = 1.*DEFAULT_RESOLUTION*np.ones(d)
+    cost_fn = get_duration_fn(get_difference_fn(robot, plan_joints),
+                              v_max=MAX_VELOCITIES[:d], a_max=MAX_ACCELERATIONS[:d])
 
     if args.cfree:
         obstacles = []
@@ -598,19 +604,20 @@ def main():
     saver = WorldSaver()
     start_time = time.time()
     with LockRenderer(lock=args.lock):
-        with Profiler(field='tottime', num=25): # tottime | cumtime | None
+        with Profiler(field='cumtime', num=25): # tottime | cumtime | None
             # TODO: draw the search tree
             path = plan_base_joint_motion(
-                robot, plan_joints, goal_conf[:len(plan_joints)],
+                robot, plan_joints, goal_conf[:d],
                 holonomic=holonomic, reversible=args.reversible,
-                obstacles=obstacles, self_collisions=False,
-                custom_limits=custom_limits, resolutions=resolutions[:len(plan_joints)],
+                obstacles=obstacles, self_collisions=False, custom_limits=custom_limits,
                 use_aabb=True, cache=True, max_distance=MIN_PROXIMITY,
-                weights=np.reciprocal(resolutions[:len(plan_joints)]),
+                resolutions=resolutions, weights=np.reciprocal(resolutions), # TODO: use KDTrees
                 circular={2: UNBOUNDED_LIMITS if holonomic else CIRCULAR_LIMITS},
+                cost_fn=cost_fn,
                 algorithm=args.algorithm, verbose=True,
-                restarts=5, max_iterations=50,
-                smooth=0 if args.holonomic else None) # 20 | None
+                restarts=5, max_iterations=50, smooth_time=1,
+                smooth=INF, # None | 100 | INF
+            )
         saver.restore()
     #wait_for_duration(duration=1e-3)
 
