@@ -25,11 +25,11 @@ from pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, 
     get_duration_fn, velocity_control_joint, get_max_velocities, get_difference, plan_base_joint_motion, \
     UNBOUNDED_LIMITS, get_difference_fn
 
-from motion_planners.trajectory.smooth import smooth_curve
+from motion_planners.trajectory.smooth import smooth_curve, smooth_cubic
 from motion_planners.trajectory.linear import solve_multi_linear, quickest_inf_accel
 from motion_planners.trajectory.limits import check_spline
 from motion_planners.utils import waypoints_from_path, default_selector, irange
-from motion_planners.trajectory.discretize import time_discretize_curve
+from motion_planners.trajectory.discretize import time_discretize_curve, sample_discretize_curve
 #from motion_planners.tkinter.samplers import get_cost_fn
 #from motion_planners.lazy_prm import ROADMAPS # TODO: draw roadmap
 from motion_planners.primitives import get_duration_fn
@@ -430,6 +430,8 @@ def step_curve(robot, joints, path, step_size=None):
 def iterate_path(robot, joints, path, simulate=False, step_size=None, resolutions=None, smooth=False, **kwargs): # 1e-2 | None
     if path is None:
         return
+    #assert holonomic
+    saver = WorldSaver()
     path = adjust_path(robot, joints, path)
     with LockRenderer():
         handles = draw_path(path)
@@ -438,8 +440,13 @@ def iterate_path(robot, joints, path, simulate=False, step_size=None, resolution
     #waypoints = waypoints_from_path(path)
     #curve = interpolate_path(robot, joints, waypoints, k=1, velocity_fraction=1) # TODO: no velocities in the URDF
 
-    curve = solve_multi_linear(waypoints, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS)
-    _, path = time_discretize_curve(curve, verbose=False, resolution=resolutions) # max_velocities=v_max,
+    if True:
+        curve = solve_multi_linear(waypoints, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS)
+    else:
+        collision_fn = get_collision_fn(robot, joints, **kwargs) # TODO: custom_limits=custom_limits
+        curve = smooth_cubic(path, collision_fn, resolutions, MAX_VELOCITIES, MAX_ACCELERATIONS)
+    #_, path = time_discretize_curve(curve, verbose=False, resolution=resolutions) # max_velocities=v_max,
+    _, path = sample_discretize_curve(curve, resolutions)
     print('Steps: {} | Start: {:.3f} | End: {:.3f} | Knots: {}'.format(
         len(path), curve.x[0], curve.x[-1], len(curve.x)))
     with LockRenderer():
@@ -450,10 +457,10 @@ def iterate_path(robot, joints, path, simulate=False, step_size=None, resolution
         #curve_collision_fn = lambda *args, **kwargs: False
         curve_collision_fn = get_curve_collision_fn(robot, joints, resolutions=resolutions, **kwargs)
         with LockRenderer():
-            with BodySaver(robot):
-                with Profiler():
-                    curve = smooth_curve(curve, MAX_VELOCITIES, MAX_ACCELERATIONS,
-                                         curve_collision_fn, max_time=5) #, curve_collision_fn=[])
+            with Profiler():
+                curve = smooth_curve(curve, MAX_VELOCITIES, MAX_ACCELERATIONS,
+                                     curve_collision_fn, max_time=5) #, curve_collision_fn=[])
+            saver.restore()
         path = [conf for t, conf in sample_curve(curve, time_step=step_size)]
         print('Steps: {} | Start: {:.3f} | End: {:.3f} | Knots: {}'.format(
             len(path), curve.x[0], curve.x[-1], len(curve.x)))
@@ -584,10 +591,11 @@ def main():
     plan_joints = base_joints[:2] if not args.orientation else base_joints
     d = len(plan_joints)
     holonomic = args.holonomic or (d != 3)
-    resolutions = 1.*DEFAULT_RESOLUTION*np.ones(d)
+    resolutions = 1.*DEFAULT_RESOLUTION*np.ones(d) # TODO: default resolutions, velocities, accelerations fns
     cost_fn = get_duration_fn(get_difference_fn(robot, plan_joints),
                               v_max=MAX_VELOCITIES[:d], a_max=MAX_ACCELERATIONS[:d])
 
+    # TODO: check that taking shortest turning direction (reversible affecting?)
     if args.cfree:
         obstacles = []
     # for obstacle in obstacles:
@@ -602,6 +610,7 @@ def main():
 
     # TODO: filter if straight-line path is feasible
     saver = WorldSaver()
+    wait_for_duration(duration=1e-2)
     start_time = time.time()
     with LockRenderer(lock=args.lock):
         with Profiler(field='cumtime', num=25): # tottime | cumtime | None
@@ -615,10 +624,11 @@ def main():
                 circular={2: UNBOUNDED_LIMITS if holonomic else CIRCULAR_LIMITS},
                 cost_fn=cost_fn,
                 algorithm=args.algorithm, verbose=True,
-                restarts=5, max_iterations=50, smooth_time=1,
-                smooth=INF, # None | 100 | INF
+                restarts=5, max_iterations=50,
+                smooth=100, smooth_time=1, # None | 100 | INF
             )
         saver.restore()
+    # TODO: draw ROADMAPS
     #wait_for_duration(duration=1e-3)
 
     #########################
@@ -634,7 +644,8 @@ def main():
         return
 
     path = extract_full_path(robot, plan_joints, path, base_joints)
-    iterate_path(robot, base_joints, path, step_size=2e-2, custom_limits=custom_limits, resolutions=resolutions,
+    iterate_path(robot, base_joints, path, step_size=2e-2, custom_limits=custom_limits,
+                 resolutions=DEFAULT_RESOLUTION*np.ones(3), # resolutions
                  obstacles=obstacles, self_collisions=False, max_distance=MIN_PROXIMITY)
     disconnect()
 

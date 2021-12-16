@@ -4073,7 +4073,7 @@ def get_nonholonomic_extend_fn(body, joints, resolutions=None, angular_tol=0., *
     return extend_fn
 
 def get_dubins_extend_fn(body, joints, turning_radius=1e-3, # meters
-                         step_size=0.5, # meters
+                         step_size=0.01, # meters
                          **kwargs):
     assert len(joints) == 3
     import dubins
@@ -4148,7 +4148,7 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
                                                linear_tol=linear_tol) #, angular_tol=angular_tol)
     extend_fn = get_nonholonomic_extend_fn(body, joints, resolutions=resolutions, reversible=reversible,
                                            linear_tol=linear_tol, angular_tol=angular_tol)
-    #extend_fn = get_dubins_extend_fn(body, joints, resolutions=resolutions, reversible=reversible)
+    extend_fn = get_dubins_extend_fn(body, joints, resolutions=resolutions, reversible=reversible)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments,
                                     self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, max_distance=max_distance,
