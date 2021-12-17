@@ -36,11 +36,7 @@ def get_parent_dir(file): # __file__
 sys.path.extend([
     join_paths(get_parent_dir(__file__), os.pardir, 'motion'),
 ])
-from motion_planners.rrt_connect import birrt
-from motion_planners.meta import direct_path, solve
-from motion_planners.utils import RRT_SMOOTHING
-
-#from ..motion.motion_planners.rrt_connect import birrt, direct_path
+from motion_planners.meta import solve
 
 # from future_builtins import map, filter
 # from builtins import input # TODO - use future
@@ -65,19 +61,18 @@ UNBOUNDED_LIMITS = Interval(-INF, INF)
 
 #####################################
 
+# Models
 DRAKE_PATH = 'models/drake/'
 
-# Models
-
 # Robots
-MODEL_DIRECTORY = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, 'models/'))
-ROOMBA_URDF = 'models/turtlebot/roomba.urdf'
-TURTLEBOT_URDF = 'models/turtlebot/turtlebot_holonomic.urdf'
-DRAKE_IIWA_URDF = 'models/drake/iiwa_description/urdf/iiwa14_polytope_collision.urdf'
-WSG_50_URDF = 'models/drake/wsg_50_description/urdf/wsg_50_mesh_visual.urdf' # wsg_50 | wsg_50_mesh_visual | wsg_50_mesh_collision
-#SCHUNK_URDF = 'models/drake/wsg_50_description/sdf/schunk_wsg_50.sdf'
-PANDA_HAND_URDF = "models/franka_description/robots/hand.urdf"
-PANDA_ARM_URDF = "models/franka_description/robots/panda_arm_hand.urdf"
+MODEL_DIRECTORY = join_paths(get_parent_dir(__file__), os.pardir, 'models/')
+ROOMBA_URDF = join_paths(MODEL_DIRECTORY, 'turtlebot/roomba.urdf')
+TURTLEBOT_URDF = join_paths(MODEL_DIRECTORY, 'turtlebot/turtlebot_holonomic.urdf')
+DRAKE_IIWA_URDF = join_paths(MODEL_DIRECTORY, 'drake/iiwa_description/urdf/iiwa14_polytope_collision.urdf')
+WSG_50_URDF = join_paths(MODEL_DIRECTORY, 'drake/wsg_50_description/urdf/wsg_50_mesh_visual.urdf') # wsg_50 | wsg_50_mesh_visual | wsg_50_mesh_collision
+#SCHUNK_URDF = join_paths(MODEL_DIRECTORY, 'drake/wsg_50_description/sdf/schunk_wsg_50.sdf')
+PANDA_HAND_URDF = join_paths(MODEL_DIRECTORY, 'franka_description/robots/hand.urdf')
+PANDA_ARM_URDF = join_paths(MODEL_DIRECTORY, 'franka_description/robots/panda_arm_hand.urdf')
 
 # PyBullet Robots
 #PYBULLET_DIRECTORY = add_data_path()
@@ -107,10 +102,10 @@ FLOOR_URDF = 'plane.urdf'
 TABLE_URDF = 'table/table.urdf'
 
 # Objects
-SMALL_BLOCK_URDF = 'models/drake/objects/block_for_pick_and_place.urdf'
-BLOCK_URDF = 'models/drake/objects/block_for_pick_and_place_mid_size.urdf'
-SINK_URDF = 'models/sink.urdf'
-STOVE_URDF = 'models/stove.urdf'
+SMALL_BLOCK_URDF = join_paths(MODEL_DIRECTORY, 'drake/objects/block_for_pick_and_place.urdf')
+BLOCK_URDF = join_paths(MODEL_DIRECTORY, 'drake/objects/block_for_pick_and_place_mid_size.urdf')
+SINK_URDF = join_paths(MODEL_DIRECTORY, 'sink.urdf')
+STOVE_URDF = join_paths(MODEL_DIRECTORY, 'stove.urdf')
 
 #####################################
 
@@ -1758,13 +1753,22 @@ def wrap_interval(value, interval=UNIT_LIMITS):
     assert -INF < lower <= upper < +INF
     return (value - lower) % (upper - lower) + lower
 
-def interval_distance(value1, value2, interval=UNIT_LIMITS):
-    value1 = wrap_interval(value1, interval)
+def interval_difference(value2, value1, interval=UNIT_LIMITS):
     value2 = wrap_interval(value2, interval)
-    if value1 > value2:
-        value1, value2 = value2, value1
+    value1 = wrap_interval(value1, interval)
     lower, upper = interval
-    return min(value2 - value1, (value1 - lower) + (upper - value2))
+    straight_distance = value2 - value1
+    if value2 >= value1:
+        wrap_difference = (lower - value1) + (value2 - upper)
+    else:
+        wrap_difference = (upper - value1) + (value2 - lower)
+    #return [straight_distance, wrap_difference]
+    if abs(wrap_difference) < abs(straight_distance):
+        return wrap_difference
+    return straight_distance
+
+def interval_distance(value1, value2, **kwargs):
+    return abs(interval_difference(value2, value1, **kwargs))
 
 def circular_interval(lower=-PI): # [-np.pi, np.pi)
     return Interval(lower, lower + 2*PI)
@@ -1777,7 +1781,9 @@ def circular_difference(theta2, theta1, **kwargs):
     #extent = get_interval_extent(interval) # TODO: combine with motion_planners
     extent = get_aabb_extent(interval)
     diff_interval = Interval(-extent/2, +extent/2)
-    return wrap_interval(theta2 - theta1, interval=diff_interval)
+    difference = wrap_interval(theta2 - theta1, interval=diff_interval)
+    #difference = interval_difference(theta2, theta1, interval=interval)
+    return difference
 
 def base_values_from_pose(pose, tolerance=1e-3):
     (point, quat) = pose
@@ -3754,8 +3760,8 @@ def get_refine_fn(body, joints, num_steps=0):
         q = q1
         for i in range(num_steps):
             positions = (1. / (num_steps - i)) * np.array(difference_fn(q2, q)) + q
-            q = tuple(positions)
-            #q = tuple(wrap_positions(body, joints, positions)) # TODO: need wrap - issue with adjust path though
+            #q = tuple(positions)
+            q = tuple(wrap_positions(body, joints, positions)) # TODO: possible issue with adjust path
             yield q
     return fn
 
@@ -3768,10 +3774,18 @@ def refine_path(body, joints, waypoints, num_steps):
 
 DEFAULT_RESOLUTION = math.radians(3) # 0.05
 
+def get_default_resolution(body, joint):
+    joint_type = get_joint_type(body, joint)
+    if joint_type == p.JOINT_REVOLUTE:
+        return math.radians(3) # 0.05
+    elif joint_type == p.JOINT_PRISMATIC:
+        return 0.02
+    return DEFAULT_RESOLUTION
+
 def get_default_resolutions(body, joints, resolutions=None):
     if resolutions is not None:
         return resolutions
-    return DEFAULT_RESOLUTION*np.ones(len(joints))
+    return np.array([get_default_resolution(body, joint) for joint in joints])
 
 def get_extend_fn(body, joints, resolutions=None, norm=2):
     # norm = 1, 2, INF
@@ -3793,12 +3807,13 @@ def remove_redundant(path, tolerance=1e-3):
             new_path.append(conf)
     return new_path
 
-def waypoints_from_path(path, tolerance=1e-3):
+def waypoints_from_path(path, difference_fn=None, tolerance=1e-3):
+    if difference_fn is None:
+        difference_fn = lambda q2, q1: np.array(q2) - np.array(q1) # get_difference
+        #difference_fn = get_difference_fn(body, joints) # TODO: account for wrap around or use adjust_path
     path = remove_redundant(path, tolerance=tolerance)
     if len(path) < 2:
         return path
-    difference_fn = lambda q2, q1: np.array(q2) - np.array(q1)
-    #difference_fn = get_difference_fn(body, joints) # TODO: account for wrap around or use adjust_path
 
     waypoints = [path[0]]
     last_conf = path[1]
@@ -3813,10 +3828,15 @@ def waypoints_from_path(path, tolerance=1e-3):
     waypoints.append(last_conf)
     return waypoints
 
-def adjust_path(robot, joints, path):
+def adjust_path(robot, joints, path, initial_conf=None):
+    if path is None:
+        return path
+    if initial_conf is None:
+        initial_conf = path[0]
+        #initial_conf = get_joint_positions(robot, joints)
     difference_fn = get_difference_fn(robot, joints)
     differences = [difference_fn(q2, q1) for q1, q2 in get_pairs(path)]
-    adjusted_path = [np.array(get_joint_positions(robot, joints))] # Assumed the same as path[0] mod rotation
+    adjusted_path = [np.array(initial_conf)] # Assumed the same as path[0] mod rotation
     for difference in differences:
         if not np.array_equal(difference, np.zeros(len(joints))):
             adjusted_path.append(adjusted_path[-1] + difference)
@@ -3986,6 +4006,7 @@ def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
         return None
 
     if algorithm is None:
+        from motion_planners.rrt_connect import birrt
         return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
     return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn,
                  algorithm=algorithm, weights=weights, **kwargs)
@@ -4023,7 +4044,7 @@ def plan_lazy_prm(start_conf, end_conf, sample_fn, extend_fn, collision_fn, **kw
 def get_closest_angle_fn(body, joints, weights=None, reversible=True, linear_tol=0., **kwargs):
     assert len(joints) == 3
     weights = get_default_weights(body, joints, weights)
-    linear_distance_fn = get_distance_fn(body, joints[:2], weights=weights[:2])
+    linear_distance_fn = get_distance_fn(body, joints[:2], weights=weights[:2], norm=2)
     angular_distance_fn = get_distance_fn(body, joints[2:], weights=weights[2:])
 
     def closest_fn(q1, q2):
@@ -4035,7 +4056,7 @@ def get_closest_angle_fn(body, joints, weights=None, reversible=True, linear_tol
 
         angle_and_distance = []
         for direction in [0, PI] if reversible else [0]: # TODO: previously was [PI]
-            angle = get_angle(q1[:2], q2[:2]) + direction
+            angle = wrap_angle(get_angle(q1[:2], q2[:2]) + direction)
             distance = angular_distance_fn(q1[2:], [angle]) \
                        + linear_distance \
                        + angular_distance_fn([angle], q2[2:])
@@ -4136,6 +4157,31 @@ def get_differential_extend_fn(body, joints, resolutions=None, **kwargs):
         return path
     return extend_fn
 
+def shortcut_circular(body, joints, path, extend_fn, collision_fn, **kwargs):
+    if path is None:
+        return path
+    # TODO: apply generically whenever only one moving joint
+    #from pybullet_tools.retime import decompose_into_paths
+    difference_fn = get_difference_fn(body, joints)
+    waypoints = waypoints_from_path(path, difference_fn=difference_fn, **kwargs)
+    # print(decompose_into_paths(joints, waypoints))
+    linear_indices = []
+    for i in range(len(waypoints) - 1):
+        difference = difference_fn(waypoints[i], waypoints[i + 1])
+        if not all_close(difference[:2], np.zeros(2)):  # np.nonzero
+            linear_indices.append(i)
+
+    shortcutted = [path[0]]
+    for i1, i2 in get_pairs(linear_indices):
+        end1 = waypoints[i1 + 1]
+        start2 = waypoints[i2]
+        if not any(map(collision_fn, extend_fn(end1, start2))):
+            shortcutted.extend(waypoints[i1:i1 + 2])
+        else:
+            shortcutted.extend(waypoints[i1:i2])
+    shortcutted.append(path[-1])
+    return list(flatten(extend_fn(*pair) for pair in get_pairs(shortcutted))) + shortcutted[-1:]
+
 def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[],
                              self_collisions=True, disabled_collisions=set(),
                              weights=None, resolutions=None, reversible=True,
@@ -4148,7 +4194,7 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
                                                linear_tol=linear_tol) #, angular_tol=angular_tol)
     extend_fn = get_nonholonomic_extend_fn(body, joints, resolutions=resolutions, reversible=reversible,
                                            linear_tol=linear_tol, angular_tol=angular_tol)
-    extend_fn = get_dubins_extend_fn(body, joints, resolutions=resolutions, reversible=reversible)
+    #extend_fn = get_dubins_extend_fn(body, joints, resolutions=resolutions, reversible=reversible) # TODO: distance_fn
     collision_fn = get_collision_fn(body, joints, obstacles, attachments,
                                     self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, max_distance=max_distance,
@@ -4159,9 +4205,12 @@ def plan_nonholonomic_motion(body, joints, end_conf, obstacles=[], attachments=[
         return None
 
     if algorithm is None:
+        from motion_planners.rrt_connect import birrt
         return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
-    return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn,
+    path = solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn,
                  algorithm=algorithm, **kwargs) # weights=weights, # TODO: deliberately excluding for PRM unless circular
+    #return path
+    return shortcut_circular(body, joints, path, extend_fn, collision_fn)
 
 plan_differential_motion = plan_nonholonomic_motion
 
@@ -4180,6 +4229,67 @@ def plan_base_joint_motion(robot, joints, goal_positions, attachments=[], obstac
     return plan_nonholonomic_motion(robot, joints, goal_positions, reversible=reversible,
                                     linear_tol=1e-6, angular_tol=0.,
                                     attachments=attachments, obstacles=obstacles, **kwargs)
+
+#####################################
+
+def get_max_accelerations(robot, joints, max_velocities=None, duration_to_max=1.):
+    if duration_to_max == 0:
+        return INF*np.ones(len(joints))
+    if max_velocities is None:
+        max_velocities = get_max_velocities(robot, joints)
+    return np.array(max_velocities) / duration_to_max
+
+def get_dynamical_limits(robot, joints, max_velocities=None, max_accelerations=None, duration_to_max=1.):
+    if max_velocities is None:
+        # TODO: velocities from position limits
+        max_velocities = get_max_velocities(robot, joints)
+    assert np.greater(max_velocities, np.zeros(len(joints))).all()
+    if max_accelerations is None:
+        max_accelerations = get_max_accelerations(robot, joints, max_velocities, duration_to_max)
+    assert np.greater(max_accelerations, np.zeros(len(joints))).all()
+    return max_velocities, max_accelerations
+
+def get_acceleration_fn(robot, joints, max_velocities=None, max_accelerations=None, duration_to_max=1., **kwargs):
+    from motion_planners.primitives import get_duration_fn
+    max_velocities, max_accelerations = get_dynamical_limits(
+        robot, joints, max_velocities, max_accelerations, duration_to_max=1.)
+    return get_duration_fn(get_difference_fn(robot, joints), v_max=max_velocities, a_max=max_accelerations, **kwargs)
+
+def retime_path(robot, joints, path, **kwargs):
+    if path is None:
+        return None
+    from motion_planners.trajectory.linear import solve_multi_linear
+    path = adjust_path(robot, joints, path) # TODO: adjust to the current configuration
+    #waypoints = waypoints_from_path(path)
+    max_velocities, max_accelerations = get_dynamical_limits(robot, joints, **kwargs)
+    curve = solve_multi_linear(path, v_max=max_velocities, a_max=max_accelerations)
+    return curve
+
+def smooth_path(robot, joints, path, obstacles=[], attachments=[],
+                self_collisions=True, disabled_collisions=set(),
+                resolutions=None, max_distance=MAX_DISTANCE,
+                use_aabb=False, cache=True, custom_limits={}, **kwargs):
+    if path is None:
+        return None
+    from motion_planners.trajectory.smooth import smooth_cubic
+    path = adjust_path(robot, joints, path) # TODO: adjust to the current configuration
+    if resolutions is None:
+        resolutions = get_default_resolutions(robot, joints)
+    collision_fn = get_collision_fn(robot, joints, obstacles, attachments, self_collisions, disabled_collisions,
+                                    custom_limits=custom_limits, use_aabb=use_aabb, cache=cache, max_distance=max_distance)
+    max_velocities, max_accelerations = get_dynamical_limits(robot, joints, **kwargs)
+    curve = smooth_cubic(path, collision_fn, resolutions, max_velocities, max_accelerations)
+    return curve
+
+def discretize_curve(body, joints, curve, resolutions=None, **kwargs):
+    if curve is None:
+        return None
+    from motion_planners.trajectory.discretize import time_discretize_curve, sample_discretize_curve
+    if resolutions is None:
+        resolutions = get_default_resolutions(body, joints)
+    #_, path = time_discretize_curve(curve, verbose=False, resolution=resolutions) # max_velocities=v_max,
+    _, path = sample_discretize_curve(curve, resolutions, **kwargs)
+    return path
 
 #####################################
 
@@ -4230,8 +4340,10 @@ def plan_base_motion(body, end_conf, base_limits, obstacles=[], direct=False,
         return None
 
     if direct:
+        from motion_planners.meta import direct_path
         return direct_path(start_conf, end_conf, extend_fn, collision_fn)
     if algorithm is None:
+        from motion_planners.rrt_connect import birrt
         return birrt(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, **kwargs)
     return solve(start_conf, end_conf, distance_fn, sample_fn, extend_fn, collision_fn, algorithm=algorithm, **kwargs)
 
