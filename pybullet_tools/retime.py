@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-from pybullet_planning.pybullet_tools.utils import clip, INF, \
+from pybullet_planning.pybullet_tools.utils import safe_zip, clip, INF, \
     waypoints_from_path, adjust_path, get_difference, get_pairs, get_max_velocities, get_duration_fn, wait_if_gui
 
 #ARM_SPEED = 0.15*np.pi # radians / sec
@@ -33,7 +33,7 @@ def decompose_into_paths(joints, path):
         current_path.append(tuple(q2[j] for j in indices))
     if current_path:
         path_sequence.append(current_path)
-    return zip(joint_sequence, path_sequence)
+    return safe_zip(joint_sequence, path_sequence)
 
 ################################################################################
 

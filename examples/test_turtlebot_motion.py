@@ -4,41 +4,36 @@ import argparse
 import random
 import numpy as np
 import time
-import math
-from collections import OrderedDict, defaultdict
-from itertools import combinations
+from collections import OrderedDict
 
-from pybullet_planning.pybullet_tools.utils import load_model, TURTLEBOT_URDF, joints_from_names, \
-    set_joint_positions, HideOutput, get_bodies, sample_placement, pairwise_collision, \
-    set_point, Point, create_box, stable_z, TAN, GREY, connect, PI, OrderedSet, \
-    wait_if_gui, dump_body, set_all_color, BLUE, child_link_from_joint, link_from_name, draw_pose, Pose, pose_from_pose2d, \
-    get_random_seed, get_numpy_seed, set_random_seed, set_numpy_seed, plan_joint_motion, plan_nonholonomic_motion, \
-    joint_from_name, safe_zip, draw_base_limits, BodySaver, WorldSaver, LockRenderer, elapsed_time, disconnect, flatten, \
-    INF, wait_for_duration, get_unbuffered_aabb, draw_aabb, DEFAULT_AABB_BUFFER, get_link_pose, get_joint_positions, \
-    get_subtree_aabb, get_pairs, get_distance_fn, get_aabb, set_all_static, step_simulation, get_bodies_in_region, \
+from pybullet_planning.pybullet_tools.utils import TURTLEBOT_URDF, joints_from_names, \
+    set_joint_positions, get_bodies, sample_placement, pairwise_collision, \
+    set_point, Point, create_box, stable_z, TAN, GREY, connect, PI, wait_if_gui, dump_body, set_all_color, BLUE, \
+    link_from_name, draw_pose, pose_from_pose2d, \
+    set_random_seed, set_numpy_seed, joint_from_name, safe_zip, draw_base_limits, BodySaver, WorldSaver, LockRenderer, \
+    elapsed_time, disconnect, flatten, \
+    INF, wait_for_duration, draw_aabb, DEFAULT_AABB_BUFFER, get_joint_positions, \
+    get_pairs, get_distance_fn, step_simulation, get_bodies_in_region, \
     AABB, Profiler, pairwise_link_collision, BASE_LINK, get_collision_data, draw_pose2d, \
-    normalize_interval, wrap_angle, CIRCULAR_LIMITS, wrap_interval, Euler, rescale_interval, adjust_path, \
-    contact_collision, timer, update_scene, set_aabb_buffer, set_separating_axis_collisions, get_aabb, set_pose, \
-    Pose, get_all_links, can_collide, aabb_overlap, set_collision_pair_mask, randomize, DEFAULT_RESOLUTION, \
-    base_aligned_z, load_pybullet, get_collision_fn, get_custom_limits, get_limits_fn, \
+    CIRCULAR_LIMITS, wrap_interval, rescale_interval, adjust_path, \
+    contact_collision, timer, get_aabb, Pose, get_all_links, can_collide, DEFAULT_RESOLUTION, \
+    load_pybullet, get_collision_fn, get_limits_fn, \
     get_joint_velocities, control_joint, get_time_step, remove_handles, Interval, get_distance, \
-    get_duration_fn, velocity_control_joint, get_max_velocities, get_difference, plan_base_joint_motion, \
-    UNBOUNDED_LIMITS, get_difference_fn
+    get_duration_fn, velocity_control_joint, get_max_velocities, plan_base_joint_motion, \
+    UNBOUNDED_LIMITS, BLACK, GREEN, RED, add_line, \
+    point_from_pose, retime_path, smooth_path, get_acceleration_fn, discretize_curve
 
-from motion_planners.trajectory.smooth import smooth_curve, smooth_cubic
-from motion_planners.trajectory.linear import solve_multi_linear, quickest_inf_accel
+from motion_planners.trajectory.smooth import smooth_curve
 from motion_planners.trajectory.limits import check_spline
-from motion_planners.utils import waypoints_from_path, default_selector, irange
-from motion_planners.trajectory.discretize import time_discretize_curve, sample_discretize_curve
+from motion_planners.utils import default_selector, irange
 #from motion_planners.tkinter.samplers import get_cost_fn
-#from motion_planners.lazy_prm import ROADMAPS # TODO: draw roadmap
-from motion_planners.primitives import get_duration_fn
+from motion_planners.lazy_prm import ROADMAPS
 
-from pybullet_planning.pybullet_tools.retime import interpolate_path, sample_curve
+from pybullet_planning.pybullet_tools.retime import sample_curve
 
 BASE_LINK_NAME = 'base_link'
 BASE_JOINTS = ['x', 'y', 'theta']
-DRAW_Z = 1e-3
+DRAW_Z = 1e-1
 DRAW_LENGTH = 0.5
 MIN_AABB_VOLUME = DEFAULT_AABB_BUFFER**3
 
@@ -118,6 +113,32 @@ def extract_full_path(robot, path_joints, path, all_joints):
             set_joint_positions(robot, path_joints, conf)
             new_path.append(get_joint_positions(robot, all_joints)) # TODO: do without assigning
         return new_path
+
+def draw_last_roadmap(robot, joints, only_checked=False, linear=True, down_sample=None, **kwargs):
+    handles = []
+    if not ROADMAPS:
+        return handles
+    roadmap = ROADMAPS[-1]
+    for q in roadmap.samples:
+       handles.extend(draw_pose2d(q, z=DRAW_Z))
+    for v1, v2 in roadmap.edges:
+        color = BLACK
+        if roadmap.is_colliding(v1, v2):
+            color = RED
+        elif roadmap.is_safe(v1, v2):
+            color = GREEN
+        elif only_checked:
+            continue
+        if linear:
+            path = [roadmap.samples[v1], roadmap.samples[v2]]
+        else:
+            path = roadmap.get_path(v1, v2)
+            if down_sample is not None:
+                path = path[::down_sample] + [path[-1]]
+        #handles.extend(draw_path(path, **kwargs))
+        points = list(map(point_from_pose, [pose_from_pose2d(q, z=DRAW_Z) for q in path]))
+        handles.extend(add_line(p1, p2, color=color) for p1, p2 in get_pairs(points))
+    return handles
 
 ##################################################
 
@@ -430,7 +451,6 @@ def step_curve(robot, joints, path, step_size=None):
 def iterate_path(robot, joints, path, simulate=False, step_size=None, resolutions=None, smooth=False, **kwargs): # 1e-2 | None
     if path is None:
         return
-    #assert holonomic
     saver = WorldSaver()
     path = adjust_path(robot, joints, path)
     with LockRenderer():
@@ -440,19 +460,18 @@ def iterate_path(robot, joints, path, simulate=False, step_size=None, resolution
     #waypoints = waypoints_from_path(path)
     #curve = interpolate_path(robot, joints, waypoints, k=1, velocity_fraction=1) # TODO: no velocities in the URDF
 
-    if True:
-        curve = solve_multi_linear(waypoints, v_max=MAX_VELOCITIES, a_max=MAX_ACCELERATIONS)
+    if not smooth:
+        curve = retime_path(robot, joints, path, max_velocities=MAX_VELOCITIES, max_accelerations=MAX_ACCELERATIONS)
     else:
-        collision_fn = get_collision_fn(robot, joints, **kwargs) # TODO: custom_limits=custom_limits
-        curve = smooth_cubic(path, collision_fn, resolutions, MAX_VELOCITIES, MAX_ACCELERATIONS)
-    #_, path = time_discretize_curve(curve, verbose=False, resolution=resolutions) # max_velocities=v_max,
-    _, path = sample_discretize_curve(curve, resolutions)
+        curve = smooth_path(robot, joints, path, resolutions=resolutions,
+                            max_velocities=MAX_VELOCITIES, max_accelerations=MAX_ACCELERATIONS, **kwargs)
+    path = discretize_curve(robot, joints, curve, resolutions=resolutions)
     print('Steps: {} | Start: {:.3f} | End: {:.3f} | Knots: {}'.format(
         len(path), curve.x[0], curve.x[-1], len(curve.x)))
     with LockRenderer():
         handles = draw_path(path)
 
-    if smooth:
+    if False:
         # TODO: handle circular joints
         #curve_collision_fn = lambda *args, **kwargs: False
         curve_collision_fn = get_curve_collision_fn(robot, joints, resolutions=resolutions, **kwargs)
@@ -592,8 +611,10 @@ def main():
     d = len(plan_joints)
     holonomic = args.holonomic or (d != 3)
     resolutions = 1.*DEFAULT_RESOLUTION*np.ones(d) # TODO: default resolutions, velocities, accelerations fns
-    cost_fn = get_duration_fn(get_difference_fn(robot, plan_joints),
-                              v_max=MAX_VELOCITIES[:d], a_max=MAX_ACCELERATIONS[:d])
+    #weights = np.reciprocal(resolutions)
+    weights = np.array([1, 1, 1e-3])
+    cost_fn = get_acceleration_fn(robot, plan_joints, max_velocities=MAX_VELOCITIES[:d],
+                                  max_accelerations=MAX_ACCELERATIONS[:d])
 
     # TODO: check that taking shortest turning direction (reversible affecting?)
     if args.cfree:
@@ -620,12 +641,12 @@ def main():
                 holonomic=holonomic, reversible=args.reversible,
                 obstacles=obstacles, self_collisions=False, custom_limits=custom_limits,
                 use_aabb=True, cache=True, max_distance=MIN_PROXIMITY,
-                resolutions=resolutions, weights=np.reciprocal(resolutions), # TODO: use KDTrees
+                resolutions=resolutions, weights=weights, # TODO: use KDTrees
                 circular={2: UNBOUNDED_LIMITS if holonomic else CIRCULAR_LIMITS},
                 cost_fn=cost_fn,
                 algorithm=args.algorithm, verbose=True,
                 restarts=5, max_iterations=50,
-                smooth=100, smooth_time=1, # None | 100 | INF
+                smooth=None if holonomic else 100, smooth_time=1, # None | 100 | INF
             )
         saver.restore()
     # TODO: draw ROADMAPS
@@ -643,8 +664,17 @@ def main():
         disconnect()
         return
 
+    # for i, conf in enumerate(path):
+    #   set_joint_positions(robot, plan_joints, conf)
+    # wait_if_gui('{}/{}) Continue?'.format(i + 1, len(path)))
     path = extract_full_path(robot, plan_joints, path, base_joints)
-    iterate_path(robot, base_joints, path, step_size=2e-2, custom_limits=custom_limits,
+    with LockRenderer():
+        draw_last_roadmap(robot, base_joints)
+    # for i, conf in enumerate(path):
+    #    set_joint_positions(robot, base_joints, conf)
+    #    wait_if_gui('{}/{}) Continue?'.format(i+1, len(path)))
+
+    iterate_path(robot, base_joints, path, step_size=2e-2, smooth=holonomic, custom_limits=custom_limits,
                  resolutions=DEFAULT_RESOLUTION*np.ones(3), # resolutions
                  obstacles=obstacles, self_collisions=False, max_distance=MIN_PROXIMITY)
     disconnect()
