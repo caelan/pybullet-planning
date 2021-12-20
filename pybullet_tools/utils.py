@@ -4268,7 +4268,8 @@ def retime_path(robot, joints, path, **kwargs):
 def smooth_path(robot, joints, path, obstacles=[], attachments=[],
                 self_collisions=True, disabled_collisions=set(),
                 resolutions=None, max_distance=MAX_DISTANCE,
-                use_aabb=False, cache=True, custom_limits={}, **kwargs):
+                use_aabb=False, cache=True, custom_limits={},
+                max_velocities=None, max_accelerations=None, duration_to_max=1., **kwargs):
     if path is None:
         return None
     from motion_planners.trajectory.smooth import smooth_cubic
@@ -4277,8 +4278,8 @@ def smooth_path(robot, joints, path, obstacles=[], attachments=[],
         resolutions = get_default_resolutions(robot, joints)
     collision_fn = get_collision_fn(robot, joints, obstacles, attachments, self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, use_aabb=use_aabb, cache=cache, max_distance=max_distance)
-    max_velocities, max_accelerations = get_dynamical_limits(robot, joints, **kwargs)
-    curve = smooth_cubic(path, collision_fn, resolutions, max_velocities, max_accelerations)
+    max_velocities, max_accelerations = get_dynamical_limits(robot, joints, max_velocities, max_accelerations, duration_to_max)
+    curve = smooth_cubic(path, collision_fn, resolutions, max_velocities, max_accelerations, **kwargs)
     return curve
 
 def discretize_curve(body, joints, curve, resolutions=None, **kwargs):
