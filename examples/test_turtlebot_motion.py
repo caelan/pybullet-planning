@@ -115,11 +115,13 @@ def extract_full_path(robot, path_joints, path, all_joints):
         return new_path
 
 def draw_last_roadmap(robot, joints, only_checked=False, linear=True, down_sample=None, **kwargs):
+    q0 = get_joint_positions(robot, joints)
     handles = []
     if not ROADMAPS:
         return handles
     roadmap = ROADMAPS[-1]
     for q in roadmap.samples:
+       q = q if len(q) == 3 else np.append(q[:2], q0[2:]) # TODO: make a function
        handles.extend(draw_pose2d(q, z=DRAW_Z))
     for v1, v2 in roadmap.edges:
         color = BLACK
@@ -136,7 +138,8 @@ def draw_last_roadmap(robot, joints, only_checked=False, linear=True, down_sampl
             if down_sample is not None:
                 path = path[::down_sample] + [path[-1]]
         #handles.extend(draw_path(path, **kwargs))
-        points = list(map(point_from_pose, [pose_from_pose2d(q, z=DRAW_Z) for q in path]))
+        points = list(map(point_from_pose, [pose_from_pose2d(
+            q if len(q) == 3 else np.append(q[:2], q0[2:]), z=DRAW_Z) for q in path]))
         handles.extend(add_line(p1, p2, color=color) for p1, p2 in get_pairs(points))
     return handles
 
@@ -612,7 +615,7 @@ def main():
     holonomic = args.holonomic or (d != 3)
     resolutions = 1.*DEFAULT_RESOLUTION*np.ones(d) # TODO: default resolutions, velocities, accelerations fns
     #weights = np.reciprocal(resolutions)
-    weights = np.array([1, 1, 1e-3])
+    weights = np.array([1, 1, 1e-3])[:d]
     cost_fn = get_acceleration_fn(robot, plan_joints, max_velocities=MAX_VELOCITIES[:d],
                                   max_accelerations=MAX_ACCELERATIONS[:d])
 
