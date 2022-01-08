@@ -1029,7 +1029,7 @@ def wait_if_unlocked(*args, **kwargs):
 def wait_unlocked(*args, **kwargs):
     enable = get_renderer()
     set_renderer(enable=True)
-    wait_for_user(*args, **kwargs)
+    wait_if_unlocked(*args, **kwargs)
     set_renderer(enable)
 
 def wait_for_interrupt(max_time=np.inf):
@@ -1629,8 +1629,8 @@ def invert(pose):
     return p.invertTransform(point, quat)
 
 def multiply(*poses):
-    pose = poses[0]
-    for next_pose in poses[1:]:
+    pose = unit_pose()
+    for next_pose in poses:
         pose = p.multiplyTransforms(pose[0], pose[1], *next_pose)
     return pose
 
@@ -2308,6 +2308,8 @@ def get_com_pose(body, link): # COM = center of mass
     return link_state.linkWorldPosition, link_state.linkWorldOrientation
 
 def get_link_inertial_pose(body, link):
+    if link == BASE_LINK:
+        return unit_pose()
     link_state = get_link_state(body, link)
     return link_state.localInertialFramePosition, link_state.localInertialFrameOrientation
 
