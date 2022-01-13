@@ -8,10 +8,10 @@ from .utils import unit_pose, safe_zip, multiply, Pose, AABB, create_box, set_po
     get_aabb, pairwise_link_collision, remove_body, draw_aabb, get_box_geometry, create_shape, create_body, STATIC_MASS, \
     unit_quat, unit_point, CLIENT, create_shape_array, set_color, get_point, clip, load_model, TEMP_DIR, NULL_ID, \
     elapsed_time, draw_point, invert, tform_point, draw_pose, get_aabb_edges, add_line, \
-    get_pose, PoseSaver, get_aabb_vertices, aabb_from_points, apply_affine, OOBB, draw_oobb, get_aabb_center
+    get_pose, PoseSaver, get_aabb_vertices, aabb_from_points, apply_affine, OOBB, draw_oobb, get_aabb_center, MAX_RGB
 
 MAX_TEXTURE_WIDTH = 418 # max square dimension
-MAX_PIXEL_VALUE = 2**8 - 1
+MAX_PIXEL_VALUE = MAX_RGB
 MAX_LINKS = 125  # Max links seems to be 126
 
 ################################################################################
@@ -223,11 +223,11 @@ class VoxelGrid(object):
     def draw_origin(self, scale=1, **kwargs):
         size = scale*np.min(self.resolutions)
         return draw_pose(self.world_from_grid, length=size, **kwargs)
-    def draw_voxel(self, voxel, color=None):
+    def draw_voxel(self, voxel, color=None, **kwargs):
         if color is None:
             color = self.color
         aabb = self.aabb_from_voxel(voxel)
-        return draw_oobb(OOBB(aabb, self.world_from_grid), color=color[:3])
+        return draw_oobb(OOBB(aabb, self.world_from_grid), color=color[:3], **kwargs)
         # handles.extend(draw_aabb(aabb, color=self.color[:3]))
     def draw_voxel_boxes(self, voxels=None, **kwargs):
         if voxels is None:
@@ -327,15 +327,15 @@ class VoxelGrid(object):
             interval = (start, last)
             voxel_intervals.append((i, j, interval))
         return voxel_intervals
-    def draw_intervals(self):
+    def draw_intervals(self, **kwargs):
         with LockRenderer():
             handles = []
             for (i, j, (k1, k2)) in self.create_intervals():
                 voxels = [(i, j, k1), (i, j, k2)]
                 aabb = aabb_from_points([extrema for voxel in voxels for extrema in self.aabb_from_voxel(voxel)])
-                handles.extend(draw_oobb(OOBB(aabb, self.world_from_grid), color=self.color[:3]))
+                handles.extend(draw_oobb(OOBB(aabb, self.world_from_grid), color=self.color[:3], **kwargs))
             return handles
-    def draw_vertical_lines(self):
+    def draw_vertical_lines(self, **kwargs):
         with LockRenderer():
             handles = []
             for (i, j, (k1, k2)) in self.create_intervals():
@@ -344,7 +344,7 @@ class VoxelGrid(object):
                 center = get_aabb_center(aabb)
                 p1 = self.to_world(np.append(center[:2], [aabb[0][2]]))
                 p2 = self.to_world(np.append(center[:2], [aabb[1][2]]))
-                handles.append(add_line(p1, p2, color=self.color[:3]))
+                handles.append(add_line(p1, p2, color=self.color[:3], **kwargs))
             return handles
 
     def project2d(self):
