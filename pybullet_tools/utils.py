@@ -3018,7 +3018,7 @@ def clone_world(client=None, exclude=[]):
             mapping[body] = new_body
     return mapping
 
-def create_vhacd(input_path, output_path=None, verbose=True, **kwargs):
+def create_vhacd(input_path, output_path=None, verbose=False, **kwargs):
     # https://github.com/bulletphysics/bullet3/blob/afa4fb54505fd071103b8e2e8793c38fd40f6fb6/examples/pybullet/examples/vhacd.py
     if output_path is None:
         #output_path = join_paths(TEMP_DIR, 'vhacd_{}.obj'.format(next(VHACD_CNT)))
@@ -3028,23 +3028,24 @@ def create_vhacd(input_path, output_path=None, verbose=True, **kwargs):
 
     log_path = join_paths(TEMP_DIR, 'vhacd_log.txt')
     # TODO: use kwargs to update the default args
+    vhacd_kwargs = {
+        'concavity': 0.0025,  # Maximum allowed concavity (default=0.0025, range=0.0-1.0)
+        'alpha': 0.04,  # Controls the bias toward clipping along symmetry planes (default=0.05, range=0.0-1.0)
+        'beta': 0.05,  # Controls the bias toward clipping along revolution axes (default=0.05, range=0.0-1.0)
+        'gamma': 0.00125,  # Controls the maximum allowed concavity during the merge stage (default=0.00125, range=0.0-1.0)
+        'minVolumePerCH': 0.0001,  # Controls the adaptive sampling of the generated convex-hulls (default=0.0001, range=0.0-0.01)
+        'resolution': 100000,  # Maximum number of voxels generated during the voxelization stage (default=100,000, range=10,000-16,000,000)
+        'maxNumVerticesPerCH': 64,  # Controls the maximum number of triangles per convex-hull (default=64, range=4-1024)
+        'depth': 20,  # Maximum number of clipping stages. During each split stage, parts with a concavity higher than the user defined threshold are clipped according the best clipping plane (default=20, range=1-32)
+        'planeDownsampling': 4,  # Controls the granularity of the search for the \"best\" clipping plane (default=4, range=1-16)
+        'convexhullDownsampling': 4,  # Controls the precision of the convex-hull generation process during the clipping plane selection stage (default=4, range=1-16)
+        'pca': 0,  # Enable/disable normalizing the mesh before applying the convex decomposition (default=0, range={0,1})
+        'mode': 0,  # 0: voxel-based approximate convex decomposition, 1: tetrahedron-based approximate convex decomposition (default=0,range={0,1})
+        'convexhullApproximation': 1,  # Enable/disable approximation when computing convex-hulls (default=1, range={0,1})
+    }
+    vhacd_kwargs.update(kwargs)
     with HideOutput(enable=not verbose):
-        p.vhacd(
-            input_path, output_path, log_path,
-            concavity=0.0025,  # Maximum allowed concavity (default=0.0025, range=0.0-1.0)
-            alpha=0.04,  # Controls the bias toward clipping along symmetry planes (default=0.05, range=0.0-1.0)
-            beta=0.05,  # Controls the bias toward clipping along revolution axes (default=0.05, range=0.0-1.0)
-            gamma=0.00125,  # Controls the maximum allowed concavity during the merge stage (default=0.00125, range=0.0-1.0)
-            minVolumePerCH=0.0001,  # Controls the adaptive sampling of the generated convex-hulls (default=0.0001, range=0.0-0.01)
-            resolution=100000,  # Maximum number of voxels generated during the voxelization stage (default=100,000, range=10,000-16,000,000)
-            maxNumVerticesPerCH=64,  # Controls the maximum number of triangles per convex-hull (default=64, range=4-1024)
-            depth=20,  # Maximum number of clipping stages. During each split stage, parts with a concavity higher than the user defined threshold are clipped according the best clipping plane (default=20, range=1-32)
-            planeDownsampling=4,  # Controls the granularity of the search for the \"best\" clipping plane (default=4, range=1-16)
-            convexhullDownsampling=4,  # Controls the precision of the convex-hull generation process during the clipping plane selection stage (default=4, range=1-16)
-            pca=0,  # Enable/disable normalizing the mesh before applying the convex decomposition (default=0, range={0,1})
-            mode=0,  # 0: voxel-based approximate convex decomposition, 1: tetrahedron-based approximate convex decomposition (default=0,range={0,1})
-            convexhullApproximation=1,  # Enable/disable approximation when computing convex-hulls (default=1, range={0,1})
-        )
+        p.vhacd(input_path, output_path, log_path, **vhacd_kwargs)
     return output_path
     #return create_obj(output_path, **kwargs)
 
