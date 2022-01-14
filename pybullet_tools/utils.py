@@ -2872,11 +2872,13 @@ CollisionShapeData = namedtuple('CollisionShapeData', ['object_unique_id', 'link
                                                        'geometry_type', 'dimensions', 'filename',
                                                        'local_frame_pos', 'local_frame_orn'])
 
-def collision_shape_from_data(data, body, link, client=None):
+def collision_shape_from_data(data, body, link, client=None, decompose=False, **kwargs):
     client = get_client(client)
     filename = data.filename.decode(encoding='UTF-8')
     if (data.geometry_type == p.GEOM_MESH) and (filename == UNKNOWN_FILE):
         return NULL_ID
+    if decompose and filename.endswith('.obj'):
+        filename = create_vhacd(filename, **kwargs)
     pose = multiply(get_joint_inertial_pose(body, link), get_data_pose(data))
     point, quat = pose
     # TODO: the visual data seems affected by the collision data
@@ -2892,7 +2894,27 @@ def collision_shape_from_data(data, body, link, client=None):
                                   collisionFramePosition=point,
                                   collisionFrameOrientation=quat,
                                   physicsClientId=client)
-    #return p.createCollisionShapeArray()
+
+def collision_shape_from_datas(datas, body, link, client=None):
+    # https://github.com/bulletphysics/bullet3/blob/5ae9a15ecac7bc7e71f1ec1b544a55135d7d7e32/examples/pybullet/gym/pybullet_utils/urdfEditor.py#L481
+    client = get_client(client)
+    collision_kwargs = defaultdict(list)
+    for data in datas:
+        filename = data.filename.decode(encoding='UTF-8')
+        if (data.geometry_type == p.GEOM_MESH) and (filename == UNKNOWN_FILE):
+            #continue
+            return NULL_ID
+        pose = multiply(get_joint_inertial_pose(body, link), get_data_pose(data))
+        point, quat = pose
+        collision_kwargs['shapeTypes'].append(data.geometry_type)
+        collision_kwargs['radii'].append(get_data_radius(data))
+        collision_kwargs['halfExtents'].append(np.array(get_data_extents(data)) / 2)
+        collision_kwargs['lengths'].append(get_data_height(data))
+        collision_kwargs['fileNames'].append(filename)
+        collision_kwargs['meshScales'].append(get_data_scale(data))
+        collision_kwargs['collisionFramePositions'].append(point)
+        collision_kwargs['collisionFrameOrientations'].append(quat)
+    return p.createCollisionShapeArray(physicsClientId=client, **collision_kwargs) # TODO: planeNormal, flags
 
 def clone_visual_shape(body, link, client=None):
     client = get_client(client)
@@ -2904,19 +2926,20 @@ def clone_visual_shape(body, link, client=None):
     assert (len(visual_data) == 1)
     return visual_shape_from_data(visual_data[0], client)
 
-def clone_collision_shape(body, link, client=None):
+def clone_collision_shape(body, link, client=None, **kwargs):
     client = get_client(client)
     collision_data = get_collision_data(body, link)
     if not collision_data:
         return NULL_ID
+    if len(collision_data) != 1:
+        return collision_shape_from_datas(collision_data, body, link, client, **kwargs)
     assert (len(collision_data) == 1)
-    # TODO: can do CollisionArray
     try:
-        return collision_shape_from_data(collision_data[0], body, link, client)
+        return collision_shape_from_data(collision_data[0], body, link, client, **kwargs)
     except p.error:
         return NULL_ID
 
-def clone_body(body, links=None, collision=True, visual=True, client=None):
+def clone_body(body, links=None, collision=True, visual=True, client=None, **kwargs):
     # TODO: names are not retained
     # TODO: error with createMultiBody link poses on PR2
     # localVisualFrame_position: position of local visual frame, relative to link/joint frame
@@ -2946,7 +2969,7 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
         joint_info = get_joint_info(body, link)
         dynamics_info = get_dynamics_info(body, link)
         masses.append(dynamics_info.mass)
-        collision_shapes.append(clone_collision_shape(body, link, client) if collision else NULL_ID)
+        collision_shapes.append(clone_collision_shape(body, link, client, **kwargs) if collision else NULL_ID)
         visual_shapes.append(clone_visual_shape(body, link, client) if visual else NULL_ID)
         point, quat = get_local_link_pose(body, link)
         positions.append(point)
@@ -2960,24 +2983,26 @@ def clone_body(body, links=None, collision=True, visual=True, client=None):
 
     base_dynamics_info = get_dynamics_info(body, base_link)
     base_point, base_quat = get_link_pose(body, base_link)
-    new_body = p.createMultiBody(baseMass=base_dynamics_info.mass,
-                                 baseCollisionShapeIndex=clone_collision_shape(body, base_link, client) if collision else NULL_ID,
-                                 baseVisualShapeIndex=clone_visual_shape(body, base_link, client) if visual else NULL_ID,
-                                 basePosition=base_point,
-                                 baseOrientation=base_quat,
-                                 baseInertialFramePosition=base_dynamics_info.local_inertial_pos,
-                                 baseInertialFrameOrientation=base_dynamics_info.local_inertial_orn,
-                                 linkMasses=masses,
-                                 linkCollisionShapeIndices=collision_shapes,
-                                 linkVisualShapeIndices=visual_shapes,
-                                 linkPositions=positions,
-                                 linkOrientations=orientations,
-                                 linkInertialFramePositions=inertial_positions,
-                                 linkInertialFrameOrientations=inertial_orientations,
-                                 linkParentIndices=parent_indices,
-                                 linkJointTypes=joint_types,
-                                 linkJointAxis=joint_axes,
-                                 physicsClientId=client)
+    new_body = p.createMultiBody(
+        baseMass=base_dynamics_info.mass,
+        baseCollisionShapeIndex=clone_collision_shape(body, base_link, client, **kwargs) if collision else NULL_ID,
+        baseVisualShapeIndex=clone_visual_shape(body, base_link, client) if visual else NULL_ID,
+        basePosition=base_point,
+        baseOrientation=base_quat,
+        baseInertialFramePosition=base_dynamics_info.local_inertial_pos,
+        baseInertialFrameOrientation=base_dynamics_info.local_inertial_orn,
+        linkMasses=masses,
+        linkCollisionShapeIndices=collision_shapes,
+        linkVisualShapeIndices=visual_shapes,
+        linkPositions=positions,
+        linkOrientations=orientations,
+        linkInertialFramePositions=inertial_positions,
+        linkInertialFrameOrientations=inertial_orientations,
+        linkParentIndices=parent_indices,
+        linkJointTypes=joint_types,
+        linkJointAxis=joint_axes,
+        physicsClientId=client,
+    )
     #set_configuration(new_body, get_joint_positions(body, movable_joints)) # Need to use correct client
     for joint, value in zip(range(len(links)), get_joint_positions(body, links)):
         # TODO: check if movable?
@@ -2992,6 +3017,36 @@ def clone_world(client=None, exclude=[]):
             new_body = clone_body(body, collision=True, visual=visual, client=client)
             mapping[body] = new_body
     return mapping
+
+def create_vhacd(input_path, output_path=None, verbose=True, **kwargs):
+    # https://github.com/bulletphysics/bullet3/blob/afa4fb54505fd071103b8e2e8793c38fd40f6fb6/examples/pybullet/examples/vhacd.py
+    if output_path is None:
+        #output_path = join_paths(TEMP_DIR, 'vhacd_{}.obj'.format(next(VHACD_CNT)))
+        # https://stackoverflow.com/questions/10501247/best-way-to-generate-random-file-names-in-python
+        import uuid
+        output_path =  join_paths(TEMP_DIR, '{}.obj'.format(uuid.uuid4()))
+
+    log_path = join_paths(TEMP_DIR, 'vhacd_log.txt')
+    # TODO: use kwargs to update the default args
+    with HideOutput(enable=not verbose):
+        p.vhacd(
+            input_path, output_path, log_path,
+            concavity=0.0025,  # Maximum allowed concavity (default=0.0025, range=0.0-1.0)
+            alpha=0.04,  # Controls the bias toward clipping along symmetry planes (default=0.05, range=0.0-1.0)
+            beta=0.05,  # Controls the bias toward clipping along revolution axes (default=0.05, range=0.0-1.0)
+            gamma=0.00125,  # Controls the maximum allowed concavity during the merge stage (default=0.00125, range=0.0-1.0)
+            minVolumePerCH=0.0001,  # Controls the adaptive sampling of the generated convex-hulls (default=0.0001, range=0.0-0.01)
+            resolution=100000,  # Maximum number of voxels generated during the voxelization stage (default=100,000, range=10,000-16,000,000)
+            maxNumVerticesPerCH=64,  # Controls the maximum number of triangles per convex-hull (default=64, range=4-1024)
+            depth=20,  # Maximum number of clipping stages. During each split stage, parts with a concavity higher than the user defined threshold are clipped according the best clipping plane (default=20, range=1-32)
+            planeDownsampling=4,  # Controls the granularity of the search for the \"best\" clipping plane (default=4, range=1-16)
+            convexhullDownsampling=4,  # Controls the precision of the convex-hull generation process during the clipping plane selection stage (default=4, range=1-16)
+            pca=0,  # Enable/disable normalizing the mesh before applying the convex decomposition (default=0, range={0,1})
+            mode=0,  # 0: voxel-based approximate convex decomposition, 1: tetrahedron-based approximate convex decomposition (default=0,range={0,1})
+            convexhullApproximation=1,  # Enable/disable approximation when computing convex-hulls (default=1, range={0,1})
+        )
+    return output_path
+    #return create_obj(output_path, **kwargs)
 
 #####################################
 
