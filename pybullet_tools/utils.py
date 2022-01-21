@@ -646,7 +646,7 @@ def remove_alpha(color):
 def apply_alpha(color, alpha=1.):
     if color is None:
         return None
-    red, green, blue = color[:3]
+    red, green, blue = remove_alpha(color)
     return RGBA(red, green, blue, alpha)
 
 def spaced_colors(n, s=1, v=1):
@@ -1482,7 +1482,7 @@ def image_from_segmented(segmented, color_from_body=None):
     for r in range(segmented.shape[0]):
         for c in range(segmented.shape[1]):
             body, link = segmented[r, c, :]
-            image[r, c, :] = color_from_body.get(body, BLACK)[:3] # TODO: alpha
+            image[r, c, :] = remove_alpha(color_from_body.get(body, BLACK)) # TODO: alpha
     return image
 
 def get_image_flags(segment=False, segment_links=False):
@@ -4318,8 +4318,9 @@ def get_dynamical_limits(robot, joints, max_velocities=None, max_accelerations=N
 def get_acceleration_fn(robot, joints, max_velocities=None, max_accelerations=None, duration_to_max=1., **kwargs):
     from motion_planners.primitives import get_duration_fn
     max_velocities, max_accelerations = get_dynamical_limits(
-        robot, joints, max_velocities, max_accelerations, duration_to_max=1.)
-    return get_duration_fn(get_difference_fn(robot, joints), v_max=max_velocities, a_max=max_accelerations, **kwargs)
+        robot, joints, max_velocities, max_accelerations, duration_to_max)
+    return get_duration_fn(get_difference_fn(robot, joints), # t_constant=0., t_min=0.,
+                           v_max=max_velocities, a_max=max_accelerations, **kwargs)
 
 def retime_path(robot, joints, path, **kwargs):
     if path is None:
@@ -5223,14 +5224,14 @@ def read_button(debug):
     return read_counter(debug) % 2 == 1
 
 def add_text(text, position=unit_point(), color=BLACK, lifetime=None, parent=NULL_ID, parent_link=BASE_LINK):
-    return p.addUserDebugText(str(text), textPosition=position, textColorRGB=color[:3], # textSize=1,
+    return p.addUserDebugText(str(text), textPosition=position, textColorRGB=remove_alpha(color), # textSize=1,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
 
 def add_line(start, end, color=BLACK, width=1, lifetime=None, parent=NULL_ID, parent_link=BASE_LINK):
     assert (len(start) == 3) and (len(end) == 3)
     #time.sleep(1e-3) # When too many lines are added within a short period of time, the following error can occur
-    return p.addUserDebugLine(start, end, lineColorRGB=color[:3], lineWidth=width,
+    return p.addUserDebugLine(start, end, lineColorRGB=remove_alpha(color), lineWidth=width,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
                               physicsClientId=CLIENT)
 

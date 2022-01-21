@@ -39,8 +39,8 @@ def decompose_into_paths(joints, path):
 
 # TODO: retain based on the end effector velocity
 
-def instantaneous_retime_path(robot, joints, path, speed=ARM_SPEED):
-    duration_fn = get_duration_fn(robot, joints) # get_distance_fn
+def instantaneous_retime_path(robot, joints, path, speed=ARM_SPEED, **kwargs):
+    duration_fn = get_duration_fn(robot, joints, **kwargs) # get_distance_fn
     mid_durations = [duration_fn(*pair) for pair in get_pairs(path)]
     durations = [0.] + mid_durations
     time_from_starts = np.cumsum(durations) / speed
