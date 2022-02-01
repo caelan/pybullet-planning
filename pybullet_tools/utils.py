@@ -2619,9 +2619,10 @@ def create_visual_shape(geometry, pose=unit_pose(), color=RED, specular=None):
         visual_args['specularColor'] = specular
     return p.createVisualShape(**visual_args)
 
-def create_shape(geometry, pose=unit_pose(), collision=True, **kwargs):
+def create_shape(geometry, pose=unit_pose(), visual=True, collision=True, **kwargs):
+    # TODO: support collision and visual obj files
     collision_id = create_collision_shape(geometry, pose=pose) if collision else NULL_ID
-    visual_id = create_visual_shape(geometry, pose=pose, **kwargs) # if collision else NULL_ID
+    visual_id = create_visual_shape(geometry, pose=pose, **kwargs) if visual else NULL_ID
     return collision_id, visual_id
 
 def plural(word):
@@ -2895,7 +2896,7 @@ def collision_shape_from_data(data, body, link, client=None, decompose=False, **
                                   collisionFrameOrientation=quat,
                                   physicsClientId=client)
 
-def collision_shape_from_datas(datas, body, link, client=None):
+def collision_shape_from_datas(datas, body, link, client=None, decompose=False, **kwargs):
     # https://github.com/bulletphysics/bullet3/blob/5ae9a15ecac7bc7e71f1ec1b544a55135d7d7e32/examples/pybullet/gym/pybullet_utils/urdfEditor.py#L481
     client = get_client(client)
     collision_kwargs = defaultdict(list)
@@ -2904,6 +2905,8 @@ def collision_shape_from_datas(datas, body, link, client=None):
         if (data.geometry_type == p.GEOM_MESH) and (filename == UNKNOWN_FILE):
             #continue
             return NULL_ID
+        if decompose and filename.endswith('.obj'):
+            filename = create_vhacd(filename, **kwargs)
         pose = multiply(get_joint_inertial_pose(body, link), get_data_pose(data))
         point, quat = pose
         collision_kwargs['shapeTypes'].append(data.geometry_type)
@@ -3018,13 +3021,27 @@ def clone_world(client=None, exclude=[]):
             mapping[body] = new_body
     return mapping
 
-def create_vhacd(input_path, output_path=None, verbose=False, **kwargs):
+VHACD_DIR = 'vhacd/'
+
+def create_vhacd(input_path, output_path=None, cache=True, verbose=False, **kwargs):
     # https://github.com/bulletphysics/bullet3/blob/afa4fb54505fd071103b8e2e8793c38fd40f6fb6/examples/pybullet/examples/vhacd.py
     if output_path is None:
         #output_path = join_paths(TEMP_DIR, 'vhacd_{}.obj'.format(next(VHACD_CNT)))
         # https://stackoverflow.com/questions/10501247/best-way-to-generate-random-file-names-in-python
-        import uuid
-        output_path =  join_paths(TEMP_DIR, '{}.obj'.format(uuid.uuid4()))
+        # import uuid
+        # directory = TEMP_DIR
+        # filename = '{}.obj'.format(uuid.uuid4())
+
+        # https://stackoverflow.com/questions/27954892/deterministic-hashing-in-python-3
+        import zlib
+        directory = VHACD_DIR
+        ensure_dir(directory)
+        filename, _ = os.path.splitext(os.path.basename(input_path))
+        identity = zlib.adler32(os.path.abspath(input_path).encode('utf-8')) # TODO: kwargs
+        filename = '{}_vhacd_{}.obj'.format(filename, identity)
+        output_path = join_paths(directory, filename)
+        if cache and os.path.exists(output_path):
+            return output_path
 
     log_path = join_paths(TEMP_DIR, 'vhacd_log.txt')
     # TODO: use kwargs to update the default args
@@ -3093,6 +3110,10 @@ def get_default_geometry():
         'radius': DEFAULT_RADIUS,
         'length': DEFAULT_HEIGHT, # 'height'
         'fileName': DEFAULT_MESH,
+        # 'vertices': None,
+        # 'indices': None,
+        # 'uvs': None,
+        # 'normals': None,
         'meshScale': DEFAULT_SCALE,
         'planeNormal': DEFAULT_NORMAL,
     }
@@ -3946,7 +3967,7 @@ def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=Tru
 def get_limits_fn(body, joints, custom_limits={}, verbose=False):
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits)
 
-    def limits_fn(q):
+    def limits_fn(q): # , verbose=False
         if not all_between(lower_limits, q, upper_limits):
             #print('Joint limits violated')
             #if verbose: print(lower_limits, q, upper_limits)
@@ -3969,8 +3990,8 @@ def get_collision_fn(body, joints, obstacles=[], attachments=[], self_collisions
     # TODO: sort bodies by bounding box size
     # TODO: cluster together links that remain rigidly attached to reduce the number of checks
 
-    def collision_fn(q, verbose=False):
-        if limits_fn(q):
+    def collision_fn(q, verbose=False): # TODO: make verbose a flag for get_collision_fn
+        if limits_fn(q): # verbose=False
             return True
         set_joint_positions(body, joints, q)
         for attachment in attachments:
@@ -3984,7 +4005,8 @@ def get_collision_fn(body, joints, obstacles=[], attachments=[], self_collisions
             if (not use_aabb or aabb_overlap(get_moving_aabb(body), get_moving_aabb(body))) and \
                     pairwise_link_collision(body, link1, body, link2): #, **kwargs):
                 #print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
-                if verbose: print(body, link1, body, link2)
+                if verbose:
+                    print(body, link1, body, link2)
                 return True
 
         # #step_simulation()
@@ -4004,7 +4026,8 @@ def get_collision_fn(body, joints, obstacles=[], attachments=[], self_collisions
             if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
                     and pairwise_collision(body1, body2, **kwargs):
                 #print(get_body_name(body1), get_body_name(body2))
-                if verbose: print(body1, body2)
+                if verbose:
+                    print(body1, body2)
                 return True
         return False
     return collision_fn
@@ -4331,6 +4354,28 @@ def retime_path(robot, joints, path, **kwargs):
     max_velocities, max_accelerations = get_dynamical_limits(robot, joints, **kwargs)
     curve = solve_multi_linear(path, v_max=max_velocities, a_max=max_accelerations)
     return curve
+
+def shortcut_path(robot, joints, path, obstacles=[], attachments=[],
+                  self_collisions=True, disabled_collisions=set(),
+                  resolutions=None, max_distance=MAX_DISTANCE,
+                  use_aabb=False, cache=True, custom_limits={},
+                  holonomic=False, reversible=False,
+                  cost_fn=None, weights=None, **kwargs):
+    if path is None:
+        return None
+    from motion_planners.smoothing import smooth_path as shortcut
+    # TODO: function that toggles these
+    if holonomic:
+        distance_fn = get_distance_fn(robot, joints, weights=weights)
+    else:
+        distance_fn = get_nonholonomic_distance_fn(robot, joints, weights=weights, reversible=reversible)
+    if holonomic:
+        extend_fn = get_extend_fn(robot, joints, resolutions=resolutions)
+    else:
+        extend_fn = get_nonholonomic_extend_fn(robot, joints, resolutions=resolutions, reversible=reversible)
+    collision_fn = get_collision_fn(robot, joints, obstacles, attachments, self_collisions, disabled_collisions,
+                                    custom_limits=custom_limits, use_aabb=use_aabb, cache=cache, max_distance=max_distance)
+    return shortcut(path, extend_fn, collision_fn, cost_fn=cost_fn, distance_fn=distance_fn, **kwargs)
 
 def smooth_path(robot, joints, path, obstacles=[], attachments=[],
                 self_collisions=True, disabled_collisions=set(),
