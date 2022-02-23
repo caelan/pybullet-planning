@@ -473,10 +473,10 @@ def log_time(method):
     timed.__doc__ = method.__doc__
     return timed
 
-def cached_fn(fn, cache=True, **global_kargs):
+def cached_fn(fn, cache=True, **global_kwargs):
     # https://docs.python.org/3/library/functools.html#functools.cache
     def normal(*args, **local_kwargs):
-        kwargs = dict(global_kargs)
+        kwargs = dict(global_kwargs)
         kwargs.update(local_kwargs)
         return fn(*args, **kwargs)
     if not cache:
@@ -2903,8 +2903,7 @@ def collision_shape_from_datas(datas, body, link, client=None, decompose=False, 
     for data in datas:
         filename = data.filename.decode(encoding='UTF-8')
         if (data.geometry_type == p.GEOM_MESH) and (filename == UNKNOWN_FILE):
-            #continue
-            return NULL_ID
+            continue
         if decompose and filename.endswith('.obj'):
             filename = create_vhacd(filename, **kwargs)
         pose = multiply(get_joint_inertial_pose(body, link), get_data_pose(data))
@@ -2917,6 +2916,8 @@ def collision_shape_from_datas(datas, body, link, client=None, decompose=False, 
         collision_kwargs['meshScales'].append(get_data_scale(data))
         collision_kwargs['collisionFramePositions'].append(point)
         collision_kwargs['collisionFrameOrientations'].append(quat)
+    if not collision_kwargs:
+        return NULL_ID
     return p.createCollisionShapeArray(physicsClientId=client, **collision_kwargs) # TODO: planeNormal, flags
 
 def clone_visual_shape(body, link, client=None):
@@ -3037,7 +3038,9 @@ def create_vhacd(input_path, output_path=None, cache=True, verbose=False, **kwar
         directory = VHACD_DIR
         ensure_dir(directory)
         filename, _ = os.path.splitext(os.path.basename(input_path))
-        identity = zlib.adler32(os.path.abspath(input_path).encode('utf-8')) # TODO: kwargs
+        unique = os.path.abspath(input_path)
+        #unique = read(input_path) # TODO: not written deterministically in the same order
+        identity = zlib.adler32(unique.encode('utf-8')) # TODO: kwargs
         filename = '{}_vhacd_{}.obj'.format(filename, identity)
         output_path = join_paths(directory, filename)
         if cache and os.path.exists(output_path):
@@ -3405,7 +3408,7 @@ def buffer_aabb(aabb, buffer):
     if np.isscalar(buffer):
         #buffer = buffer - DEFAULT_AABB_BUFFER # TODO: account for the default
         buffer = buffer * np.ones(len(extent))
-    new_extent = np.add(2*buffer, extent)
+    new_extent = np.add(2*np.array(buffer), extent)
     center = get_aabb_center(aabb)
     return aabb_from_extent_center(new_extent, center)
 
@@ -5319,6 +5322,7 @@ def add_segments(points, closed=False, **kwargs): # TODO: draw_segments
 draw_segments = add_segments
 
 def draw_link_name(body, link=BASE_LINK, position=Point(y=0.2)):
+    # TODO: AABB
     return add_text(get_link_name(body, link), position=position,
                     parent=body, parent_link=link)
 
@@ -5344,13 +5348,13 @@ def draw_base_limits(limits, z=1e-2, **kwargs):
                 (upper[0], upper[1], z), (upper[0], lower[1], z)]
     return add_segments(vertices, closed=True, **kwargs)
 
-def get_circle_vertices(center, radius, n=24):
+def get_circle_vertices(center, radius, n=24, z=0.):
     vertices = []
     for i in range(n):
         theta = i*2*math.pi/n # TODO: theta0
         unit = unit_from_theta(theta)
         if len(center) == 3:
-            unit = np.append(unit, [0.])
+            unit = np.append(unit, [z])
         vertices.append(center + radius*unit)
     return vertices
 
