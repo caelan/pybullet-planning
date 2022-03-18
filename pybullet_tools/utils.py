@@ -1348,6 +1348,8 @@ CameraInfo = namedtuple('CameraInfo', ['width', 'height', 'viewMatrix', 'project
 def get_camera():
     return CameraInfo(*p.getDebugVisualizerCamera(physicsClientId=CLIENT))
 
+get_camera_info = get_camera
+
 def get_camera_pose():
     if not has_gui():
         return None
@@ -1421,6 +1423,8 @@ def set_camera_pose2(world_from_camera, **kwargs):
     # TODO: assert that roll is about zero?
     #p.resetDebugVisualizerCamera(cameraDistance=distance, cameraYaw=math.degrees(yaw), cameraPitch=math.degrees(-pitch),
     #                             cameraTargetPosition=target_world, physicsClientId=CLIENT)
+
+set_camera_viewpoint = set_camera_pose2
 
 CameraImage = namedtuple('CameraImage', ['rgbPixels', 'depthPixels', 'segmentationMaskBuffer',
                                          'camera_pose', 'camera_matrix'])
@@ -3243,6 +3247,7 @@ def aabb_from_points(points):
     return AABB(np.min(points, axis=0), np.max(points, axis=0))
 
 def aabb_union(aabbs):
+    aabbs = list(aabbs)
     if not aabbs:
         return None
     if len(aabbs) == 1:
@@ -3447,11 +3452,15 @@ def get_oobb_vertices(oobb):
 def aabb_from_oobb(oobb):
     return aabb_from_points(get_oobb_vertices(oobb))
 
-def recenter_oobb(oobb):
-    aabb, pose = oobb
+def recenter_aabb(aabb):
     extent = get_aabb_extent(aabb)
     new_aabb = AABB(-extent/2., +extent/2.)
-    return OOBB(new_aabb, multiply(pose, Pose(point=get_aabb_center(aabb))))
+    return OOBB(new_aabb, Pose(point=get_aabb_center(aabb)))
+
+def recenter_oobb(oobb):
+    aabb, pose = oobb
+    new_aabb, new_pose = recenter_aabb(aabb)
+    return OOBB(new_aabb, multiply(pose, new_pose))
 
 #####################################
 
