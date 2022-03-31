@@ -3028,8 +3028,9 @@ def clone_world(client=None, exclude=[]):
 
 VHACD_DIR = 'vhacd/'
 
-def create_vhacd(input_path, output_path=None, cache=True, verbose=False, **kwargs):
+def create_vhacd(input_path, output_path=None, output_dir=VHACD_DIR, cache=True, verbose=False, **kwargs):
     # https://github.com/bulletphysics/bullet3/blob/afa4fb54505fd071103b8e2e8793c38fd40f6fb6/examples/pybullet/examples/vhacd.py
+    input_path = os.path.abspath(input_path)
     if output_path is None:
         #output_path = join_paths(TEMP_DIR, 'vhacd_{}.obj'.format(next(VHACD_CNT)))
         # https://stackoverflow.com/questions/10501247/best-way-to-generate-random-file-names-in-python
@@ -3039,18 +3040,19 @@ def create_vhacd(input_path, output_path=None, cache=True, verbose=False, **kwar
 
         # https://stackoverflow.com/questions/27954892/deterministic-hashing-in-python-3
         import zlib
-        directory = VHACD_DIR
-        ensure_dir(directory)
+        ensure_dir(output_dir)
         filename, _ = os.path.splitext(os.path.basename(input_path))
         unique = os.path.abspath(input_path)
         #unique = read(input_path) # TODO: not written deterministically in the same order
         identity = zlib.adler32(unique.encode('utf-8')) # TODO: kwargs
         filename = '{}_vhacd_{}.obj'.format(filename, identity)
-        output_path = join_paths(directory, filename)
+        output_path = join_paths(output_dir, filename)
         if cache and os.path.exists(output_path):
             return output_path
 
-    log_path = join_paths(TEMP_DIR, 'vhacd_log.txt')
+    start_time = time.time()
+    print('Starting V-HACD of {}'.format(input_path))
+    log_path = join_paths(VHACD_DIR, 'vhacd_log.txt')
     # TODO: use kwargs to update the default args
     vhacd_kwargs = {
         'concavity': 0.0025,  # Maximum allowed concavity (default=0.0025, range=0.0-1.0)
@@ -3070,6 +3072,8 @@ def create_vhacd(input_path, output_path=None, cache=True, verbose=False, **kwar
     vhacd_kwargs.update(kwargs)
     with HideOutput(enable=not verbose):
         p.vhacd(input_path, output_path, log_path, **vhacd_kwargs)
+    print('Finished V-HACD: {} ({:.3f} sec)'.format(output_path, elapsed_time(start_time)))
+
     return output_path
     #return create_obj(output_path, **kwargs)
 
