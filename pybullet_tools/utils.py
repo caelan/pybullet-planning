@@ -1743,7 +1743,7 @@ def pose_from_tform(tform):
 
 def normalize_interval(value, interval=UNIT_LIMITS):
     lower, upper = interval
-    assert lower <= upper
+    #assert lower <= upper
     return (value - lower) / (upper - lower)
 
 def rescale_interval(value, old_interval=UNIT_LIMITS, new_interval=UNIT_LIMITS):
@@ -3687,6 +3687,7 @@ def any_link_pair_collision(body1, links1, body2, links2=None, **kwargs):
         if (body1 == body2) and (link1 == link2):
             continue
         if pairwise_link_collision(body1, link1, body2, link2, **kwargs):
+            #print(body1, get_link_name(body1, link1), body2, get_link_name(body2, link2))
             return True
     return False
 
