@@ -9,7 +9,6 @@ from .utils import get_pose, set_pose, get_movable_joints, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
     inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
     step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions, dump_world, wait_if_gui, flatten
-from pybullet_data import franka_panda
 # TODO: deprecate
 
 GRASP_INFO = {

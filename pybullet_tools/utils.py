@@ -82,6 +82,7 @@ RACECAR_URDF = 'racecar/racecar.urdf' # racecar_differential.urdf
 PR2_GRIPPER = 'pr2_gripper.urdf'
 PANDA_URDF = 'franka_panda/panda.urdf'
 
+PANDA_OG_URDF = "models/franka_description/robots/panda.urdf"
 # PyBullet wsg50 robots
 # wsg50_one_motor_gripper.sdf - no visual
 # wsg50_one_motor_gripper_free_base.sdf - seg fault
@@ -1298,12 +1299,12 @@ def save_image(filename, rgba):
 def get_projection_matrix(width, height, vertical_fov, near, far):
     """
     OpenGL projection matrix
-    :param width: 
-    :param height: 
+    :param width:
+    :param height:
     :param vertical_fov: vertical field of view in radians
-    :param near: 
-    :param far: 
-    :return: 
+    :param near:
+    :param far:
+    :return:
     """
     # http://ksimek.github.io/2013/08/13/intrinsic/
     # http://www.songho.ca/opengl/gl_projectionmatrix.html
@@ -1365,21 +1366,21 @@ def get_image(camera_pos, target_pos, width=640, height=480, vertical_fov=60.0, 
                                    flags=flags,
                                    renderer=renderer,
                                    physicsClientId=CLIENT)[2:]
-    
+
     depth = far * near / (far - (far - near) * d)
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/pointCloudFromCameraImage.py
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/getCameraImageTest.py
     segmented = None
     if segment:
         segmented = extract_segmented(seg)
-        
+
     camera_tform = np.reshape(view_matrix, [4, 4])
     camera_tform[:3, 3] = camera_pos
     view_pose = multiply(pose_from_tform(camera_tform), Pose(euler=Euler(roll=PI)))
 
     focal_length = get_focal_lengths(height, vertical_fov) # TODO: horizontal_fov
     camera_matrix = get_camera_matrix(width, height, focal_length)
-    
+
     return CameraImage(rgb, depth, segmented, view_pose, camera_matrix)
 
 def get_image_at_pose(camera_pose, camera_matrix, far=5.0, **kwargs):
@@ -1584,7 +1585,7 @@ def quat_angle_between(quat0, quat1):
     # q1 = unit_vector(quat1[:4])
     # d = clip(np.dot(q0, q1), min_value=-1., max_value=+1.)
     # angle = math.acos(d)
-    
+
     # TODO: angle_between
     delta = p.getDifferenceQuaternion(quat0, quat1)
     d = clip(delta[-1], min_value=-1., max_value=1.)
