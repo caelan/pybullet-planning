@@ -209,7 +209,7 @@
   </link>
   <joint name="panda_joint7" type="revolute">
     <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-2.8973" soft_upper_limit="2.8973"/>
-    <origin rpy="0 0 0" xyz="0.088 0 0"/>
+    <origin rpy="1.57079632679 0 0" xyz="0.088 0 0"/>
     <parent link="panda_link6"/>
     <child link="panda_link7"/>
     <axis xyz="0 0 1"/>
@@ -307,14 +307,14 @@
       <material name="panda_white"/>
     </collision>
   </link>
-  <joint name="panda_finger_joint1" type="prismatic">
+  <joint name="panda_finger_joint1" type="fixed">
     <parent link="panda_hand"/>
     <child link="panda_leftfinger"/>
     <origin rpy="0 0 0" xyz="0 0 0.0584"/>
     <axis xyz="0 1 0"/>
     <limit effort="20" lower="0.0" upper="0.04" velocity="0.2"/>
   </joint>
-  <joint name="panda_finger_joint2" type="prismatic">
+  <joint name="panda_finger_joint2" type="fixed">
     <parent link="panda_hand"/>
     <child link="panda_rightfinger"/>
     <origin rpy="0 0 0" xyz="0 0 0.0584"/>

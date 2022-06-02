@@ -7,9 +7,16 @@ from .utils import get_pose, set_pose, get_movable_joints, \
     set_joint_positions, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, wait_for_duration, link_from_name, get_body_name, sample_placement, \
     end_effector_from_body, approach_from_grasp, plan_joint_motion, GraspInfo, Pose, INF, Point, \
-    inverse_kinematics, pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
-    step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions, dump_world, wait_if_gui, flatten
+    pairwise_collision, remove_fixed_constraint, Attachment, get_sample_fn, \
+    step_simulation, refine_path, plan_direct_joint_motion, get_joint_positions, dump_world, wait_if_gui, flatten, \
+    irange, elapsed_time, is_pose_close, all_between, get_link_pose
+
+from .ikfast.franka_panda.ik import PANDA_INFO, FRANKA_URDF, IKFastInfo
+from .ikfast.ikfast import get_ik_joints, either_inverse_kinematics, check_ik_solver
 # TODO: deprecate
+
+PANDA_OG_INFO = IKFastInfo(module_name='franka_panda.ikfast_panda_arm', base_link='panda_link0',
+                        ee_link='panda_grasptarget', free_joints=['panda_joint7'])
 
 GRASP_INFO = {
     'top': GraspInfo(lambda body: get_top_grasps(body, under=True, tool_pose=Pose(), max_width=INF,  grasp_length=0),
@@ -17,12 +24,36 @@ GRASP_INFO = {
 }
 
 TOOL_FRAMES = {
-    'panda': 'panda_link8', # iiwa_link_ee | iiwa_link_ee_kuka
+    'panda': 'panda_grasptarget', # iiwa_link_ee | iiwa_link_ee_kuka
 }
 
 DEBUG_FAILURE = True
 
 ##################################################
+
+def inverse_kinematics(robot, link, target_pose, max_iterations=200, max_time=INF, custom_limits={}, **kwargs):
+    start_time = time.time()
+    movable_joints = get_movable_joints(robot)
+    for iteration in irange(max_iterations):
+        # TODO: stop is no progress (converged)
+        # TODO: stop if collision or invalid joint limits
+        if elapsed_time(start_time) >= max_time:
+            return None
+        fixedJoints = ["panda_grasptarget_hand", "panda_joint8", "panda_hand_joint"]
+        kinematic_conf = next(either_inverse_kinematics(robot, PANDA_OG_INFO, link, target_pose,fixedJoints), None)
+        # kinematic_conf = inverse_kinematics_helper(robot, link, target_pose)
+        if kinematic_conf is None:
+            return None
+        set_joint_positions(robot, movable_joints, kinematic_conf)
+        if is_pose_close(get_link_pose(robot, link), target_pose, **kwargs):
+            break
+    else:
+        return None
+    lower_limits, upper_limits = get_custom_limits(robot, movable_joints, custom_limits)
+    if not all_between(lower_limits, kinematic_conf, upper_limits):
+        return None
+    return kinematic_conf
+
 
 class BodyPose(object):
     num = count()
