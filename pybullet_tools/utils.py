@@ -83,6 +83,7 @@ PR2_GRIPPER = 'pr2_gripper.urdf'
 PANDA_URDF = 'franka_panda/panda.urdf'
 
 PANDA_OG_URDF = "models/franka_description/robots/panda.urdf"
+BI_PANDA_URDF = "models/bi_panda/bi_panda.urdf"
 # PyBullet wsg50 robots
 # wsg50_one_motor_gripper.sdf - no visual
 # wsg50_one_motor_gripper_free_base.sdf - seg fault
