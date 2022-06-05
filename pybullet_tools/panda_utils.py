@@ -78,7 +78,7 @@ PANDA_BASE_LINK = 'bi_panda_base'
 
 # Arm tool poses
 #TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678]) # l_gripper_palm_link
-TOOL_POSE = Pose(euler=Euler(pitch=np.pi/2)) # l_gripper_tool_frame (+x out of gripper arm)
+TOOL_POSE = Pose(euler=Euler(pitch=PI/2,yaw=0.9*PI/2, roll=0.9*PI/4)) # l_gripper_tool_frame (+x out of gripper arm)
 #TOOL_DIRECTION = [0., 0., 1.]
 
 #####################################

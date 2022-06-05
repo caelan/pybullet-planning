@@ -28,8 +28,8 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_place
 
 BASE_EXTENT = 6 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
-GRASP_LENGTH = 0.05
-APPROACH_DISTANCE = 0.1 + GRASP_LENGTH
+GRASP_LENGTH = 0.02
+APPROACH_DISTANCE = 0.01 + GRASP_LENGTH
 SELF_COLLISIONS = False
 
 

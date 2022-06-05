@@ -8,7 +8,7 @@
  <link name="bi_panda_base">
   </link>
   <joint name="bi_panda_base_joint" type="fixed">
-    <origin rpy="0 0 0" xyz="-.4 0 .05"/>
+    <origin rpy="0 0 0" xyz="0 0 0.5"/>
     <parent link="bi_panda_base"/>
     <child link="bi_panda_base_joint_link"/>
   </joint>
@@ -35,7 +35,7 @@
     </collision>
   </link>
   <joint name="l_panda_joint0" type="fixed">
-    <origin rpy="0 0 0" xyz="-.6 .0 .05"/>
+    <origin rpy="0 0 0" xyz="-.3 0 0.05"/>
     <parent link="bi_panda_base"/>
     <child link="l_panda_link0"/>
   </joint>
