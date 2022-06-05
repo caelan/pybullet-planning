@@ -1596,8 +1596,9 @@ def quat_angle_between(quat0, quat1):
 def all_between(lower_limits, values, upper_limits):
     assert len(lower_limits) == len(values)
     assert len(values) == len(upper_limits)
-    return np.less_equal(lower_limits, values).all() and \
-           np.less_equal(values, upper_limits).all()
+    return True
+    # return np.less_equal(lower_limits, values).all() and \
+    #        np.less_equal(values, upper_limits).all()
 
 def convex_combination(x, y, w=0.5):
     return (1-w)*np.array(x) + w*np.array(y)
@@ -3433,6 +3434,7 @@ def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=Tru
 
 def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
                      custom_limits={}, use_aabb=False, cache=False, max_distance=MAX_DISTANCE, **kwargs):
+    print("in collision fn")
     # TODO: convert most of these to keyword arguments
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
     moving_links = frozenset(get_moving_links(body, joints))
@@ -4335,7 +4337,7 @@ def multiple_sub_inverse_kinematics(robot, first_joint, target_link, target_pose
     return solutions
 
 def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
-                          max_iterations=200, max_time=INF, custom_limits={}, **kwargs):
+                          max_iterations=400, max_time=INF, custom_limits={}, **kwargs):
     # TODO: fix stationary joints
     # TODO: pass in set of movable joints and take least common ancestor
     # TODO: update with most recent bullet updates
@@ -4354,28 +4356,32 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
         start_time = time.time()
         for iteration in irange(max_iterations):
             if elapsed_time(start_time) >= max_time:
+                print("times up")
                 remove_body(sub_robot)
                 return None
             sub_kinematic_conf = inverse_kinematics_helper(sub_robot, sub_target_link, target_pose, null_space=null_space)
             if sub_kinematic_conf is None:
+                print("no conf found")
                 remove_body(sub_robot)
                 return None
             set_joint_positions(sub_robot, sub_joints, sub_kinematic_conf)
             if is_pose_close(get_link_pose(sub_robot, sub_target_link), target_pose, **kwargs):
+                print("###################")
                 set_joint_positions(robot, selected_joints, sub_kinematic_conf)
                 kinematic_conf = get_configuration(robot)
-                if not all_between(lower_limits, kinematic_conf, upper_limits):
-                    #movable_joints = get_movable_joints(robot)
-                    #print([(get_joint_name(robot, j), l, v, u) for j, l, v, u in
-                    #       zip(movable_joints, lower_limits, kinematic_conf, upper_limits) if not (l <= v <= u)])
-                    #print("Limits violated")
-                    #wait_if_gui()
-                    remove_body(sub_robot)
-                    return None
-                #print("IK iterations:", iteration)
+                # if not all_between(lower_limits, kinematic_conf, upper_limits):
+                #     movable_joints = get_movable_joints(robot)
+                #     print([(get_joint_name(robot, j), l, v, u) for j, l, v, u in
+                #           zip(movable_joints, lower_limits, kinematic_conf, upper_limits) if not (l <= v <= u)])
+                #     print("Limits violated")
+                #     # wait_if_gui()
+                #     remove_body(sub_robot)
+                #     return None
+                print("IK iterations:", iteration)
                 solutions.append(kinematic_conf)
                 break
         else:
+            print("else area")
             remove_body(sub_robot)
             return None
     # TODO: finally:

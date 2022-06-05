@@ -8,7 +8,7 @@ from itertools import islice, count
 
 import numpy as np
 
-from .ikfast.franka_panda.ik import is_ik_compiled, ikfast_inverse_kinematics
+from .ikfast.franka_panda.ik import is_ik_compiled, ikfast_inverse_kinematics, PANDA_LEFT_INFO, bi_panda_inverse_kinematics
 from .ikfast.utils import USE_CURRENT, USE_ALL
 from .pr2_problems import get_fixed_bodies
 from .panda_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, GET_GRASPS, get_gripper_joints, \
@@ -24,13 +24,14 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_place
     add_segments, get_max_limit, link_from_name, BodySaver, get_aabb, Attachment, interpolate_poses, \
     plan_direct_joint_motion, has_gui, create_attachment, wait_for_duration, get_extend_fn, set_renderer, \
     get_custom_limits, all_between, get_unit_vector, wait_if_gui, \
-    set_base_values, euler_from_quat, INF, elapsed_time, get_moving_links, flatten_links, get_relative_pose
+    set_base_values, euler_from_quat, INF, elapsed_time, get_moving_links, flatten_links, get_relative_pose, get_link_name
 
 BASE_EXTENT = 6 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
 GRASP_LENGTH = 0.05
 APPROACH_DISTANCE = 0.1 + GRASP_LENGTH
 SELF_COLLISIONS = False
+
 
 ##################################################
 
@@ -80,7 +81,7 @@ class Grasp(object):
         self.approach = tuple(approach)
         self.carry = tuple(carry)
     def get_attachment(self, robot, arm):
-        tool_link = link_from_name(robot, PR2_TOOL_FRAMES[arm])
+        tool_link = link_from_name(robot, PANDA_TOOL_FRAMES[arm])
         return Attachment(robot, tool_link, self.value, self.body)
     def __repr__(self):
         return 'g{}'.format(id(self) % 1000)
@@ -97,6 +98,7 @@ class Conf(object):
     def bodies(self): # TODO: misnomer
         return flatten_links(self.body, get_moving_links(self.body, self.joints))
     def assign(self):
+
         set_joint_positions(self.body, self.joints, self.values)
     def iterate(self):
         yield self
@@ -226,7 +228,7 @@ class Attach(Command):
         self.arm = arm
         self.grasp = grasp
         self.body = body
-        self.link = link_from_name(self.robot, PR2_TOOL_FRAMES.get(self.arm, self.arm))
+        self.link = link_from_name(self.robot, PANDA_TOOL_FRAMES.get(self.arm, self.arm))
         #self.attachment = None
     def assign(self):
         gripper_pose = get_link_pose(self.robot, self.link)
@@ -258,7 +260,7 @@ class Detach(Command):
         self.robot = robot
         self.arm = arm
         self.body = body
-        self.link = link_from_name(self.robot, PR2_TOOL_FRAMES.get(self.arm, self.arm))
+        self.link = link_from_name(self.robot, PANDA_TOOL_FRAMES.get(self.arm, self.arm))
         # TODO: pose argument to maintain same object
     def apply(self, state, **kwargs):
         del state.attachments[self.body]
@@ -329,6 +331,7 @@ def get_grasp_gen(problem, collisions=False, randomize=True):
                           for g in get_side_grasps(body, grasp_length=GRASP_LENGTH))
         filtered_grasps = []
         for grasp in grasps:
+            print("grasp, ", grasp)
             grasp_width = compute_grasp_width(problem.robot, arm, body, grasp.value) if collisions else 0.0
             if grasp_width is not None:
                 grasp.grasp_width = grasp_width
@@ -361,8 +364,6 @@ def get_stable_gen(problem, collisions=True, **kwargs):
     obstacles = problem.fixed if collisions else []
     def gen(body, surface):
         print("############ in stable gen fn")
-        print(body)
-        print(surface)
         # TODO: surface poses are being sampled in pr2_belief
         if surface is None:
             surfaces = problem.surfaces
@@ -383,8 +384,8 @@ def get_stable_gen(problem, collisions=True, **kwargs):
 ##################################################
 
 def get_tool_from_root(robot, arm):
-    root_link = link_from_name(robot, PR2_GRIPPER_ROOTS[arm])
-    tool_link = link_from_name(robot, PR2_TOOL_FRAMES[arm])
+    root_link = link_from_name(robot, PANDA_GRIPPER_ROOTS[arm])
+    tool_link = link_from_name(robot, PANDA_TOOL_FRAMES[arm])
     return get_relative_pose(robot, root_link, tool_link)
 
 def iterate_approach_path(robot, arm, gripper, pose, grasp, body=None):
@@ -410,18 +411,19 @@ def get_ir_sampler(problem, custom_limits={}, max_attempts=25, collisions=True, 
                 return
         gripper_pose = multiply(pose.value, invert(grasp.value)) # w_f_g = w_f_o * (g_f_o)^-1
         default_conf = arm_conf(arm, grasp.carry)
+        base_joints = get_group_joints(robot, 'base')
         arm_joints = get_arm_joints(robot, arm)
         base_conf = get_pose(robot)
         lower_limits, upper_limits = get_custom_limits(robot, base_joints, custom_limits)
         while True:
             count = 0
-            for _ in range (num_attempts):
+            for _ in range (max_attempts):
                 count += 1
-                if not all_between(lower_limits, base_conf, upper_limits):
-                    continue
+                # if not all_between(lower_limits, base_conf, upper_limits):
+                #     continue
                 bq = Conf(robot, base_joints, base_conf)
                 pose.assign()
-                bq.assign()
+                # bq.assign()
                 set_joint_positions(robot, arm_joints, default_conf)
                 if any(pairwise_collision(robot, b) for b in obstacles + [obj]):
                     continue
@@ -439,7 +441,6 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
     obstacles = problem.fixed if collisions else []
 
     def fn(arm, obj, pose, grasp):
-        print("########## in ik function")
         approach_obstacles = {obst for obst in obstacles if not is_placement(obj, obst)}
         gripper_pose = multiply(pose.value, invert(grasp.value)) # w_f_g = w_f_o * (g_f_o)^-1
         #approach_pose = multiply(grasp.approach, gripper_pose)
@@ -452,7 +453,11 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
         pose.assign()
         open_arm(robot, arm)
         set_joint_positions(robot, arm_joints, default_conf) # default_conf | sample_fn()
-        grasp_conf = ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target)(robot, arm, gripper_pose, custom_limits=custom_limits) #, upper_limits=USE_CURRENT)
+        ikfaskt_info = PANDA_LEFT_INFO
+        gripper_link = link_from_name(robot, PANDA_GRIPPER_ROOTS[arm])
+        grasp_conf = bi_panda_inverse_kinematics(robot, arm, arm_link, gripper_pose, max_attempts=25, max_time=1.3, obstacles=obstacles)
+        # grasp_conf = ikfast_inverse_kinematics(robot, PANDA_LEFT_INFO, gripper_link, gripper_pose, max_attempts=25, max_time=1.3)
+        # grasp_conf = ikfast_inverse_kinematics( robot, arm, gripper_pose, custom_limits=custom_limits) #, upper_limits=USE_CURRENT)
                                             #nearby_conf=USE_CURRENT) # upper_limits=USE_CURRENT,
         if (grasp_conf is None) or any(pairwise_collision(robot, b) for b in obstacles): # [obj]
             print('Grasp IK failure', grasp_conf)
@@ -464,9 +469,10 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
         #                                       upper_limits=USE_CURRENT, nearby_conf=USE_CURRENT)
         approach_conf = sub_inverse_kinematics(robot, arm_joints[0], arm_link, approach_pose, custom_limits=custom_limits)
         if (approach_conf is None) or any(pairwise_collision(robot, b) for b in obstacles + [obj]):
-            print('Approach IK failure', approach_conf)
+            print('Approach IK failure', grasp_conf)
             #wait_if_gui()
             return None
+        print("########## approach success")
         approach_conf = get_joint_positions(robot, arm_joints)
         attachment = grasp.get_attachment(problem.robot, arm)
         attachments = {attachment.child: attachment}
@@ -476,7 +482,7 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
             resolutions = 0.05**np.ones(len(arm_joints))
             grasp_path = plan_direct_joint_motion(robot, arm_joints, grasp_conf, attachments=attachments.values(),
                                                   obstacles=approach_obstacles, self_collisions=SELF_COLLISIONS,
-                                                  custom_limits=custom_limits, resolutions=resolutions/2.)
+                                                  custom_limits={}, resolutions=resolutions/2.)
             if grasp_path is None:
                 print('Grasp path failure')
                 return None
@@ -498,9 +504,11 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
 
 def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False, **kwargs):
     # TODO: compose using general fn
+    ir_sampler = get_ir_sampler(problem, learned=learned, max_attempts=1, **kwargs)
     ik_fn = get_ik_fn(problem, teleport=teleport, **kwargs)
     def gen(*inputs):
         b, a, p, g = inputs
+        ir_generator = ir_sampler(*inputs)
         attempts = 0
         while True:
             if max_attempts <= attempts:
@@ -509,11 +517,17 @@ def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False, **kwar
                 attempts = 0
                 yield None
             attempts += 1
+            try:
+                ir_outputs = next(ir_generator)
+            except StopIteration:
+                return
+            if ir_outputs is None:
+                continue
             ik_outputs = ik_fn(*(inputs))
             if ik_outputs is None:
                 continue
             print('IK attempts:', attempts)
-            yield ik_outputs
+            yield ir_outputs + ik_outputs
             return
             #if not p.init:
             #    return

@@ -135,7 +135,6 @@ def ikfast_forward_kinematics(robot, ikfast_info, tool_link, conf=None, use_ikfa
 def ikfast_inverse_kinematics(robot, ikfast_info, tool_link, world_from_target,
                               fixed_joints=[], max_attempts=INF, max_time=INF,
                               norm=INF, max_distance=INF, **kwargs):
-    print("############3 in ik fast kinematics")
     assert (max_attempts < INF) or (max_time < INF)
     if max_distance is None:
         max_distance = INF

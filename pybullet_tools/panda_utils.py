@@ -85,7 +85,7 @@ TOOL_POSE = Pose(euler=Euler(pitch=np.pi/2)) # l_gripper_tool_frame (+x out of g
 
 # Special configurations
 
-TOP_HOLDING_LEFT_ARM = [ 0.67717021, -0.34313199, 1.2, -1.46688405, 1.24223229, -1.95442826, 2.22254125]
+TOP_HOLDING_LEFT_ARM = [ 0.0, PI/8, 0.0, -PI/3, 0, 0.9*PI/2, -PI/4]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
 REST_LEFT_ARM = [0, 2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -1.4851759349218694, 1.3911839347271555,
@@ -239,7 +239,7 @@ def set_arm_conf(robot, arm, conf):
 
 def get_gripper_link(robot, arm):
     assert arm in ARM_NAMES
-    return link_from_name(robot, PR2_TOOL_FRAMES[arm])
+    return link_from_name(robot, PANDA_TOOL_FRAMES[arm])
 
 
 # def get_gripper_pose(robot):
