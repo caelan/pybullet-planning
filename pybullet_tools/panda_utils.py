@@ -17,7 +17,8 @@ from .utils import multiply, get_link_pose, set_joint_position, set_joint_positi
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
     get_extend_fn, get_moving_links, link_pairs_collision, get_link_subtree, \
     clone_body, get_all_links, pairwise_collision, tform_point, get_camera_matrix, ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, \
-    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color, wait_if_gui
+    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color, wait_if_gui, Point
+from .transformations import euler_from_quaternion
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -77,15 +78,18 @@ PANDA_GRIPPER_ROOTS = {
 PANDA_BASE_LINK = 'bi_panda_base'
 
 # Arm tool poses
-#TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678]) # l_gripper_palm_link
-TOOL_POSE = Pose(euler=Euler(pitch=PI/2,yaw=0.9*PI/2, roll=0.9*PI/4)) # l_gripper_tool_frame (+x out of gripper arm)
+# TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678]) # l_gripper_palm_link
+
+# TOOL_POSE = ((0.35226336121559143, 8.295230821686594e-16, 0.6660239100456238), (0.9238003761661757, 0.3826506598554189, -0.012093209233817237, -0.005009171375786134)) # l_gripper_tool_frame (+x out of gripper arm)
+# TOOL_POSE = Pose(euler=Euler(PI/2,PI/2,PI/2))
+TOOL_POSE = Pose(point=Point(0, 0.0, 0.09),euler=Euler(roll= 0,pitch=0, yaw=0))
 #TOOL_DIRECTION = [0., 0., 1.]
 
 #####################################
 
 # Special configurations
 
-TOP_HOLDING_LEFT_ARM = [ 0.0, PI/8, 0.0, -PI/3, 0, 0.9*PI/2, -PI/4]
+TOP_HOLDING_LEFT_ARM = [ 0, PI/8, 0.0, -PI/3, 0, 0.9*PI/2, -PI/4]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
 REST_LEFT_ARM = [0, 2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -1.4851759349218694, 1.3911839347271555,
@@ -276,7 +280,7 @@ close_gripper = close_arm
 # Box grasps
 
 #GRASP_LENGTH = 0.04
-GRASP_LENGTH = 0.
+GRASP_LENGTH = 0.09
 #GRASP_LENGTH = -0.01
 
 #MAX_GRASP_WIDTH = 0.07
@@ -428,8 +432,8 @@ def get_top_presses(body, tool_pose=TOOL_POSE, body_pose=unit_pose(), top_offset
                        reflect_z, translate_center, body_pose)
 
 GET_GRASPS = {
-    'top': get_top_grasps,
-    'side': get_side_grasps,
+    'top': get_top_cylinder_grasps,
+    'side': get_side_cylinder_grasps,
     # 'press': get_x_presses,
 }
 # TODO: include approach/carry info

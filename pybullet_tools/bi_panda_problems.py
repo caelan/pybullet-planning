@@ -94,7 +94,7 @@ def create_table(width=0.6, length=1.2, height=0.73, thickness=0.03, radius=0.01
     #    set_color(body, shape_index=idx, color=color)
     return body
 
-def create_short_table(width=0.3, length=.4, height=0.07, thickness=0.03, radius=0.015,
+def create_short_table(width=0.45, length=.6, height=0.3, thickness=0.03, radius=0.015,
                  top_color=LIGHT_GREY, leg_color=TAN, cylinder=True, **kwargs):
     # TODO: table URDF
     surface = get_box_geometry(width, length, thickness)
