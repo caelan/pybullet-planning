@@ -88,7 +88,7 @@ TOOL_POSE = Pose(point=Point(0, 0.0, 0.09),euler=Euler(roll= 0,pitch=0, yaw=0))
 #####################################
 
 # Special configurations
-
+EXTENDED_LEFT_ARM = [ 0, PI/2, 0.0, 0, 0, PI, -PI/2-PI/4]
 TOP_HOLDING_LEFT_ARM = [ 0, PI/8, 0.0, -PI/3, 0, 0.9*PI/2, -PI/4]
 SIDE_HOLDING_LEFT_ARM = [0.39277395, 0.33330058, 0., -1.52238431, 2.72170996, -1.21946936, -2.98914779]
 REST_LEFT_ARM = [0, 2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
@@ -153,6 +153,9 @@ def arm_conf(arm, left_config):
 
 def get_carry_conf(arm, grasp_type):
     return arm_conf(arm, PR2_LEFT_CARRY_CONFS[grasp_type])
+
+def get_extended_conf(arm):
+    return arm_conf(arm, EXTENDED_LEFT_ARM)
 
 def get_other_arm(arm):
     for other_arm in ARM_NAMES:
