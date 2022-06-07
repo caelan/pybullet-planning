@@ -13,8 +13,8 @@ from .ikfast.utils import USE_CURRENT, USE_ALL
 from .pr2_problems import get_fixed_bodies
 from .panda_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, GET_GRASPS, get_gripper_joints, \
     get_carry_conf, get_top_grasps, get_side_grasps, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
-    learned_pose_generator, PANDA_TOOL_FRAMES, get_x_presses, BI_PANDA_GROUPS, joints_from_names, \
-    is_drake_pr2, get_group_joints, get_group_conf, compute_grasp_width, PANDA_GRIPPER_ROOTS
+    learned_pose_generator, PANDA_TOOL_FRAMES, get_x_presses, BI_PANDA_GROUPS, joints_from_names, arm_from_arm,\
+    is_drake_pr2, get_group_joints, get_group_conf, compute_grasp_width, PANDA_GRIPPER_ROOTS, get_group_links
 from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_placement, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, waypoints_from_path, \
     unit_quat, plan_base_motion, plan_joint_motion, base_values_from_pose, pose_from_base_values, \
@@ -23,7 +23,7 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_place
     get_min_limit, user_input, step_simulation, get_body_name, get_bodies, BASE_LINK, \
     add_segments, get_max_limit, link_from_name, BodySaver, get_aabb, Attachment, interpolate_poses, \
     plan_direct_joint_motion, has_gui, create_attachment, wait_for_duration, get_extend_fn, set_renderer, \
-    get_custom_limits, all_between, get_unit_vector, wait_if_gui, \
+    get_custom_limits, all_between, get_unit_vector, wait_if_gui, joint_from_name, get_joint_info,\
     set_base_values, euler_from_quat, INF, elapsed_time, get_moving_links, flatten_links, get_relative_pose, get_link_name
 
 BASE_EXTENT = 6 # 2.5
@@ -133,6 +133,15 @@ class Commands(object):
 
 #####################################
 
+def set_joint_force_limits(robot, arm):
+    links = get_group_links(robot, arm_from_arm(arm))
+    joints = get_group_joints(robot, arm_from_arm(arm))
+    for i in range(len(joints)):
+        joint = joints[i]
+        limits = get_joint_info(robot, joint)
+        p.changeDynamics(robot, links[i], jointLimitForce=limits.jointMaxForce)
+
+######################################
 class Trajectory(Command):
     _draw = False
     def __init__(self, path):

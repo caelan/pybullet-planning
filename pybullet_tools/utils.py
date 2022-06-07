@@ -2020,7 +2020,7 @@ parent_link_from_joint = get_link_parent
 def link_from_name(body, name):
     if name == get_base_name(body):
         return BASE_LINK
-    for link in get_joints(body):
+    for link in get_links(body):
         if get_link_name(body, link) == name:
             return link
     raise ValueError(body, name)
@@ -2327,6 +2327,7 @@ def create_visual_shape(geometry, pose=unit_pose(), color=RED, specular=None):
 def create_shape(geometry, pose=unit_pose(), collision=True, **kwargs):
     collision_id = create_collision_shape(geometry, pose=pose) if collision else NULL_ID
     visual_id = create_visual_shape(geometry, pose=pose, **kwargs) # if collision else NULL_ID
+
     return collision_id, visual_id
 
 def plural(word):
@@ -2370,7 +2371,7 @@ def create_shape_array(geoms, poses, colors=None):
 
 #####################################
 
-def create_body(collision_id=NULL_ID, visual_id=NULL_ID, mass=STATIC_MASS):
+def create_body(collision_id=NULL_ID, visual_id=NULL_ID, mass=STATIC_MASS, inertial=NULL_ID):
     return p.createMultiBody(baseMass=mass, baseCollisionShapeIndex=collision_id,
                              baseVisualShapeIndex=visual_id, physicsClientId=CLIENT)
 

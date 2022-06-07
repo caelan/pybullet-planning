@@ -61,6 +61,18 @@ BI_PANDA_GROUPS = {
                                  'r_panda_finger_joint2', 'r_panda_grasptarget_hand'],
 }
 
+BI_PANDA_LINK_GROUPS = {
+    "base": ["bi_panda_base_joint"],
+    arm_from_arm(LEFT_ARM): ['l_panda_link1', 'l_panda_link2', 'l_panda_link3','l_panda_link4',
+                            'l_panda_link5', 'l_panda_link6', 'l_panda_link7'],
+    arm_from_arm(RIGHT_ARM): ['r_panda_link1', 'r_panda_link2', 'r_panda_link3','r_panda_link4',
+                            'r_panda_link5', 'r_panda_link6', 'r_panda_link7'],
+    # gripper_from_arm(LEFT_ARM): ['l_panda_hand_link', 'l_panda_finger_link1',
+    #                              'l_panda_finger_link2', 'l_panda_grasptarget_hand'],
+    # gripper_from_arm(RIGHT_ARM): ['r_panda_hand_link', 'r_panda_finger_link1',
+    #                              'r_panda_finger_link2', 'r_panda_grasptarget_hand'],
+}
+
 HEAD_LINK_NAME = 'high_def_optical_frame' # high_def_optical_frame | high_def_frame | wide_stereo_l_stereo_camera_frame
 # kinect - 'head_mount_kinect_rgb_optical_frame' | 'head_mount_kinect_rgb_link'
 
@@ -206,6 +218,9 @@ def get_groups():
 
 def get_group_joints(robot, group):
     return joints_from_names(robot, BI_PANDA_GROUPS[group])
+
+def get_group_links(robot, group):
+    return [link_from_name(robot, name) for name in BI_PANDA_LINK_GROUPS[group]]
 
 def get_group_conf(robot, group):
     return get_joint_positions(robot, get_group_joints(robot, group))

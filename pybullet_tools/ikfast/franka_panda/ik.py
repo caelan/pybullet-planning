@@ -18,7 +18,10 @@ PANDA_INFO = IKFastInfo(module_name='franka_panda.ikfast_panda_arm', base_link='
 PANDA_LEFT_INFO = IKFastInfo(module_name='franka_panda.ikfast_panda_arm', base_link='l_panda_link0',
                         ee_link='l_panda_grasptarget', free_joints=['l_panda_joint7'])
 
-info = {'left': PANDA_LEFT_INFO}
+PANDA_RIGHT_INFO = IKFastInfo(module_name='franka_panda.ikfast_panda_arm', base_link='r_panda_link0',
+                        ee_link='r_panda_grasptarget', free_joints=['r_panda_joint7'])
+
+info = {'left': PANDA_LEFT_INFO, 'right': PANDA_RIGHT_INFO}
 
 def get_tool_from_ik(robot, arm):
     # TODO: change PR2_TOOL_FRAMES[arm] to be IK_LINK[arm]
