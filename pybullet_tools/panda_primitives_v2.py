@@ -255,7 +255,7 @@ class Attach(Command):
         else:
             # TODO: the gripper doesn't quite work yet
             gripper_name = '{}_gripper'.format(self.arm)
-            joints = joints_from_names(self.robot, PR2_GROUPS[gripper_name])
+            joints = joints_from_names(self.robot, BI_PANDA_GROUPS[gripper_name])
             values = [get_min_limit(self.robot, joint) for joint in joints] # Closed
             for _ in joint_controller_hold(self.robot, joints, values):
                 step_simulation()
@@ -646,8 +646,7 @@ def get_press_gen(problem, max_attempts=25, learned=True, teleport=False):
 #####################################
 
 def control_commands(commands, **kwargs):
-    print("############# in control commands fn")
-    wait_if_gui('Control?')
+    # wait_if_gui('Control?')
     disable_real_time()
     enable_gravity()
     for i, command in enumerate(commands):

@@ -84,6 +84,7 @@ PANDA_URDF = 'franka_panda/panda.urdf'
 
 PANDA_OG_URDF = "models/franka_description/robots/panda.urdf"
 BI_PANDA_URDF = "models/bi_panda/bi_panda.urdf"
+TRAY_URDF = "/home/liam/dev/bi-manual-forceful-manipulation/bi-manual-tamp/examples/pybullet/utils/models/bi_panda/tray.urdf"
 # PyBullet wsg50 robots
 # wsg50_one_motor_gripper.sdf - no visual
 # wsg50_one_motor_gripper_free_base.sdf - seg fault
@@ -1988,7 +1989,7 @@ def get_custom_limits(body, joints, custom_limits={}, circular_limits=UNBOUNDED_
 # Links
 
 BASE_LINK = -1
-STATIC_MASS = 0
+STATIC_MASS = 0.5
 
 get_num_links = get_num_joints
 get_links = get_joints # Does not include BASE_LINK
