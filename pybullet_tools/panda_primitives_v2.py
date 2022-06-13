@@ -31,7 +31,7 @@ BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
 GRASP_LENGTH = 0.02
 APPROACH_DISTANCE = 0.01 + GRASP_LENGTH
 SELF_COLLISIONS = False
-
+TABLE = 3
 
 ##################################################
 
@@ -665,6 +665,7 @@ class State(object):
         self.cooked = cooked
         self.bodies = get_bodies()
         self.body_names = [get_body_name(body) for body in self.bodies]
+
 
     def assign(self):
         for attachment in self.attachments.values():

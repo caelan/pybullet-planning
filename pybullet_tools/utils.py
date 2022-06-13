@@ -85,6 +85,7 @@ PANDA_URDF = 'franka_panda/panda.urdf'
 PANDA_OG_URDF = "models/franka_description/robots/panda.urdf"
 BI_PANDA_URDF = "models/bi_panda/bi_panda_shifted.urdf"
 TRAY_URDF = "/home/liam/dev/bi-manual-forceful-manipulation/bi-manual-tamp/examples/pybullet/utils/models/bi_panda/tray.urdf"
+TABLE_URDF = "/home/liam/dev/bi-manual-forceful-manipulation/bi-manual-tamp/examples/pybullet/utils/models/bi_panda/table.urdf"
 # PyBullet wsg50 robots
 # wsg50_one_motor_gripper.sdf - no visual
 # wsg50_one_motor_gripper_free_base.sdf - seg fault
@@ -1642,6 +1643,13 @@ def body_from_name(name):
             return body
     raise ValueError(name)
 
+def is_b1_on_b2(b1, b2):
+    if has_body(name_from_body(b2)):
+        AABB = get_aabb(b2)
+        overlapping = p.getOverlappingObjects(AABB)
+        return b1 in overlapping
+    return False
+
 def remove_body(body):
     if (CLIENT, body) in INFO_FROM_BODY:
         del INFO_FROM_BODY[CLIENT, body]
@@ -1679,6 +1687,24 @@ def set_euler(body, euler):
 def pose_from_pose2d(pose2d, z=0.):
     x, y, theta = pose2d
     return Pose(Point(x=x, y=y, z=z), Euler(yaw=theta))
+
+def get_COM(state, b2):
+    totalMass = get_mass(b2)
+    comR = get_pose(b2)[0]
+    comMX =  totalMass * comR[0]
+    comMY = totalMass * comR[1]
+    comMZ = totalMass * comR[2]
+    num_obs = 1
+    for body in state.bodies:
+        if(body > 3 and is_b1_on_b2(body, b2)):
+            pos = get_pose(body)[0]
+            mass = get_mass(body)
+            ratio = totalMass / (totalMass + mass)
+            totalMass = totalMass + mass
+            comMX = (comMX * ratio) + (mass*pos[0]/totalMass)
+            comMY = (comMY * ratio) + (mass*pos[1]/totalMass)
+            comMZ = (comMZ * ratio) + (mass*pos[2]/totalMass)
+    return (comMX, comMY, comMZ)
 
 def set_base_values(body, values):
     _, _, z = get_point(body)

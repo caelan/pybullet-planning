@@ -1,29 +1,31 @@
 <?xml version="1.0" ?>
-<robot name="tray">
+<robot name="table">
   <link name="base_link">
     <contact>
-      <lateral_friction value="0.12"/>
+      <lateral_friction value="0.5"/>
       <inertia_scaling value="1.0"/>
     </contact>
     <inertial>
       <origin rpy="0 0 0" xyz="0 0 0"/>
-       <mass value="0.01"/>
-       <inertia ixx="0.000166666667" ixy="0" ixz="0" iyy="0.000166666667" iyz="0" izz="0.000166666667"/>
+       <mass value="50"/>
+       <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
     </inertial>
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <box size="0.3 0.4 0.01" />
+        <!--<box size="0.9144 1.8288 0.762"/>-->
+        <box size="0.004 0.003 0.5"/>
       </geometry>
        <material name="white">
-        <color rgba="0 0 1 1"/>
+        <color rgba="0.66 0.66 0.66 1"/>
       </material>
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <box size="0.2 0.3 0.01"/>
+<!--	 	<box size="0.762 1.2192 0.762"/>-->
+        <!--<box size="0.9144 1.8288 0.762"/>-->
+        <box size="0.004 0.003 0.5"/> <!--8128?-->
       </geometry>
     </collision>
   </link>
-</robot>
