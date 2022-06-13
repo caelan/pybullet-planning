@@ -92,7 +92,7 @@ PANDA_BASE_LINK = 'bi_panda_base'
 # Arm tool poses
 # TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678]) # l_gripper_palm_link
 
-TOOL_POSE = Pose(point=Point(0, 0.0, 0.09),euler=Euler(roll= 0,pitch=0, yaw=0))
+TOOL_POSE = Pose(point=Point(0, 0.0, 0.1),euler=Euler(roll= 0,pitch=0, yaw=0))
 
 #TOOL_DIRECTION = [0., 0., 1.]
 
@@ -100,10 +100,10 @@ TOOL_POSE = Pose(point=Point(0, 0.0, 0.09),euler=Euler(roll= 0,pitch=0, yaw=0))
 
 # Special configurations
 EXTENDED_LEFT_ARM = [0, PI/2, 0.0, 0, 0, PI, -PI/2-PI/4]
-TOP_HOLDING_LEFT_ARM = [0, PI/8, 0.0, -PI/3, 0, -0.9*PI/2, -PI/4-.01]
-TOP_HOLDING_LEFT_ARM_CENTERED = [-PI/2, 0, 0.0, 0, PI, PI/2-.5, -PI/4-.05]
+TOP_HOLDING_LEFT_ARM = [0, PI/8, 0.0, -PI/3, 0, PI/2, -PI/2-.01]
+TOP_HOLDING_LEFT_ARM_CENTERED = [-PI/2, PI/4, PI, -5*PI/8, 0, 1.1, PI/3-.1]
 SIDE_HOLDING_LEFT_ARM = [0, PI/8, PI, -PI/3, PI, 0.9*PI/2, -PI/4]
-PLATE_GRASP_LEFT_ARM = [-PI/4, PI/2, 0.0, 0, 0, PI, -PI/4]
+PLATE_GRASP_LEFT_ARM = [-PI/2, PI/2, 0.0, 0, 0, PI, -PI/4]
 REST_LEFT_ARM = [0, 2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -1.4851759349218694, 1.3911839347271555,
                  -1.6531320011389408, -2.978586584568441]

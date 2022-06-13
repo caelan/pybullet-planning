@@ -11,7 +11,7 @@ import numpy as np
 from .ikfast.franka_panda.ik import is_ik_compiled, ikfast_inverse_kinematics, PANDA_LEFT_INFO, bi_panda_inverse_kinematics
 from .ikfast.utils import USE_CURRENT, USE_ALL
 from .pr2_problems import get_fixed_bodies
-from .panda_utils import TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, GET_GRASPS, get_gripper_joints, \
+from .panda_utils import TOP_HOLDING_LEFT_ARM_CENTERED, TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, GET_GRASPS, get_gripper_joints, \
     get_carry_conf, get_top_grasps, get_side_grasps, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, PANDA_TOOL_FRAMES, get_x_presses, BI_PANDA_GROUPS, joints_from_names, arm_from_arm,\
     is_drake_pr2, get_group_joints, get_group_conf, compute_grasp_width, PANDA_GRIPPER_ROOTS, get_group_links
@@ -332,7 +332,7 @@ def get_grasp_gen(problem, collisions=False, randomize=True):
         #carry_conf = get_carry_conf(arm, 'top')
         if 'top' in problem.grasp_types:
             approach_vector = APPROACH_DISTANCE*get_unit_vector([1, 0, 0])
-            grasps.extend(Grasp('top', body, g, multiply((approach_vector, unit_quat()), g), TOP_HOLDING_LEFT_ARM)
+            grasps.extend(Grasp('top', body, g, multiply((approach_vector, unit_quat()), g), TOP_HOLDING_LEFT_ARM_CENTERED)
                           for g in get_top_grasps(body, grasp_length=GRASP_LENGTH))
         if 'side' in problem.grasp_types:
             approach_vector = APPROACH_DISTANCE*get_unit_vector([2, 0, -1])
@@ -464,7 +464,7 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
         set_joint_positions(robot, arm_joints, default_conf) # default_conf | sample_fn()
         ikfaskt_info = PANDA_LEFT_INFO
         gripper_link = link_from_name(robot, PANDA_GRIPPER_ROOTS[arm])
-        grasp_conf = bi_panda_inverse_kinematics(robot, arm, arm_link, gripper_pose, max_attempts=25, max_time=1.3, obstacles=obstacles)
+        grasp_conf = bi_panda_inverse_kinematics(robot, arm, arm_link, gripper_pose, max_attempts=100, max_time=3.5, obstacles=obstacles)
         # grasp_conf = ikfast_inverse_kinematics(robot, PANDA_LEFT_INFO, gripper_link, gripper_pose, max_attempts=25, max_time=1.3)
         # grasp_conf = ikfast_inverse_kinematics( robot, arm, gripper_pose, custom_limits=custom_limits) #, upper_limits=USE_CURRENT)
                                             #nearby_conf=USE_CURRENT) # upper_limits=USE_CURRENT,
@@ -478,10 +478,12 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=False):
         #                                       upper_limits=USE_CURRENT, nearby_conf=USE_CURRENT)
         approach_conf = sub_inverse_kinematics(robot, arm_joints[0], arm_link, approach_pose, custom_limits=custom_limits)
         if (approach_conf is None) or any(pairwise_collision(robot, b) for b in obstacles + [obj]):
+            if(any(pairwise_collision(robot, b) for b in obstacles + [obj])):
+                print("collision failure")
             print('Approach IK failure', grasp_conf)
             #wait_if_gui()
             return None
-        print("########## approach success")
+        print("!!!!!!!!!!! approach success")
         approach_conf = get_joint_positions(robot, arm_joints)
         attachment = grasp.get_attachment(problem.robot, arm)
         attachments = {attachment.child: attachment}
@@ -661,6 +663,9 @@ class State(object):
         self.attachments = attachments
         self.cleaned = cleaned
         self.cooked = cooked
+        self.bodies = get_bodies()
+        self.body_names = [get_body_name(body) for body in self.bodies]
+
     def assign(self):
         for attachment in self.attachments.values():
             #attach.attachment.assign()
