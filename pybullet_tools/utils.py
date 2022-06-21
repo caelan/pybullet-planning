@@ -1808,6 +1808,12 @@ def quat_combination(quat1, quat2, fraction=0.5):
     #return p.getQuaternionSlerp(quat1, quat2, interpolationFraction=fraction)
     return quaternion_slerp(quat1, quat2, fraction)
 
+def quat_angle(quat):
+    x, y, z, w = quat
+    d = clip(w, min_value=-1., max_value=1.)
+    angle = math.acos(d)
+    return angle
+
 def quat_angle_between(quat0, quat1):
     # q0 = unit_vector(quat0[:4])
     # q1 = unit_vector(quat1[:4])
@@ -1816,9 +1822,7 @@ def quat_angle_between(quat0, quat1):
     
     # TODO: angle_between
     delta = p.getDifferenceQuaternion(quat0, quat1)
-    d = clip(delta[-1], min_value=-1., max_value=1.)
-    angle = math.acos(d)
-    return angle
+    return quat_angle(delta)
 
 def all_between(lower_limits, values, upper_limits):
     assert len(lower_limits) == len(values)
@@ -3052,7 +3056,7 @@ def create_vhacd(input_path, output_path=None, output_dir=VHACD_DIR, cache=True,
 
     start_time = time.time()
     print('Starting V-HACD of {}'.format(input_path))
-    log_path = join_paths(VHACD_DIR, 'vhacd_log.txt')
+    log_path = join_paths(output_dir, 'vhacd_log.txt')
     # TODO: use kwargs to update the default args
     vhacd_kwargs = {
         'concavity': 0.0025,  # Maximum allowed concavity (default=0.0025, range=0.0-1.0)
