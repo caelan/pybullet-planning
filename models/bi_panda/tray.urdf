@@ -7,13 +7,13 @@
     </contact>
     <inertial>
       <origin rpy="0 0 0" xyz="0 0 0"/>
-       <mass value="0.01"/>
+       <mass value="0.1"/>
        <inertia ixx="0.000166666667" ixy="0" ixz="0" iyy="0.000166666667" iyz="0" izz="0.000166666667"/>
     </inertial>
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <box size="0.3 0.4 0.01" />
+        <box size="0.2063 0.3143 0.0178" />
       </geometry>
        <material name="white">
         <color rgba="0 0 1 1"/>
@@ -22,7 +22,7 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <box size="0.2 0.3 0.01"/>
+        <box size="0.2063 0.3143 0.0178"/>
       </geometry>
     </collision>
   </link>

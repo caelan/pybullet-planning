@@ -14,7 +14,8 @@ from .pr2_problems import get_fixed_bodies
 from .panda_utils import TOP_HOLDING_LEFT_ARM_CENTERED, TOP_HOLDING_LEFT_ARM, SIDE_HOLDING_LEFT_ARM, GET_GRASPS, get_gripper_joints, \
     get_carry_conf, get_top_grasps, get_side_grasps, open_arm, arm_conf, get_gripper_link, get_arm_joints, \
     learned_pose_generator, PANDA_TOOL_FRAMES, get_x_presses, BI_PANDA_GROUPS, joints_from_names, arm_from_arm,\
-    is_drake_pr2, get_group_joints, get_group_conf, compute_grasp_width, PANDA_GRIPPER_ROOTS, get_group_links
+    is_drake_pr2, get_group_joints, get_group_conf, compute_grasp_width, PANDA_GRIPPER_ROOTS, get_group_links, \
+    are_forces_balanced, get_other_arm
 from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_placement, \
     pairwise_collision, set_joint_positions, get_joint_positions, sample_placement, get_pose, waypoints_from_path, \
     unit_quat, plan_base_motion, plan_joint_motion, base_values_from_pose, pose_from_base_values, \
@@ -24,7 +25,8 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_place
     add_segments, get_max_limit, link_from_name, BodySaver, get_aabb, Attachment, interpolate_poses, \
     plan_direct_joint_motion, has_gui, create_attachment, wait_for_duration, get_extend_fn, set_renderer, \
     get_custom_limits, all_between, get_unit_vector, wait_if_gui, joint_from_name, get_joint_info,\
-    set_base_values, euler_from_quat, INF, elapsed_time, get_moving_links, flatten_links, get_relative_pose, get_link_name
+    set_base_values, euler_from_quat, INF, elapsed_time, get_moving_links, flatten_links, get_relative_pose, get_link_name, \
+    get_max_force, compute_jacobian
 
 BASE_EXTENT = 6 # 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
@@ -272,6 +274,7 @@ class Detach(Command):
         self.link = link_from_name(self.robot, PANDA_TOOL_FRAMES.get(self.arm, self.arm))
         # TODO: pose argument to maintain same object
     def apply(self, state, **kwargs):
+        print(state.attachments)
         del state.attachments[self.body]
         state.poses[self.body] = Pose(self.body, get_pose(self.body))
         del state.grasps[self.body]
@@ -371,6 +374,24 @@ def accelerate_gen_fn(gen_fn, max_attempts=1):
 
 def get_stable_gen(problem, collisions=True, **kwargs):
     obstacles = problem.fixed if collisions else []
+    robot = problem.robot
+    link = link_from_name(robot, 'l_panda_hand')
+    bodies = problem.movable
+    arm = problem.arms[0]
+    max_limits = []
+    joints = BI_PANDA_GROUPS[arm_from_arm(arm)]
+    for joint in joints:
+        jointNum = joint_from_name(robot, joint)
+        max_limits.append(get_max_force(problem.robot, jointNum))
+    tray_arm = get_other_arm(arm)
+    l = PANDA_GRIPPER_ROOTS[tray_arm]
+    Jl, Ja = compute_jacobian(problem.robot, link_from_name(problem.robot, l))
+    Jl = np.array(Jl)
+    Ja = np.array(Ja)
+    J = np.concatenate((Jl[:7,:], Ja[:7:]))
+    print("##################################################")
+    print(np.matmul(J,np.array([0,9.8,0])))
+    print(len(J), len(J[0]))
     def gen(body, surface):
         print("############ in stable gen fn")
         # TODO: surface poses are being sampled in pr2_belief
@@ -385,7 +406,7 @@ def get_stable_gen(problem, collisions=True, **kwargs):
                 break
             p = Pose(body, body_pose, surface)
             p.assign()
-            if not any(pairwise_collision(body, obst) for obst in obstacles if obst not in {body, surface}):
+            if are_forces_balanced(body, p, surface,robot, link, bodies) and not any(pairwise_collision(body, obst) for obst in obstacles if obst not in {body, surface}):
                 yield (p,)
     # TODO: apply the acceleration technique here
     return gen

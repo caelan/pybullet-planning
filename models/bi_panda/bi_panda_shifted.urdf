@@ -35,7 +35,7 @@
     </collision>
   </link>
   <joint name="l_panda_joint0" type="fixed">
-    <origin rpy="0 0 0" xyz="0 1 0.05"/>
+    <origin rpy="0 0 0" xyz="0 1.05 0.05"/>
     <parent link="bi_panda_base"/>
     <child link="l_panda_link0"/>
   </joint>

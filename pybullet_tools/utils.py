@@ -86,6 +86,7 @@ PANDA_OG_URDF = "models/franka_description/robots/panda.urdf"
 BI_PANDA_URDF = "models/bi_panda/bi_panda_shifted.urdf"
 TRAY_URDF = "/home/liam/dev/bi-manual-forceful-manipulation/bi-manual-tamp/examples/pybullet/utils/models/bi_panda/tray.urdf"
 TABLE_URDF = "/home/liam/dev/bi-manual-forceful-manipulation/bi-manual-tamp/examples/pybullet/utils/models/bi_panda/table.urdf"
+COKE_URDF = "/home/liam/dev/bi-manual-forceful-manipulation/bi-manual-tamp/examples/pybullet/utils/models/bi_panda/coke.urdf"
 # PyBullet wsg50 robots
 # wsg50_one_motor_gripper.sdf - no visual
 # wsg50_one_motor_gripper_free_base.sdf - seg fault
@@ -107,6 +108,7 @@ BLOCK_URDF = 'models/drake/objects/block_for_pick_and_place_mid_size.urdf'
 SINK_URDF = 'models/sink.urdf'
 STOVE_URDF = 'models/stove.urdf'
 
+TARGET = 3
 #####################################
 
 # I/O
@@ -1644,7 +1646,7 @@ def body_from_name(name):
     raise ValueError(name)
 
 def is_b1_on_b2(b1, b2):
-    if has_body(name_from_body(b2)):
+    if has_body(get_name(b2)):
         AABB = get_aabb(b2)
         overlapping = p.getOverlappingObjects(AABB)
         return b1 in overlapping
@@ -1688,15 +1690,15 @@ def pose_from_pose2d(pose2d, z=0.):
     x, y, theta = pose2d
     return Pose(Point(x=x, y=y, z=z), Euler(yaw=theta))
 
-def get_COM(state, b2):
+def get_COM(bodies, b2, b1 = None, p1 = None):
     totalMass = get_mass(b2)
     comR = get_pose(b2)[0]
     comMX =  totalMass * comR[0]
     comMY = totalMass * comR[1]
     comMZ = totalMass * comR[2]
     num_obs = 1
-    for body in state.bodies:
-        if(body > 3 and is_b1_on_b2(body, b2)):
+    for body in bodies:
+        if(body != b2 and body > 3 and is_b1_on_b2(body, b2)):
             pos = get_pose(body)[0]
             mass = get_mass(body)
             ratio = totalMass / (totalMass + mass)
@@ -1704,7 +1706,15 @@ def get_COM(state, b2):
             comMX = (comMX * ratio) + (mass*pos[0]/totalMass)
             comMY = (comMY * ratio) + (mass*pos[1]/totalMass)
             comMZ = (comMZ * ratio) + (mass*pos[2]/totalMass)
-    return (comMX, comMY, comMZ)
+    if b1 is not None and p1 is not None:
+        pos = p1.value[0]
+        mass = get_mass(b1)
+        ratio = totalMass / (totalMass + mass)
+        totalMass = totalMass + mass
+        comMX = (comMX * ratio) + (mass*pos[0]/totalMass)
+        comMY = (comMY * ratio) + (mass*pos[1]/totalMass)
+        comMZ = (comMZ * ratio) + (mass*pos[2]/totalMass)
+    return (comMX, comMY, comMZ), totalMass
 
 def set_base_values(body, values):
     _, _, z = get_point(body)
@@ -3060,6 +3070,7 @@ def vertices_from_link(body, link=BASE_LINK, collision=True):
     return vertices
 
 OBJ_MESH_CACHE = {}
+URDF_MESH_CACHE = {}
 
 def vertices_from_rigid(body, link=BASE_LINK):
     assert implies(link == BASE_LINK, get_num_links(body) == 0)
@@ -3074,6 +3085,13 @@ def vertices_from_rigid(body, link=BASE_LINK):
                 OBJ_MESH_CACHE[info.path] = read_obj(info.path, decompose=False)
             mesh = OBJ_MESH_CACHE[info.path]
             vertices = mesh.vertices
+        elif ext==".urdf":
+            print(URDF_MESH_CACHE)
+            if info.path not in URDF_MESH_CACHE:
+                URDF_MESH_CACHE[info.path] = p.getMeshData(body)
+            mesh = URDF_MESH_CACHE[info.path]
+            print(len(mesh))
+            vertices = mesh[1]
         else:
             raise NotImplementedError(ext)
     return vertices
@@ -3474,7 +3492,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
     get_obstacle_aabb = cached_fn(get_buffered_aabb, cache=cache, max_distance=max_distance/2., **kwargs)
     # TODO: sort bodies by bounding box size
 
-    def collision_fn(q, verbose=False):
+    def collision_fn(q, verbose=True):
         if not all_between(lower_limits, q, upper_limits):
             #print('Joint limits violated')
             if verbose: print(lower_limits, q, upper_limits)
@@ -3490,7 +3508,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
             # TODO: self-collisions between body and attached_bodies (except for the link adjacent to the robot)
             if (not use_aabb or aabb_overlap(get_moving_aabb(body), get_moving_aabb(body))) and \
                     pairwise_link_collision(body, link1, body, link2): #, **kwargs):
-                #print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
+                # print("COLLISIOn: ",get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
                 if verbose: print(body, link1, body, link2)
                 return True
         #step_simulation()
@@ -3503,7 +3521,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         for body1, body2 in product(moving_bodies, obstacles):
             if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
                     and pairwise_collision(body1, body2, **kwargs):
-                #print(get_body_name(body1), get_body_name(body2))
+                # print("Collision: ",get_body_name(body1), get_body_name(body2))
                 if verbose: print(body1, body2)
                 return True
         return False
@@ -4940,6 +4958,19 @@ def read_pcd_file(path):
         return [tuple(map(float, f.readline().split())) for _ in range(num_points)]
 
 # TODO: factor out things that don't depend on pybullet
+
+def check_overlap(pose, body):
+    lower, upper = get_aabb(body)
+    isOverlap = True
+    isOverlap &= pose[0] > lower[0]
+    isOverlap &= pose[1] > lower[1]
+    isOverlap &= pose[0] < upper[0]
+    isOverlap &= pose[1] < upper[1]
+    return isOverlap
+
+
+
+
 
 #####################################
 

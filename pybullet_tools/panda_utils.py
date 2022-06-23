@@ -17,7 +17,7 @@ from .utils import multiply, get_link_pose, set_joint_position, set_joint_positi
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
     get_extend_fn, get_moving_links, link_pairs_collision, get_link_subtree, \
     clone_body, get_all_links, pairwise_collision, tform_point, get_camera_matrix, ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, \
-    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color, wait_if_gui, Point
+    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color, wait_if_gui, Point, TARGET, get_COM, get_mass
 from .transformations import euler_from_quaternion
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
@@ -458,6 +458,36 @@ GET_GRASPS = {
 # TODO: include approach/carry info
 
 #####################################
+EPS = 0.03
+COMR = []
+totalMass = -1
+def are_forces_balanced(b1, p1, b2, robot, link, bodies):
+    if b2 == TARGET:
+        print("checking force balanced")
+        gripperPose = get_link_pose(robot, link)[0]
+        if len(COMR) == 0:
+            comR, totalMass = get_COM(bodies, TARGET)
+        pose = p1.value[0]
+        mass = get_mass(b1)
+        ratio = totalMass / (totalMass + mass)
+        comR = list(comR)
+        comR[0] = (comR[0] * ratio) + (mass * pose[0] / (totalMass + mass))
+        comR[1] = (comR[1] * ratio) + (mass * pose[1] / (totalMass + mass))
+        totalMass += mass
+        basePose = list(get_pose(TARGET)[0])
+        # basePose[0] = (basePose[0] + gripperPose[0])/2
+        # basePose[1] = (basePose[1] + gripperPose[1])/2
+        valid = True
+        valid &= abs(basePose[0] - comR[0]) < EPS
+        valid &= abs(basePose[1] - comR[1]) < EPS
+        if valid:
+            print('\n\n\n\n\n')
+            print(abs(basePose[0] - comR[0]), abs(basePose[1] - comR[1]))
+        return valid
+    else:
+        print("$$$$$$$$$$$$$$ item is not tray")
+        print('\n\n\n\n\n')
+    return True
 
 # Inverse reachability
 
