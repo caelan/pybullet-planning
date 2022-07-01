@@ -5719,6 +5719,7 @@ def read_obj(path, decompose=True):
         elif tokens[0] == 'v':
             vertex = tuple(map(float, tokens[1:4]))
             vertices.append(vertex)
+            #mesh.vertices.append(vertex)
         elif tokens[0] in ('vn', 's'):
             pass
         elif tokens[0] == 'f':
@@ -5727,6 +5728,8 @@ def read_obj(path, decompose=True):
             mesh.faces.append(face)
     if not decompose:
         return Mesh(vertices, faces)
+    if not meshes:
+        return {None: Mesh(vertices, faces)}
 
     # TODO: separate into a standalone method
     #if not meshes:
