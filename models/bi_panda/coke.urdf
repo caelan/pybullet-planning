@@ -3,7 +3,7 @@
 
 	<link name="cylinder">
 		<inertial>
-			<mass value="0.1"/>
+			<mass value="2"/>
 			<inertia  ixx="0.002385" ixy="0.00"  ixz="0.00" iyy="0.002385" iyz="0.00" izz="0.00027" />
 		</inertial>
 		<visual>

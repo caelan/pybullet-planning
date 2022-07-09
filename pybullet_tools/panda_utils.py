@@ -458,7 +458,7 @@ GET_GRASPS = {
 # TODO: include approach/carry info
 
 #####################################
-EPS = 0.03
+EPS = 0.05
 COMR = []
 totalMass = -1
 def are_forces_balanced(b1, p1, b2, robot, link, bodies):
@@ -834,7 +834,7 @@ def compute_grasp_width(robot, arm, body, grasp_pose, **kwargs):
     return close_until_collision(robot, gripper_joints, bodies=[body], **kwargs)
 
 
-def create_gripper(robot, arm, visual=True):
+def create_gripper(robot, arm, visual=False):
     link_name = PANDA_GRIPPER_ROOTS[arm]
     # gripper = load_pybullet(os.path.join(get_data_path(), 'pr2_gripper.urdf'))
     # gripper = load_pybullet(os.path.join(get_models_path(), 'pr2_description/pr2_l_gripper.urdf'), fixed_base=False)

@@ -1648,9 +1648,21 @@ def body_from_name(name):
 def is_b1_on_b2(b1, b2):
     if has_body(get_name(b2)):
         AABB = get_aabb(b2)
-        overlapping = p.getOverlappingObjects(AABB)
-        return b1 in overlapping
+        AABB2 = get_aabb(b1)
+        isOn = AABB2[1][0] <= AABB[1][0] and AABB2[0][0] >= AABB[0][0]
+        isOn &= AABB2[1][1] <= AABB[1][1] and AABB2[0][1] >= AABB[0][1]
+        return isOn
     return False
+
+def is_pose_on_r(pose, r):
+    AABB = get_aabb(r)
+    print("(((((((((((((((((")
+    print(pose[0])
+    print(AABB[1])
+    print(AABB[0])
+    isOn = pose[0][0] <= AABB[1][0] and pose[0][0] >= AABB[0][0]
+    isOn &= pose[0][1] <= AABB[1][1] and pose[0][1] >= AABB[0][1]
+    return isOn
 
 def remove_body(body):
     if (CLIENT, body) in INFO_FROM_BODY:
@@ -1690,22 +1702,33 @@ def pose_from_pose2d(pose2d, z=0.):
     x, y, theta = pose2d
     return Pose(Point(x=x, y=y, z=z), Euler(yaw=theta))
 
-def get_COM(bodies, b2, b1 = None, p1 = None):
+def get_COM(bodies, b2, b1 = None, p1 = None, poses = None):
     totalMass = get_mass(b2)
     comR = get_pose(b2)[0]
     comMX =  totalMass * comR[0]
     comMY = totalMass * comR[1]
     comMZ = totalMass * comR[2]
     num_obs = 1
-    for body in bodies:
-        if(body != b2 and body > 3 and is_b1_on_b2(body, b2)):
-            pos = get_pose(body)[0]
-            mass = get_mass(body)
-            ratio = totalMass / (totalMass + mass)
-            totalMass = totalMass + mass
-            comMX = (comMX * ratio) + (mass*pos[0]/totalMass)
-            comMY = (comMY * ratio) + (mass*pos[1]/totalMass)
-            comMZ = (comMZ * ratio) + (mass*pos[2]/totalMass)
+    if poses is not None:
+        for body in poses:
+            if(body != b2 and body > 3):
+                pos = poses[body][0]
+                mass = get_mass(body)
+                ratio = totalMass / (totalMass + mass)
+                totalMass = totalMass + mass
+                comMX = (comMX * ratio) + (mass*pos[0]/totalMass)
+                comMY = (comMY * ratio) + (mass*pos[1]/totalMass)
+                comMZ = (comMZ * ratio) + (mass*pos[2]/totalMass)
+    else:
+        for body in bodies:
+            if(body != b2 and body > 3 and is_b1_on_b2(body, b2)):
+                pos = get_pose(body)[0]
+                mass = get_mass(body)
+                ratio = totalMass / (totalMass + mass)
+                totalMass = totalMass + mass
+                comMX = (comMX * ratio) + (mass*pos[0]/totalMass)
+                comMY = (comMY * ratio) + (mass*pos[1]/totalMass)
+                comMZ = (comMZ * ratio) + (mass*pos[2]/totalMass)
     if b1 is not None and p1 is not None:
         pos = p1.value[0]
         mass = get_mass(b1)
@@ -1875,12 +1898,19 @@ def get_joint_torques(body, joints):
 def set_joint_state(body, joint, position, velocity):
     p.resetJointState(body, joint, targetValue=position, targetVelocity=velocity, physicsClientId=CLIENT)
 
+
 def set_joint_position(body, joint, value):
     # TODO: remove targetVelocity=0
     p.resetJointState(body, joint, targetValue=value, targetVelocity=0, physicsClientId=CLIENT)
-
+    # p.setJointMotorControl2(body, joint, p.POSITION_CONTROL, targetPosition=value, targetVelocity=0)
 # def set_joint_velocity(body, joint, velocity):
 #     p.resetJointState(body, joint, targetVelocity=velocity, physicsClientId=CLIENT) # TODO: targetValue required
+def set_joint_position_torque(body, joint, value):
+    p.setJointMotorControl2(body, joint, p.POSITION_CONTROL, targetPosition=value, targetVelocity=0, force=get_max_force(body, joint))
+
+def set_joint_positions_torque(body, joints, values):
+    max_forces = [get_max_force(body, joint) for joint in joints]
+    p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, forces=max_forces, targetPositions=values)
 
 def set_joint_states(body, joints, positions, velocities):
     assert len(joints) == len(positions) == len(velocities)
@@ -3521,7 +3551,10 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         for body1, body2 in product(moving_bodies, obstacles):
             if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
                     and pairwise_collision(body1, body2, **kwargs):
-                # print("Collision: ",get_body_name(body1), get_body_name(body2))
+                print("**************Collision: ",body1," ", body2)
+                continue
+                if (body1[0] == 4 and body2 == 2) or (body1[0] == 2 and body2 == 4):
+                    continue
                 if verbose: print(body1, body2)
                 return True
         return False
@@ -4383,7 +4416,7 @@ def multiple_sub_inverse_kinematics(robot, first_joint, target_link, target_pose
     return solutions
 
 def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
-                          max_iterations=400, max_time=INF, custom_limits={}, **kwargs):
+                          max_iterations=500, max_time=INF, custom_limits={}, **kwargs):
     # TODO: fix stationary joints
     # TODO: pass in set of movable joints and take least common ancestor
     # TODO: update with most recent bullet updates
