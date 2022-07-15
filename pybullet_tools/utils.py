@@ -3678,6 +3678,12 @@ def get_closest_points(body1, body2, link1=None, link2=None, max_distance=MAX_DI
                                      distance=max_distance, physicsClientId=CLIENT)
     return [CollisionInfo(*info) for info in results]
 
+def get_proximity(body1, body2, **kwargs):
+    collision_infos = get_closest_points(body1, body2, max_distance=INF, **kwargs)
+    if not collision_infos:
+        return INF
+    return min(collision_info.contactDistance for collision_info in collision_infos)
+
 def pairwise_link_collision(body1, link1, body2, link2=BASE_LINK, **kwargs):
     return len(get_closest_points(body1, body2, link1=link1, link2=link2, **kwargs)) != 0
 
@@ -4079,7 +4085,7 @@ def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstac
     waypoints = [start_conf] + list(waypoints)
     for i, waypoint in enumerate(waypoints):
         if collision_fn(waypoint):
-            #print('Warning: waypoint configuration {}/{} is in collision'.format(i, len(waypoints)))
+            #print('Warning: waypoint configuration {}/{} is in collision'.format(i+1, len(waypoints)))
             return None
     return interpolate_joint_waypoints(body, joints, waypoints, resolutions=resolutions, collision_fn=collision_fn)
 
