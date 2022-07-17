@@ -1,0 +1,84 @@
+<robot name="bin">
+  <link name="bin_body">
+    <collision>
+      <origin xyz="0 0 -.085" />
+      <geometry>
+        <box size="0.21 0.35 0.01" />
+      </geometry>
+    </collision>
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+       <mass value="0.1"/>
+       <inertia ixx="0.000166666667" ixy="0" ixz="0" iyy="0.000166666667" iyz="0" izz="0.000166666667"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -.085" />
+      <material name="c">
+        <color rgba="0.6 0.6 0.6 1.0" />
+      </material>
+      <geometry>
+        <box size="0.21 0.35 0.01" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.105 0 0" />
+      <geometry>
+        <box size="0.01 0.35 0.17" />
+      </geometry>
+    </collision>
+    <visual>
+      <origin xyz="0.105 0 0" />
+      <material name="c">
+        <color rgba="0.6 0.6 0.6 1.0" />
+      </material>
+      <geometry>
+        <box size="0.01 0.35 0.17" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="-0.105 0 0" />
+      <geometry>
+        <box size="0.01 0.35 0.17" />
+      </geometry>
+    </collision>
+    <visual>
+      <origin xyz="-0.105 0 0" />
+      <material name="c">
+        <color rgba="0.6 0.6 0.6 1.0" />
+      </material>
+      <geometry>
+        <box size="0.01 0.35 0.17" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0.175 0" />
+      <geometry>
+        <box size="0.21 0.01 0.17" />
+      </geometry>
+    </collision>
+    <visual>
+      <origin xyz="0 0.175 0" />
+      <material name="c">
+        <color rgba="0.6 0.6 0.6 1.0" />
+      </material>
+      <geometry>
+        <box size="0.21 0.01 0.17" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.175 0" />
+      <geometry>
+        <box size="0.21 0.01 0.17" />
+      </geometry>
+    </collision>
+    <visual>
+      <origin xyz="0 -0.175 0" />
+      <material name="c">
+        <color rgba="0.6 0.6 0.6 1.0" />
+      </material>
+      <geometry>
+        <box size="0.21 0.01 0.17" />
+      </geometry>
+    </visual>
+  </link>
+</robot>

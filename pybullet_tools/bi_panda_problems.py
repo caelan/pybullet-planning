@@ -6,7 +6,7 @@ from .panda_utils import set_arm_conf, REST_LEFT_ARM, open_arm, \
 from .utils import create_box, set_base_values, set_point, set_pose, get_pose, \
     get_bodies, z_rotation, load_model, load_pybullet, HideOutput, create_body, \
     get_box_geometry, get_cylinder_geometry, create_shape_array, unit_pose, Pose, BI_PANDA_URDF, \
-    Point, LockRenderer, FLOOR_URDF, TABLE_URDF, add_data_path, TAN, set_color, BASE_LINK, remove_body
+    Point, LockRenderer, FLOOR_URDF, TABLE_URDF, add_data_path, TAN, set_color, BASE_LINK, remove_body, BI_PANDA_PLATE_URDF
 
 LIGHT_GREY = (0.7, 0.7, 0.7, 1.)
 
@@ -15,7 +15,7 @@ class Problem(object):
                  surfaces=tuple(), sinks=tuple(), stoves=tuple(), buttons=tuple(),
                  goal_conf=None, goal_holding=tuple(), goal_on=tuple(),
                  goal_cleaned=tuple(), goal_cooked=tuple(), costs=False,
-                 body_names={}, body_types=[], base_limits=None, holding_arm = None, holding_grasp = None):
+                 body_names={}, body_types=[], base_limits=None, holding_arm = None, holding_grasp = None, target_width=0):
         self.robot = robot
         self.arms = arms
         self.movable = movable
@@ -35,6 +35,7 @@ class Problem(object):
         self.base_limits = base_limits
         self.holding_arm = holding_arm
         self.holding_grasp = holding_grasp
+        self.target_width = target_width
         all_movable = [self.robot] + list(self.movable)
         self.fixed = list(filter(lambda b: b not in all_movable, get_bodies()))
         self.gripper = None
@@ -60,7 +61,15 @@ def get_fixed_bodies(problem): # TODO: move to problem?
 def create_bi_panda():
     with LockRenderer():
         with HideOutput():
+            bi_panda = load_model(BI_PANDA_PLATE_URDF, fixed_base=True)
+            # bi_panda = load_model(BI_PANDA_PLATE_URDF, fixed_base=True)
+    return bi_panda
+
+def create_bi_panda_with_gripper():
+    with LockRenderer():
+        with HideOutput():
             bi_panda = load_model(BI_PANDA_URDF, fixed_base=True)
+            # bi_panda = load_model(BI_PANDA_PLATE_URDF, fixed_base=True)
     return bi_panda
 
 def create_floor(**kwargs):

@@ -1,0 +1,20 @@
+<robot name="none">
+       <link name="none">
+           <visual>
+               <origin rpy="1.57 0 0" xyz="0 0 0" />
+               <geometry>
+                   <mesh filename="meshes/visual/basket.obj" />
+               </geometry>
+           </visual>
+          <collision>
+              <geometry>
+                  <box size="0.981866 1.000000 0.821304" />
+              </geometry>
+          </collision>
+
+          <inertial>
+            <mass value="0.0" />
+            <inertia ixx="0.0" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="0.0" />
+          </inertial>
+      </link>
+  </robot>

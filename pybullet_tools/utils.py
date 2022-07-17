@@ -30,7 +30,8 @@ directory = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(directory, '../motion'))
 from motion_planners.rrt_connect import birrt
 from motion_planners.meta import direct_path
-
+from pybullet_utils import bullet_client as bc
+from pybullet_utils import urdfEditor as ed
 #from ..motion.motion_planners.rrt_connect import birrt, direct_path
 
 # from future_builtins import map, filter
@@ -84,7 +85,9 @@ PANDA_URDF = 'franka_panda/panda.urdf'
 
 PANDA_OG_URDF = "models/franka_description/robots/panda.urdf"
 BI_PANDA_URDF = "models/bi_panda/bi_panda_shifted.urdf"
+BI_PANDA_PLATE_URDF = "models/bi_panda/bi_panda_shifted_plate.urdf"
 TRAY_URDF = "/home/liam/dev/bi-manual-forceful-manipulation/bi-manual-tamp/examples/pybullet/utils/models/bi_panda/tray.urdf"
+BIN_URDF = "/home/liam/dev/bi-manual-forceful-manipulation/bi-manual-tamp/examples/pybullet/utils/models/bi_panda/bin.urdf"
 TABLE_URDF = "/home/liam/dev/bi-manual-forceful-manipulation/bi-manual-tamp/examples/pybullet/utils/models/bi_panda/table.urdf"
 COKE_URDF = "/home/liam/dev/bi-manual-forceful-manipulation/bi-manual-tamp/examples/pybullet/utils/models/bi_panda/coke.urdf"
 # PyBullet wsg50 robots
@@ -108,7 +111,7 @@ BLOCK_URDF = 'models/drake/objects/block_for_pick_and_place_mid_size.urdf'
 SINK_URDF = 'models/sink.urdf'
 STOVE_URDF = 'models/stove.urdf'
 
-TARGET = 3
+TARGET = "tray"
 #####################################
 
 # I/O
@@ -1646,20 +1649,14 @@ def body_from_name(name):
     raise ValueError(name)
 
 def is_b1_on_b2(b1, b2):
-    if has_body(get_name(b2)):
-        AABB = get_aabb(b2)
-        AABB2 = get_aabb(b1)
-        isOn = AABB2[1][0] <= AABB[1][0] and AABB2[0][0] >= AABB[0][0]
-        isOn &= AABB2[1][1] <= AABB[1][1] and AABB2[0][1] >= AABB[0][1]
-        return isOn
-    return False
+    AABB = get_aabb(b2)
+    AABB2 = get_aabb(b1)
+    isOn = AABB2[1][0] <= AABB[1][0] and AABB2[0][0] >= AABB[0][0]
+    isOn &= AABB2[1][1] <= AABB[1][1] and AABB2[0][1] >= AABB[0][1]
+    return isOn
 
 def is_pose_on_r(pose, r):
     AABB = get_aabb(r)
-    print("(((((((((((((((((")
-    print(pose[0])
-    print(AABB[1])
-    print(AABB[0])
     isOn = pose[0][0] <= AABB[1][0] and pose[0][0] >= AABB[0][0]
     isOn &= pose[0][1] <= AABB[1][1] and pose[0][1] >= AABB[0][1]
     return isOn
@@ -3510,7 +3507,6 @@ def get_self_link_pairs(body, joints, disabled_collisions=set(), only_moving=Tru
 
 def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
                      custom_limits={}, use_aabb=False, cache=False, max_distance=MAX_DISTANCE, **kwargs):
-    print("in collision fn")
     # TODO: convert most of these to keyword arguments
     check_link_pairs = get_self_link_pairs(body, joints, disabled_collisions) if self_collisions else []
     moving_links = frozenset(get_moving_links(body, joints))
@@ -3551,8 +3547,6 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         for body1, body2 in product(moving_bodies, obstacles):
             if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
                     and pairwise_collision(body1, body2, **kwargs):
-                print("**************Collision: ",body1," ", body2)
-                continue
                 if (body1[0] == 4 and body2 == 2) or (body1[0] == 2 and body2 == 4):
                     continue
                 if verbose: print(body1, body2)
@@ -5057,3 +5051,12 @@ def readWrl(filename, name='wrlObj', scale=1.0, color='black'):
     # Keep color only in top entry.
     return Shape([part], None, name=name, color=color)
 """
+
+def get_same_relative_pose(pose, prevTargetPose, targetPose):
+    rel_pose = (pose[0][0] - prevTargetPose[0][0],
+                pose[0][1] - prevTargetPose[0][1],
+                pose[0][2] - prevTargetPose[0][2])
+    new_pose = ((targetPose[0][0] + rel_pose[0],
+                targetPose[0][1] + rel_pose[1],
+                targetPose[0][2] + rel_pose[2]), pose[1])
+    return new_pose

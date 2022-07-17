@@ -17,7 +17,7 @@ from .utils import multiply, get_link_pose, set_joint_position, set_joint_positi
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
     get_extend_fn, get_moving_links, link_pairs_collision, get_link_subtree, \
     clone_body, get_all_links, pairwise_collision, tform_point, get_camera_matrix, ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, \
-    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color, wait_if_gui, Point, TARGET, get_COM, get_mass
+    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color, wait_if_gui, Point, TARGET, get_COM, get_mass, body_from_name
 from .transformations import euler_from_quaternion
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
@@ -55,8 +55,9 @@ BI_PANDA_GROUPS = {
                             'l_panda_joint5', 'l_panda_joint6', 'l_panda_joint7'],
     arm_from_arm(RIGHT_ARM): ['r_panda_joint1', 'r_panda_joint2', 'r_panda_joint3','r_panda_joint4',
                             'r_panda_joint5', 'r_panda_joint6', 'r_panda_joint7'],
-    gripper_from_arm(LEFT_ARM): ['l_panda_hand_joint', 'l_panda_finger_joint1',
-                                 'l_panda_finger_joint2', 'l_panda_grasptarget_hand'],
+    # gripper_from_arm(LEFT_ARM): ['l_panda_hand_joint', 'l_panda_finger_joint1',
+    #                              'l_panda_finger_joint2', 'l_panda_grasptarget_hand'],
+    gripper_from_arm(LEFT_ARM): ['l_panda_hand_joint', 'l_panda_grasptarget_hand'],
     gripper_from_arm(RIGHT_ARM): ['r_panda_hand_joint', 'r_panda_finger_joint1',
                                  'r_panda_finger_joint2', 'r_panda_grasptarget_hand'],
 }
@@ -91,6 +92,8 @@ PANDA_BASE_LINK = 'bi_panda_base'
 
 # Arm tool poses
 # TOOL_POSE = ([0.18, 0., 0.], [0., 0.70710678, 0., 0.70710678]) # l_gripper_palm_link
+
+# TOOL_POSE = Pose(point=Point(0, 0.0, 0.1),euler=Euler(roll= 0,pitch=0, yaw=0))
 
 TOOL_POSE = Pose(point=Point(0, 0.0, 0.1),euler=Euler(roll= 0,pitch=0, yaw=0))
 
@@ -153,7 +156,7 @@ def get_base_pose(pr2):
     return get_link_pose(pr2, link_from_name(pr2, PANDA_BASE_LINK))
 
 def rightarm_from_leftarm(config):
-    right_from_left = np.array([1, 1, 1, 1, 1, 1, 1])
+    right_from_left = np.array([-1, 1, 1, 1, 1, 1, 1])
     return config * right_from_left
 
 def arm_conf(arm, left_config):
@@ -462,11 +465,12 @@ EPS = 0.05
 COMR = []
 totalMass = -1
 def are_forces_balanced(b1, p1, b2, robot, link, bodies):
-    if b2 == TARGET:
+    names = [get_body_name(body) for body in get_bodies() ]
+    if TARGET in names and b2 == body_from_name(TARGET):
         print("checking force balanced")
         gripperPose = get_link_pose(robot, link)[0]
         if len(COMR) == 0:
-            comR, totalMass = get_COM(bodies, TARGET)
+            comR, totalMass = get_COM(bodies, body_from_name(TARGET))
         pose = p1.value[0]
         mass = get_mass(b1)
         ratio = totalMass / (totalMass + mass)
@@ -474,7 +478,7 @@ def are_forces_balanced(b1, p1, b2, robot, link, bodies):
         comR[0] = (comR[0] * ratio) + (mass * pose[0] / (totalMass + mass))
         comR[1] = (comR[1] * ratio) + (mass * pose[1] / (totalMass + mass))
         totalMass += mass
-        basePose = list(get_pose(TARGET)[0])
+        basePose = list(get_pose(body_from_name(TARGET))[0])
         # basePose[0] = (basePose[0] + gripperPose[0])/2
         # basePose[1] = (basePose[1] + gripperPose[1])/2
         valid = True
