@@ -467,7 +467,6 @@ totalMass = -1
 def are_forces_balanced(b1, p1, b2, robot, link, bodies):
     names = [get_body_name(body) for body in get_bodies() ]
     if TARGET in names and b2 == body_from_name(TARGET):
-        print("checking force balanced")
         gripperPose = get_link_pose(robot, link)[0]
         if len(COMR) == 0:
             comR, totalMass = get_COM(bodies, body_from_name(TARGET))
@@ -485,12 +484,8 @@ def are_forces_balanced(b1, p1, b2, robot, link, bodies):
         valid &= abs(basePose[0] - comR[0]) < EPS
         valid &= abs(basePose[1] - comR[1]) < EPS
         if valid:
-            print('\n\n\n\n\n')
             print(abs(basePose[0] - comR[0]), abs(basePose[1] - comR[1]))
         return valid
-    else:
-        print("$$$$$$$$$$$$$$ item is not tray")
-        print('\n\n\n\n\n')
     return True
 
 # Inverse reachability

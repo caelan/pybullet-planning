@@ -691,7 +691,6 @@ def get_ik_ir_gen(problem, max_attempts=25, learned=True, teleport=False, **kwar
                     newTargetPos.value = pose
 
                     if target_overlap:
-                        print("original pose: ", poses[b])
                         new_pose = get_same_relative_pose(p.value, prevPose, pose)
                         p.value = new_pose
                         poses[b] = p.value
