@@ -17,7 +17,7 @@ def main(arm=LEFT_ARM):
     np.set_printoptions(precision=3)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--first_joint', default=None, choices=[None, 'x', 'y', 'z', 'torso_lift_joint', 'l_shoulder_pan_joint'])
+    parser.add_argument('--first_joint', default=None, choices=[None, 'x', 'y', 'theta', 'torso_lift_joint', 'l_shoulder_pan_joint'])
     parser.add_argument('--drake', action='store_true')
     args = parser.parse_args()
     print('Args:', args)
