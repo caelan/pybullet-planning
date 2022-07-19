@@ -2280,13 +2280,15 @@ def link_from_name(body, name):
             return link
     raise ValueError(body, name)
 
-
 def has_link(body, name):
     try:
         link_from_name(body, name)
     except ValueError:
         return False
     return True
+
+def links_from_names(body, names):
+    return tuple(link_from_name(body, name) for name in names)
 
 LinkState = namedtuple('LinkState', ['linkWorldPosition', 'linkWorldOrientation',
                                      'localInertialFramePosition', 'localInertialFrameOrientation',
