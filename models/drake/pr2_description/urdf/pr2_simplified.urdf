@@ -94,18 +94,19 @@
   <link name="base_link_0"/>
   <link name="base_link_1"/>
   <joint name="x" type="prismatic">
-    <limit lower="-5" upper="5"/>
+    <limit lower="-5" upper="5" effort="1000.0" velocity="1.0"/>
     <parent link="world_link"/>
     <child link="base_link_0"/>
     <axis xyz="1 0 0"/>
   </joint>
   <joint name="y" type="prismatic">
-    <limit lower="-5" upper="5"/>
+    <limit lower="-5" upper="5" effort="1000.0" velocity="1.0"/>
     <parent link="base_link_0"/>
     <child link="base_link_1"/>
     <axis xyz="0 1 0"/>
   </joint>
   <joint name="theta" type="continuous">
+    <limit effort="1000.0" velocity="1.5708"/>
     <parent link="base_link_1"/>
     <child link="base_footprint"/>
     <axis xyz="0 0 1"/>

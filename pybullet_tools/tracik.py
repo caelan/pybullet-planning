@@ -6,11 +6,12 @@ from tracikpy import TracIKSolver
 
 from pybullet_tools.utils import Pose, multiply, invert, tform_from_pose, get_model_info, BASE_LINK, \
     get_link_name, link_from_name, get_joint_name, joint_from_name, parent_link_from_joint, joints_from_names, \
-    links_from_names, get_link_pose, draw_pose, set_joint_positions, get_joint_positions
+    links_from_names, get_link_pose, draw_pose, set_joint_positions, get_joint_positions, get_joint_limits, \
+    CIRCULAR_LIMITS, get_custom_limits
 
 
 class IKSolver(object):
-    def __init__(self, body, tool_link, first_joint=None, tool_offset=Pose(),
+    def __init__(self, body, tool_link, first_joint=None, tool_offset=Pose(), custom_limits={},
                  seed=None, max_time=5e-3, error=1e-5): #, **kwargs):
         self.tool_link = link_from_name(body, tool_link)
         if first_joint is None:
@@ -32,6 +33,9 @@ class IKSolver(object):
             timeout=max_time, epsilon=error,
             solve_type='Speed', # Speed | Distance | Manipulation1 | Manipulation2
         )
+        self.ik_solver.joint_limits = list(get_custom_limits(
+            self.body, self.joints, custom_limits=custom_limits, circular_limits=CIRCULAR_LIMITS))
+
         self.tool_offset = tool_offset # None
         self.random_generator = np.random.RandomState(seed)
         self.solutions = []
@@ -121,7 +125,7 @@ class IKSolver(object):
         conf = self.ik_solver.ik(tform, qinit=seed_conf, bx=bx, by=by, bz=bz, brx=brx, bry=bry, brz=brz)
         self.solutions.append((pose, conf))
         return conf
-    def solve_closest(self, tool_pose, **kwargs):
+    def solve_current(self, tool_pose, **kwargs): # solve_closest
         return self.solve(tool_pose, seed_conf=self.get_conf(), **kwargs)
     def solve_randomized(self, tool_pose, **kwargs):
         return self.solve(tool_pose, seed_conf=self.sample_conf(), **kwargs)

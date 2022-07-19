@@ -3,16 +3,19 @@
 from __future__ import print_function
 
 import argparse
+import numpy as np
 
 from pybullet_tools.pr2_utils import PR2_URDF, DRAKE_PR2_URDF, \
     SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, REST_LEFT_ARM, rightarm_from_leftarm, PR2_TOOL_FRAMES, LEFT_ARM
 from pybullet_tools.tracik import IKSolver
 from pybullet_tools.utils import set_joint_positions, add_data_path, connect, dump_body, load_model, joints_from_names, \
     disconnect, HideOutput, load_pybullet, base_aligned_z, Point, set_point, get_aabb, \
-    FLOOR_URDF, wait_unlocked
+    FLOOR_URDF, wait_unlocked, multiply, Pose, Point
 
 
-def main():
+def main(arm=LEFT_ARM):
+    np.set_printoptions(precision=3)
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--first_joint', default=None, choices=[None, 'x', 'y', 'z', 'torso_lift_joint', 'l_shoulder_pan_joint'])
     parser.add_argument('--drake', action='store_true')
@@ -32,7 +35,7 @@ def main():
     #z = stable_z_on_aabb(robot, AABB(np.zeros(3), np.zeros(3)))
     print('Base z: {:.3f}'.format(z))
     set_point(robot, Point(z=z))
-    wait_unlocked()
+    open_arm(robot, arm)
 
     group_confs = {
         'left_arm': SIDE_HOLDING_LEFT_ARM, # TOP_HOLDING_LEFT_ARM | SIDE_HOLDING_LEFT_ARM
@@ -45,18 +48,22 @@ def main():
 
     ########################################
 
-    arm = LEFT_ARM
-    open_arm(robot, arm)
     tool_link = PR2_TOOL_FRAMES[LEFT_ARM]
     ik_solver = IKSolver(robot, tool_link=tool_link, first_joint=args.first_joint)
     print(ik_solver)
 
     tool_pose = ik_solver.get_tool_pose()
-    ik_solver.draw_pose(tool_pose)
-    while True:
-        #conf = ik_solver.sample_conf()
-        conf = ik_solver.solve_randomized(tool_pose)
-        print('Solution:', conf)
+    #target_pose = tool_pose
+    target_pose = multiply(Pose(point=Point(z=0.05)), tool_pose)
+    ik_solver.draw_pose(target_pose)
+    print('Target pose:', target_pose)
+    print('Lower:', ik_solver.lower_limits)
+    print('Upper:', ik_solver.upper_limits)
+    print('Initial conf:', np.array(ik_solver.get_conf()))
+    wait_unlocked('Continue')
+
+    for i, conf in enumerate(ik_solver.generate(tool_pose)):
+        print('{}) Solution: {}'.format(i, np.array(conf)))
         if conf is not None:
             ik_solver.set_conf(conf)
         wait_unlocked('Continue')
