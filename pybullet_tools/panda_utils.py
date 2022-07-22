@@ -11,7 +11,7 @@ from .bi_panda_never_collisions import NEVER_COLLISIONS
 from .utils import multiply, get_link_pose, set_joint_position, set_joint_positions, get_joint_positions, get_min_limit, get_max_limit, quat_from_euler, read_pickle, set_pose, \
     get_pose, euler_from_quat, link_from_name, point_from_pose, invert, Pose, \
     unit_pose, joints_from_names, PoseSaver, get_aabb, get_joint_limits, ConfSaver, get_bodies, create_mesh, remove_body, \
-    unit_from_theta, violates_limit, \
+    unit_from_theta, violates_limit, set_joint_positions_torque,\
     violates_limits, add_line, get_body_name, get_num_joints, approximate_as_cylinder, \
     approximate_as_prism, unit_quat, unit_point, angle_between, quat_from_pose, compute_jacobian, \
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
@@ -104,9 +104,9 @@ TOOL_POSE = Pose(point=Point(0, 0.0, 0.1),euler=Euler(roll= 0,pitch=0, yaw=0))
 # Special configurations
 EXTENDED_LEFT_ARM = [0, PI/2, 0.0, 0, 0, PI, -PI/2-PI/4]
 TOP_HOLDING_LEFT_ARM = [0, PI/8, 0.0, -PI/3, 0, PI/2, -PI/2-.01]
-TOP_HOLDING_LEFT_ARM_CENTERED = [-PI/2, PI/4, PI, -5*PI/8, 0, 1.1, PI/3-.1]
+TOP_HOLDING_LEFT_ARM_CENTERED = [PI/2, PI/4, PI, -5*PI/8, 0, 1.1, PI/3-.1]
 SIDE_HOLDING_LEFT_ARM = [0, PI/8, PI, -PI/3, PI, 0.9*PI/2, -PI/4]
-PLATE_GRASP_LEFT_ARM = [-PI/2, PI/2, 0.0, 0, 0, PI, -PI/4]
+PLATE_GRASP_LEFT_ARM = [-PI/2, PI/2, 0.0, 0, 0, PI, -PI/2-.8]
 REST_LEFT_ARM = [0, 2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -1.4851759349218694, 1.3911839347271555,
                  -1.6531320011389408, -2.978586584568441]
@@ -461,12 +461,13 @@ GET_GRASPS = {
 # TODO: include approach/carry info
 
 #####################################
-EPS = 0.05
+EPS = 0.07
 COMR = []
 totalMass = -1
 def are_forces_balanced(b1, p1, b2, robot, link, bodies):
     names = [get_body_name(body) for body in get_bodies() ]
-    if TARGET in names and b2 == body_from_name(TARGET):
+    print(names)
+    if TARGET in names and b2 == body_from_name(TARGET) and TARGET == 'tray':
         gripperPose = get_link_pose(robot, link)[0]
         if len(COMR) == 0:
             comR, totalMass = get_COM(bodies, body_from_name(TARGET))

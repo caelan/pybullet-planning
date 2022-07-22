@@ -4410,7 +4410,7 @@ def multiple_sub_inverse_kinematics(robot, first_joint, target_link, target_pose
     return solutions
 
 def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
-                          max_iterations=500, max_time=INF, custom_limits={}, **kwargs):
+                          max_iterations=25, max_time=INF, custom_limits={}, **kwargs):
     # TODO: fix stationary joints
     # TODO: pass in set of movable joints and take least common ancestor
     # TODO: update with most recent bullet updates
