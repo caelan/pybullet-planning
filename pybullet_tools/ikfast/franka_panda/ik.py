@@ -36,15 +36,24 @@ def get_tool_from_ik(robot, arm):
 def get_ik_generator(robot, arm, gripper_link, gripper_pose, max_attempts=25, max_time=1.3):
   return ikfast_inverse_kinematics(robot, info[arm], gripper_link, gripper_pose, max_attempts=25, max_time=1.3)
 
-def sample_tool_ik(robot, arm, tool_pose, nearby_conf=USE_ALL, max_attempts=25, custom_limits={}, **kwargs):
+def get_joint_distances(current_config, new_config):
+    d = 0
+    n = len(new_config)
+    for i in range(len(new_config)):
+        d += ((new_config[i] - current_config[i])**2/n)
+    return d
+
+def sample_tool_ik(robot, arm, tool_pose, nearby_conf=USE_CURRENT, max_attempts=25, custom_limits={}, **kwargs):
     ik_pose = multiply(tool_pose, get_tool_from_ik(robot, arm))
     generator = get_ik_generator(robot, arm, link_from_name(robot, PANDA_TOOL_FRAMES[arm]), ik_pose, **kwargs)
     arm_joints = get_arm_joints(robot, arm)
+    current_conf = get_joint_positions(robot, arm_joints)
     for _ in range(max_attempts):
         try:
             solutions = next(generator)
             # TODO: sort by distance from the current solution when attempting?
             if solutions:
+                # distances = [get_joint_distances(current_conf, new_config) for new_config in solutions]
                 return solutions
         except StopIteration:
             break

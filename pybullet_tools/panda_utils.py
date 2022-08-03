@@ -105,7 +105,7 @@ TOOL_POSE = Pose(point=Point(0, 0.0, 0.1),euler=Euler(roll= 0,pitch=0, yaw=0))
 EXTENDED_LEFT_ARM = [0, PI/2, 0.0, 0, 0, PI, -PI/2-PI/4]
 TOP_HOLDING_LEFT_ARM = [0, PI/8, 0.0, -PI/3, 0, PI/2, -PI/2-.01]
 TOP_HOLDING_LEFT_ARM_CENTERED = [PI/2, PI/4, PI, -5*PI/8, 0, 1.1, PI/3-.1]
-SIDE_HOLDING_LEFT_ARM = [0, PI/8, PI, -PI/3, PI, 0.9*PI/2, -PI/4]
+SIDE_HOLDING_LEFT_ARM = [0, PI/8, PI, -PI/3, PI, 0.9*PI/2 - PI/2, 3*PI/4]
 PLATE_GRASP_LEFT_ARM = [-PI/2, PI/2, 0.0, 0, 0, PI, -PI/2-.8]
 REST_LEFT_ARM = [0, 2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -1.4851759349218694, 1.3911839347271555,
@@ -461,7 +461,7 @@ GET_GRASPS = {
 # TODO: include approach/carry info
 
 #####################################
-EPS = 0.07
+EPS = 0.03
 COMR = []
 totalMass = -1
 def are_forces_balanced(b1, p1, b2, robot, link, bodies):

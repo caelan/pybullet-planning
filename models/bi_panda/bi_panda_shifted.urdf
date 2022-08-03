@@ -64,7 +64,7 @@
     <parent link="l_panda_link0"/>
     <child link="l_panda_link1"/>
     <axis xyz="0 0 1"/>
-    <limit effort="87" lower="-2.9671" upper="2.9671" velocity="2.1750"/>
+    <limit effort="87" velocity="2.1750"/>
   </joint>
   <link name="l_panda_link2">
   	<inertial>

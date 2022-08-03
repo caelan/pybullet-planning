@@ -1903,11 +1903,15 @@ def set_joint_position(body, joint, value):
 # def set_joint_velocity(body, joint, velocity):
 #     p.resetJointState(body, joint, targetVelocity=velocity, physicsClientId=CLIENT) # TODO: targetValue required
 def set_joint_position_torque(body, joint, value):
-    p.setJointMotorControl2(body, joint, p.POSITION_CONTROL, targetPosition=value, targetVelocity=0, force=get_max_force(body, joint))
+    p.setJointMotorControl2(body, joint, p.POSITION_CONTROL, targetPosition=value, force=get_max_force(body, joint))
 
-def set_joint_positions_torque(body, joints, values):
+def set_joint_positions_torque(body, joints, values, velocities=None):
     max_forces = [get_max_force(body, joint) for joint in joints]
-    p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, forces=max_forces, targetPositions=values)
+    # max_forces = [1]*len(joints)
+    # velocities = [0.25]*len(joints)
+    if velocities is not None:
+        p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, forces = max_forces, targetPositions=values, targetVelocities=velocities, velocityGains=velocities)
+    p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, targetPositions=values, forces=max_forces)
 
 def set_joint_states(body, joints, positions, velocities):
     assert len(joints) == len(positions) == len(velocities)
@@ -2104,6 +2108,7 @@ LinkState = namedtuple('LinkState', ['linkWorldPosition', 'linkWorldOrientation'
 def get_link_state(body, link, kinematics=True, velocity=True):
     # TODO: the defaults are set to False?
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/pybullet.c
+
     return LinkState(*p.getLinkState(body, link,
                                      #computeForwardKinematics=kinematics,
                                      #computeLinkVelocity=velocity,
@@ -3142,7 +3147,7 @@ def approximate_as_cylinder(body, **kwargs):
 
 # Collision
 
-MAX_DISTANCE = 0. # 0. | 1e-3
+MAX_DISTANCE = 0 # 0. | 1e-3
 
 CollisionPair = namedtuple('Collision', ['body', 'links'])
 
@@ -3566,7 +3571,6 @@ def interpolate_joint_waypoints(body, joints, waypoints, resolutions=None,
                 return None
             path.append(q) # TODO: could instead yield
     return path
-
 def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstacles=[], attachments=[],
                                 self_collisions=True, disabled_collisions=set(),
                                 resolutions=None, custom_limits={}, max_distance=MAX_DISTANCE,
@@ -3584,8 +3588,10 @@ def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstac
             return None
     return interpolate_joint_waypoints(body, joints, waypoints, resolutions=resolutions, collision_fn=collision_fn)
 
-def plan_direct_joint_motion(body, joints, end_conf, **kwargs):
-    return plan_waypoints_joint_motion(body, joints, [end_conf], **kwargs)
+def plan_direct_joint_motion(body, joints, end_conf, waypoints=None, **kwargs):
+    if waypoints == None:
+        return plan_waypoints_joint_motion(body, joints, [end_conf], **kwargs)
+    return plan_waypoints_joint_motion(body, joints, waypoints, **kwargs)
 
 def check_initial_end(start_conf, end_conf, collision_fn, verbose=True):
     # TODO: collision_fn might not accept kwargs
@@ -4192,8 +4198,11 @@ def velocity_control_joints(body, joints, velocities):
 
 #####################################
 
-def compute_jacobian(robot, link, positions=None):
-    joints = get_movable_joints(robot)
+def compute_jacobian(robot, link, positions=None, joints=None):
+    if not joints:
+        joints = get_movable_joints(robot)
+    if positions:
+        print(len(joints), len(positions))
     if positions is None:
         positions = get_joint_positions(robot, joints)
     assert len(joints) == len(positions)
@@ -4410,7 +4419,7 @@ def multiple_sub_inverse_kinematics(robot, first_joint, target_link, target_pose
     return solutions
 
 def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
-                          max_iterations=25, max_time=INF, custom_limits={}, **kwargs):
+                          max_iterations=25, max_time=INF, custom_limits={}, ik_fn = None, arm = None, joints = None, **kwargs):
     # TODO: fix stationary joints
     # TODO: pass in set of movable joints and take least common ancestor
     # TODO: update with most recent bullet updates
@@ -4421,6 +4430,7 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
     lower_limits, upper_limits = get_custom_limits(robot, get_movable_joints(robot), custom_limits)
     sub_robot, selected_joints, sub_target_link = create_sub_robot(robot, first_joint, target_link)
     sub_joints = get_movable_joints(sub_robot)
+
     #null_space = get_null_space(robot, selected_joints, custom_limits=custom_limits)
     null_space = None
 
@@ -4432,27 +4442,51 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
                 print("times up")
                 remove_body(sub_robot)
                 return None
-            sub_kinematic_conf = inverse_kinematics_helper(sub_robot, sub_target_link, target_pose, null_space=null_space)
-            if sub_kinematic_conf is None:
-                print("no conf found")
-                remove_body(sub_robot)
-                return None
-            set_joint_positions(sub_robot, sub_joints, sub_kinematic_conf)
-            if is_pose_close(get_link_pose(sub_robot, sub_target_link), target_pose, **kwargs):
-                print("###################")
-                set_joint_positions(robot, selected_joints, sub_kinematic_conf)
-                kinematic_conf = get_configuration(robot)
-                # if not all_between(lower_limits, kinematic_conf, upper_limits):
-                #     movable_joints = get_movable_joints(robot)
-                #     print([(get_joint_name(robot, j), l, v, u) for j, l, v, u in
-                #           zip(movable_joints, lower_limits, kinematic_conf, upper_limits) if not (l <= v <= u)])
-                #     print("Limits violated")
-                #     # wait_if_gui()
-                #     remove_body(sub_robot)
-                #     return None
-                print("IK iterations:", iteration)
-                solutions.append(kinematic_conf)
-                break
+            if ik_fn is None:
+                sub_kinematic_conf = inverse_kinematics_helper(sub_robot, sub_target_link, target_pose, null_space=null_space)
+                set_joint_positions(sub_robot, sub_joints, sub_kinematic_conf)
+                if is_pose_close(get_link_pose(sub_robot, sub_target_link), target_pose, **kwargs):
+                    print("###################")
+                    set_joint_positions(robot, selected_joints, sub_kinematic_conf)
+                    kinematic_conf = get_configuration(robot)
+                    if not all_between(lower_limits, kinematic_conf, upper_limits):
+                        print("limits violated")
+                    #     movable_joints = get_movable_joints(robot)
+                    #     print([(get_joint_name(robot, j), l, v, u) for j, l, v, u in
+                    #           zip(movable_joints, lower_limits, kinematic_conf, upper_limits) if not (l <= v <= u)])
+                    #     print("Limits violated")
+                    #     # wait_if_gui()
+                        remove_body(sub_robot)
+                        return None
+                    print("IK iterations:", iteration)
+                    solutions.append(kinematic_conf)
+                    break
+            else:
+                sub_kinematic_conf = ik_fn(robot, arm, target_link, target_pose, max_attempts=25, max_time=3.5)
+                if sub_kinematic_conf is None:
+                    print("no conf found")
+                    remove_body(sub_robot)
+                    return None
+                set_joint_positions(robot, joints, sub_kinematic_conf)
+                if is_pose_close(get_link_pose(robot, target_link), target_pose):
+                    print("###################")
+                    set_joint_positions(robot, joints, sub_kinematic_conf)
+                    kinematic_conf = get_configuration(robot)
+                    if not all_between(lower_limits, kinematic_conf, upper_limits):
+                        print("limits violated")
+                    #     movable_joints = get_movable_joints(robot)
+                    #     print([(get_joint_name(robot, j), l, v, u) for j, l, v, u in
+                    #           zip(movable_joints, lower_limits, kinematic_conf, upper_limits) if not (l <= v <= u)])
+                    #     print("Limits violated")
+                    #     # wait_if_gui()
+                        remove_body(sub_robot)
+                        return None
+                    print("IK iterations:", iteration)
+                    solutions.append(sub_kinematic_conf)
+                    print("SOLUTIONS: ", solutions)
+                    break
+                else:
+                    print("pose is not close")
         else:
             print("else area")
             remove_body(sub_robot)

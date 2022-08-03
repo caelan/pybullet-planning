@@ -3,6 +3,7 @@ from __future__ import print_function
 import copy
 import pybullet as p
 import random
+import numpy as np
 import time
 from itertools import islice, count
 
@@ -27,7 +28,8 @@ from .utils import invert, multiply, get_name, set_pose, get_link_pose, is_place
     get_custom_limits, all_between, get_unit_vector, wait_if_gui, joint_from_name, get_joint_info,\
     set_base_values, euler_from_quat, INF, elapsed_time, get_moving_links, flatten_links, get_relative_pose, get_link_name, \
     get_max_force, compute_jacobian, get_COM, matrix_from_quat, check_overlap, set_point, set_joint_position, get_joint_position, \
-    is_pose_on_r, quat_from_euler, set_joint_positions_torque, body_from_name, get_same_relative_pose
+    is_pose_on_r, quat_from_euler, set_joint_positions_torque, body_from_name, get_same_relative_pose, plan_waypoints_joint_motion, \
+    is_pose_close, get_configuration, get_max_limits, get_min_limits, create_sub_robot, refine_path, plan_cartesian_motion, is_b1_on_b2
 import math
 BASE_EXTENT = 2.5
 BASE_LIMITS = (-BASE_EXTENT*np.ones(2), BASE_EXTENT*np.ones(2))
@@ -105,17 +107,63 @@ class Conf(object):
     @property
     def bodies(self): # TODO: misnomer
         return flatten_links(self.body, get_moving_links(self.body, self.joints))
-    def assign(self, end=False):
-        if end and len(self.torque_joints.intersection(set(self.joints))):
+    def assign(self, bodies=[]):
+        if (len(set(self.joints).intersection(self.torque_joints)) > 0):
+            for body in bodies:
+                    if is_b1_on_b2(body, body_from_name(TARGET)):
+                        print(get_name(body))
+                        add_fixed_constraint(body, body_from_name(TARGET))
+            wait_for_duration(0.5)
             set_joint_positions_torque(self.body, self.joints, self.values)
-        else:
-            set_joint_positions(self.body, self.joints, self.values)
+            return
+        #     return
+        set_joint_positions_torque(self.body, self.joints, self.values)
+        # if len(self.torque_joints.intersection(set(self.joints))):
+        #     wait_for_duration(.5)
     def iterate(self):
         yield self
     def __repr__(self):
         return 'q{}'.format(id(self) % 1000)
 
 #####################################
+
+def compute_joint_velocities(target_ee_velocity, Ja, Jl):
+    Jl_inv = np.linalg.pinv(Jl)
+    Ja_inv = np.linalg.pinv(Ja)
+    linear_vel = np.matmul(target_ee_velocity[:3], Jl_inv)
+    angular_vel = np.matmul(target_ee_velocity[3:], Ja_inv)
+    return linear_vel + angular_vel
+
+def velocity_move(robot, arm, target_pose):
+    print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    print(target_pose, len(target_pose))
+    target_joints = target_pose[1]
+    target_pose = target_pose[0]
+    gripper_link = get_gripper_link(robot, arm)
+    joints = get_arm_joints(robot, arm)
+
+    max_forces = [get_max_force(robot, joint) for joint in joints]
+    # cur_pose = get_link_pose(int(robot), int(gripper_link))
+    cur_pose = get_link_pose(robot, gripper_link)
+    print(cur_pose)
+    jointPoses = [target_joints[i] for i in range(len(target_joints))]
+    while not is_pose_close(cur_pose, target_pose):
+        print(len(target_joints))
+        print(len(joints))
+        Jl, Ja =  compute_jacobian(robot, gripper_link)
+        Jl = np.array(Jl)[:7]
+        Ja = np.array(Ja)[:7]
+
+        diff = [target_pose[0][i] - cur_pose[0][i] for i in range(len(target_pose[0]))]
+        ta = euler_from_quat(target_pose[1])
+        ca = euler_from_quat(cur_pose[1])
+        diffA = [ta[i] - ca[i] for i in range(len(ca))]
+        div = 10
+        vels = [0, 0.1, 0, 0, 0, 0]
+        joint_velocities = compute_joint_velocities(vels, Ja, Jl)
+        print(joint_velocities)
+        p.setJointMotorControlArray(robot, joints, p.VELOCITY_CONTROL, targetVelocities=joint_velocities, forces=max_forces)
+        cur_pose = get_link_pose(robot, gripper_link)
 
 class Command(object):
     def control(self, dt=0):
@@ -154,16 +202,23 @@ def set_joint_force_limits(robot, arm):
 ######################################
 class Trajectory(Command):
     _draw = False
-    def __init__(self, path):
+    def __init__(self, path, bodies):
         self.path = tuple(path)
+        self.bodies = bodies
         # TODO: constructor that takes in this info
     def apply(self, state, sample=1):
         handles = add_segments(self.to_points()) if self._draw and has_gui() else []
         for conf in self.path[::sample]:
-            conf.assign()
+            conf.assign(self.bodies)
             yield
+        if (len(set(self.path[0].joints).intersection(self.path[0].torque_joints)) > 0):
+            for body in self.bodies:
+                print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+                if is_b1_on_b2(body, body_from_name(TARGET)):
+                    remove_fixed_constraint(body, body_from_name(TARGET), -1)
+                else:
+                    print("nononononononon")
         end_conf = self.path[-1]
-        end_conf.assign(end=True)
         if isinstance(end_conf, Pose):
             state.poses[end_conf.body] = end_conf
         for handle in handles:
@@ -199,7 +254,7 @@ class Trajectory(Command):
         for conf in self.path:
             yield conf
     def reverse(self):
-        return Trajectory(reversed(self.path))
+        return Trajectory(reversed(self.path), self.bodies)
     #def __repr__(self):
     #    return 't{}'.format(id(self) % 1000)
     def __repr__(self):
@@ -209,8 +264,8 @@ class Trajectory(Command):
             d = 3 if isinstance(conf, Pose) else len(conf.joints)
         return 't({},{})'.format(d, len(self.path))
 
-def create_trajectory(robot, joints, path):
-    return Trajectory(Conf(robot, joints, q) for q in path)
+def create_trajectory(robot, joints, path, bodies):
+    return Trajectory([Conf(robot, joints, q) for q in path], bodies=bodies)
 
 ##################################################
 
@@ -274,6 +329,31 @@ class Attach(Command):
     def __repr__(self):
         return '{}({},{},{})'.format(self.__class__.__name__, get_body_name(self.robot),
                                      self.arm, get_name(self.body))
+
+class FixObj(Command):
+    def __init__(self, b1, b2):
+        self.b1 = b1
+        self.b2 = b2
+        print("&&&&&&&&&&&&&&&&&&&&&&& ", self.b1)
+        print("*********************** ", self.b2)
+    def assign(self):
+        pass
+    def apply(self, state, **kwargs):
+
+        if state.poses.get(self.b1, None):
+            wait_for_duration(0.5)
+            state.attachments[self.b1] = create_attachment(self.b2, -1, self.b1)
+        yield
+    def control(self, dt=0, **kwargs):
+        p.createConstraint(self.b2, -1, self.b1, -1,  # Both seem to work
+                                    p.JOINT_FIXED, jointAxis=unit_point(),
+                                    parentFramePosition=point,
+                                    childFramePosition=unit_point(),
+                                    parentFrameOrientation=quat,
+                                    childFrameOrientation=unit_quat(),
+                                    physicsClientId=CLIENT)
+    def __repr__(self):
+        return '{}({},{})'.format(self.__class__.__name__, get_body_name(self.b2), get_body_name(self.b1))
 
 class Detach(Command):
     def __init__(self, robot, arm, body):
@@ -495,12 +575,14 @@ def get_torque_limits_not_exceded_test(problem):
             jointNum = joint_from_name(robot, joint)
             max_limits.append(get_max_force(problem.robot, jointNum))
         basePose = get_link_pose(problem.robot, baseLink)[0]
-        EPS =  .8
+        EPS =  .75
         comR = []
         totalMass = 0
     def test(a, poses = None, ptotalMass = None, pcomR = None):
         if holding_arm is None:
             return True
+        # joints = get_arm_joints(robot, arm)
+        # poses = get_gripper_joints(robot, arm)
         Jl, Ja = compute_jacobian(problem.robot, l)
         Jl = np.array(Jl)
         Ja = np.array(Ja)
@@ -516,6 +598,7 @@ def get_torque_limits_not_exceded_test(problem):
         force = totalMass * 9.8
         force3d = np.array([0, 0, force])
         torques = np.matmul(J, force3d)
+        # print(torques)
         testVal = True
         # print(torques)
         # print(max_limits)
@@ -525,7 +608,7 @@ def get_torque_limits_not_exceded_test(problem):
         return testVal
     return test
 
-def get_sample_stable_holding_conf_gen_v2(problem, max_attempts = 100, stepSize = 0.00001):
+def get_sample_stable_holding_conf_gen_v2(problem, custom_limits={}, max_attempts = 100, stepSize = 0.00001):
     holding_arm = problem.holding_arm
     robot = problem.robot
     max_limits = []
@@ -537,28 +620,34 @@ def get_sample_stable_holding_conf_gen_v2(problem, max_attempts = 100, stepSize 
         jointNum = joint_from_name(robot, joint)
         jointNums.append(jointNum)
         max_limits.append(get_max_force(problem.robot, jointNum))
-    gripper_link = link_from_name(robot, PANDA_GRIPPER_ROOTS[holding_arm])
+    gripper_link = get_gripper_link(robot, holding_arm)
     arm_joints = get_arm_joints(robot, holding_arm)
     test_torque_limits = get_torque_limits_not_exceded_test(problem)
     jointStart = get_joint_position(robot, joint_from_name(robot, BI_PANDA_GROUPS[arm_from_arm(holding_arm)][-1]))
     link_start = euler_from_quat(get_link_pose(robot, gripper_link)[1])[1]
     def gen(arm, pcomR, ptotalMass,poses=None):
+        gripper_ori = problem.gripper_ori
         movable = get_objects_on_target(problem, poses=poses)
         attempts = 0
         originalObjPoses = [get_pose(obj) for obj in movable]
         originalPoses = get_joint_positions(problem.robot, jointNums)
         originalTargetPose = Pose(body_from_name(TARGET), get_pose(body_from_name(TARGET)))
-
         # original gripper pose in world frame
         originalGripperPose = get_link_pose(robot, gripper_link)
-
-
         newTargetPose = Pose(body_from_name(TARGET), originalTargetPose.value)
         newGripperPose = originalGripperPose
         newObjectPoses = [pose for pose in originalObjPoses]
         holding_grasp = problem.holding_grasp
         attachment = holding_grasp.get_attachment(robot, holding_arm)
         attachments = {attachment.child: attachment}
+        count = 0
+        ma = get_max_limits(robot, jointNums)
+        mi = get_min_limits(robot, jointNums)
+        # print(mi, ma)
+        # print(jointNums)
+        # custom_limits = {jointNums[i]:(mi[i]/2, ma[i]/2) for i in len(jointNums)}
+        # print(custom_limits)
+        custom_limits = {}
         while True:
             if attempts >= max_attempts:
                 originalTargetPose.assign()
@@ -576,49 +665,71 @@ def get_sample_stable_holding_conf_gen_v2(problem, max_attempts = 100, stepSize 
             # newTargetPose[0][1] -= stepSize
             newGripperPose = ((newGripperPose[0][0],
                                     newGripperPose[0][1] + stepSize,
-                                    newGripperPose[0][2]), newGripperPose[1])
-            midGripperPose = ((newGripperPose[0][0],
-                                    (newGripperPose[0][1] + originalGripperPose[0][1]) / 2,
-                                    newGripperPose[0][2]), newGripperPose[1])
+                                    newGripperPose[0][2]), gripper_ori)
             for i in range(len(newObjectPoses)):
                 newObjectPoses[i] = ((newObjectPoses[i][0][0],
                                         newObjectPoses[i][0][1] + stepSize,
                                         newObjectPoses[i][0][2]), newObjectPoses[i][1])
             # gripper_pose = multiply(newGripperPose, invert(problem.holding_grasp.value))
             for _ in range(max_attempts):
-                newJointAngles = bi_panda_inverse_kinematics(robot, holding_arm, gripper_link, newGripperPose, max_attempts=max_attempts, max_time=3.5)
-                newJointAnglesMid = sub_inverse_kinematics(robot, jointNums[0], gripper_link, midGripperPose)
-                if newJointAngles is None or newJointAnglesMid is None:
+                reset = get_joint_positions(robot, jointNums)
+                # newJointAngles = sub_inverse_kinematics_reconfig(robot, holding_arm, gripper_link, newGripperPose)
+                newJointAngles = bi_panda_inverse_kinematics(robot, holding_arm, gripper_link, newGripperPose)
+                if newJointAngles is None:
                     print("IK failed")
+                    set_joint_positions(robot, jointNums, reset)
                     continue
                 set_joint_positions(robot, jointNums, newJointAngles)
-                pose_test = get_link_pose(robot, gripper_link)
-                # if(pose_test[1] != newGripperPose[1]):
-                #     joint_rotation = get_joint_position(robot, joint_from_name(robot, BI_PANDA_GROUPS[arm_from_arm(holding_arm)][-1]))
-                #     gripper_correction = joint_rotation - (euler_from_quat(newGripperPose[1])[1] - euler_from_quat(pose_test[1])[1])
-                #     set_joint_position(robot, joint_from_name(robot, BI_PANDA_GROUPS[arm_from_arm(holding_arm)][-1]), gripper_correction)
                 if test_torque_limits(holding_arm, ptotalMass=ptotalMass, pcomR=pcomR):
-                    resolutions = 0.05**np.ones(len(arm_joints))
-                    path1 = plan_direct_joint_motion(robot, arm_joints, newJointAnglesMid, attachments=attachments.values(),
-                                                obstacles=[], self_collisions=SELF_COLLISIONS, custom_limits={},
-                                                resolutions=resolutions/2.)
-                    reset = get_joint_positions(robot, arm_joints)
-                    set_joint_positions(robot, arm_joints, newJointAnglesMid)
-                    path2 = plan_joint_motion(robot, arm_joints, newJointAngles, attachments=attachments.values(),
+                    resolutions = 0.025**np.ones(len(arm_joints))
+                    # path = plan_joint_motion(robot, arm_joints, newJointAngles, attachments=attachments.values(),
+                    #                           obstacles={}, self_collisions=SELF_COLLISIONS,
+                    #                           custom_limits=custom_limits, resolutions=resolutions,
+                    #                           restarts=4, iterations=25, smooth=25)
+                    grasp = problem.holding_grasp
+                    attachment = grasp.get_attachment(problem.robot, arm)
+                    attachments = {attachment.child: attachment}
+                    current_pose = get_joint_positions(robot, jointNums)
+                    custom_limits = {}
+                    pi = 3.14159
+                    custom_limits[arm_joints[-1]] = (current_pose[0], current_pose[0])
+                    custom_limits[arm_joints[-2]] = (current_pose[0]-(pi/6), current_pose[0]+(pi/6))
+                    custom_limits[arm_joints[0]] =(current_pose[0], current_pose[0]+(pi/6))
+                    custom_limits[arm_joints[1]] =(current_pose[1], current_pose[1]+(pi/6))
+                    waypoints = [originalGripperPose]
+                    diff = (newGripperPose[0][1] -  originalGripperPose[0][1]) / 10
+                    for i in range(1,10):
+                        waypoint = waypoints[i-1]
+                        waypoint = ((waypoint[0][0],
+                                    waypoint[0][1] + diff,
+                                    waypoint[0][2]), waypoint[1])
+                        waypoints.append(waypoint)
+                    waypoints.append(newGripperPose)
+                    # path = plan_cartesian_motion(robot, arm_joints[0], gripper_link, waypoints, ik_fn=bi_panda_inverse_kinematics, arm = holding_arm, joints = arm_joints)
+                    jointPoses = get_joint_positions(robot, jointNums)
+                    # path = [(newGripperPose, jointPoses)]
+                    # path = get_linear_path(robot, holding_arm, gripper_link, newGripperPose, originalGripperPose, attachments=attachments, gripper_ori=gripper_ori, custom_limits=custom_limits)
+                    # path = greedy_find_waypoints_stable_gripper(originalPoses, newJointAngles, gripper_ori, jointNums, robot, holding_arm, steps = 5)
+                    # path = plan_direct_joint_motion(robot, jointNums, newJointAngles, attachments=attachments.values(),
+                    #                               obstacles=[], self_collisions=SELF_COLLISIONS,
+                    #                               custom_limits=custom_limits, resolutions=resolutions/2.)
+                    path = plan_joint_motion(robot, jointNums, newJointAngles, attachments=attachments.values(),
                                               obstacles=[], self_collisions=SELF_COLLISIONS,
-                                              resolutions=resolutions,
-                                              restarts=4, iterations=100, smooth=100)
-                    path = path1 + path2
-                    mt = create_trajectory(robot, arm_joints, path)
+                                              custom_limits=custom_limits, resolutions=resolutions,
+                                              restarts=4, iterations=200, smooth=None)
+                    if path is None:
+                        print("Failed to find reconfig path")
+                        set_joint_positions(robot, jointNums, reset)
+                        continue
+                    print("here?")
+                    mt = create_trajectory(robot, arm_joints, path, bodies=problem.movable)
                     cmd = Commands(State(attachments=attachments), savers=[], commands=[mt])
                     shift = newTargetPose.value[0][1] - originalTargetPose.value[0][1]
-                    print(originalTargetPose)
-                    print(newTargetPose)
-                    originalPoses = newJointAngles
+                    originalPoses = newJointAngles[-1]
                     originalTargetPose.value = newTargetPose.value
                     originalGripperPose = newGripperPose
                     originalTargetPose.assign()
-                    set_joint_positions(robot, jointNums, originalPoses)
+
                     for i in range(len(movable)):
                         set_pose(movable[i], originalObjPoses[i])
                     return mt, shift
@@ -666,12 +777,12 @@ def get_ik_fn(problem, custom_limits={}, collisions=True, teleport=True):
             approach_path = plan_joint_motion(robot, arm_joints, approach_conf, attachments=attachments.values(),
                                               obstacles=obstacles, self_collisions=SELF_COLLISIONS,
                                               custom_limits=custom_limits, resolutions=resolutions,
-                                              restarts=4, iterations=25, smooth=25)
+                                              restarts=10, iterations=25, smooth=25)
             if approach_path is None:
                 print('Approach path failure')
                 return None
             path = approach_path + grasp_path
-        mt = create_trajectory(robot, arm_joints, path)
+        mt = create_trajectory(robot, arm_joints, path, None)
         if reconfig is not None:
             print("################### reconfig is not none")
             cmd = Commands(State(attachments=attachments), savers=[BodySaver(robot)], commands=[reconfig, mt])
@@ -960,19 +1071,6 @@ def apply_commands(state, commands, time_step=None, pause=False, **kwargs):
         print(i, command)
         for j, _ in enumerate(command.apply(state, **kwargs)):
             state.assign()
-            jointNums = []
-            joints = BI_PANDA_GROUPS[arm_from_arm('left')]
-            for joint in joints:
-                jointNums.append(joint_from_name(1, joint))
-            # jointPos = get_joint_positions(1, jointNums)
-            # set_joint_positions_torque(1, jointNums, jointPos)
-            # if prev_joints != jointPos:
-            #     initial_conf = PLATE_GRASP_LEFT_ARM
-            #     plate_width = 0.2063
-            #     l_hand_link = link_from_name(1, 'l_panda_hand')
-            #     hand_pose = get_link_pose(1, l_hand_link)
-            #     pose=((hand_pose[0][0] + ((plate_width / 2 + 0.07)*math.cos(initial_conf[0])), hand_pose[0][1] + ((plate_width / 2 + 0.07) *math.sin(initial_conf[0])), hand_pose[0][2]),quat_from_euler((0,0,initial_conf[0])))
-            #     set_pose(TARGET, pose)
             if j == 0:
                 continue
             if time_step is None:
@@ -982,6 +1080,7 @@ def apply_commands(state, commands, time_step=None, pause=False, **kwargs):
                 wait_for_duration(time_step)
         if pause:
             wait_if_gui()
+    return state
 
 #####################################
 
@@ -1022,60 +1121,230 @@ def get_objects_on_target(problem, target = TARGET, poses = None):
                 obs.append(obj)
     return obs
 
-def get_sample_stable_holding_conf_gen(problem, max_attempts = 25, stepSize = 0.1):
-    holding_arm = problem.holding_arm
-    robot = problem.robot
-    max_limits = []
-    l = PANDA_TOOL_FRAMES[holding_arm]
-    joints = BI_PANDA_GROUPS[arm_from_arm(problem.holding_arm)]
-    jointNums = []
-    for joint in joints:
-        jointNum = joint_from_name(robot, joint)
-        jointNums.append(jointNum)
-        max_limits.append(get_max_force(problem.robot, jointNum))
-    gripper_link = get_gripper_link(robot, holding_arm)
-    arm_joints = get_arm_joints(robot, holding_arm)
-    test_torque_limits = get_torque_limits_not_exceded_test(problem)
-    def gen(arm, totalMass = None, comR = None, poses = None):
-        originalPoses = get_joint_positions(robot, jointNums)
-        movable = get_objects_on_target(problem, poses)
-        attempts = 0
-        originalObjPoses = [get_pose(obj) for obj in movable]
 
-        originalTargetPose = get_pose(body_from_name(TARGET))
-        originalGripperPose = get_link_pose(robot, gripper_link)
-        newTargetPose = list(originalTargetPose.copy())
-        newGripperPose = list(originalGripperPose.copy())
-        newObjectPoses = [list(pose.copy()) for pose in originalObjPoses]
-        holding_grasp = problem.holding_grasp
-        attachment = holding_grasp.get_attachment(robot, holding_arm)
-        attachments = {attachment.child: attachment}
-        while True:
-            print("$$$$$$$ in stable conf gen")
-            if attempts >= max_attempts:
-                set_pose(body_from_name(TARGET), originalTargetPose)
-                set_joint_positions(robot, jointNums, originalPoses)
-                for i in range(len(movabe)):
-                    set_pose(movable[i], originalObjPoses[i])
+def check_joint_deltas(q1, q2, limit = math.pi/100):
+    for i in range(len(q1)):
+        if abs(q1[i] - q2[i]) > limit:
+            return True
+    return False
+
+def get_linear_path(robot, arm, target_link, target_pose, start_pose, attachments = None, max_iterations = 2, max_attempts=25, gripper_ori=None, custom_limits={}):
+    orientation = gripper_ori if gripper_ori else start_pose[1]
+    diff = (target_pose[0][0] - start_pose[0][0],
+            target_pose[0][1] - start_pose[0][1])
+    target_joints = [joint_from_name(robot, name) for name in BI_PANDA_GROUPS[arm_from_arm(arm)]]
+    reset = get_joint_positions(robot, target_joints)
+    dy = diff[1] / max_iterations
+    waypoints = [((start_pose[0][0], start_pose[0][1] + (dy), start_pose[0][2]), orientation) for i in range(max_iterations)]
+    waypoints.append(target_pose)
+    path = []
+    arm_joints = get_arm_joints(robot, arm)
+    old_joints = get_joint_positions(robot, target_joints)
+
+    for waypoint in waypoints:
+        old_joints = get_joint_positions(robot, target_joints)
+        for j in range(max_attempts):
+            if j > max_attempts:
+                return None
+            new_joints = bi_panda_inverse_kinematics(robot, arm, target_link, waypoint, custom_limits=custom_limits)
+            if new_joints is None or not check_x_y_rot(get_link_pose(robot, target_link)[1], waypoint[1]) or check_joint_deltas(new_joints, old_joints):
+                print(is_pose_close(get_link_pose(robot, target_link), waypoint))
+                continue
+            path.append(new_joints)
+            set_joint_positions(robot, arm_joints, new_joints)
+            break
+
+    current_pose = get_joint_positions(robot, arm_joints)
+    custom_limits = {}
+    custom_limits[arm_joints[0]] =(current_pose[0], current_pose[0]+(math.pi/6))
+    custom_limits[arm_joints[1]] =(current_pose[1], current_pose[1]+(math.pi/6))
+
+    resolutions = 0.05**np.ones(len(arm_joints))
+    realPath = []
+    return path
+    # return plan_direct_joint_motion(robot, arm_joints, waypoints=path, end_conf=waypoints[-1], attachments=attachments.values(),
+    #                                               self_collisions=SELF_COLLISIONS, resolutions=resolutions/2., custom_limits=custom_limits)
+    # for point in path:
+    #     realPath += plan_joint_motion(robot, arm_joints, point, attachments=attachments.values(),
+    #                                             self_collisions=SELF_COLLISIONS,
+    #                                           resolutions=resolutions,
+    #                                           restarts=4, iterations=25, smooth=25)
+    #     set_joint_positions(robot, arm_joints, point)
+    # return realPath
+
+def check_x_y_rot(quat1, quat2, limit=1e-2*math.pi):
+    euler1 = euler_from_quat(quat1)
+    euler2 = euler_from_quat(quat2)
+    dx = abs(euler1[0] - euler2[0])
+    dy = abs(euler1[1] - euler2[1])
+    return dy<limit and dx < limit
+
+
+def hack_table_place(problem, state):
+    torque_test = get_torque_limits_not_exceded_test(problem)
+    robot = problem.robot
+    jointNums = get_arm_joints(robot, problem.holding_arm)
+    jointPoses = get_joint_positions(robot, jointNums)
+    gripper_link = get_gripper_link(robot, problem.holding_arm)
+    gripper_pose = get_link_pose(robot, gripper_link)
+    table_pose = get_pose(problem.post_goal)
+    above = table_pose[0][2] + 0.01
+    diff = abs(gripper_pose[0][2] - above)
+    gripper_pose = ((gripper_pose[0][0], gripper_pose[0][1]+.03,
+                    gripper_pose[0][2] + 0.07), gripper_pose[1])
+    newJointPoses = None
+    while newJointPoses is None or not torque_test(problem.holding_arm):
+        newJointPoses = bi_panda_inverse_kinematics(robot, problem.holding_arm, gripper_link, gripper_pose)
+    print(jointNums, newJointPoses)
+    for body in problem.movable:
+        if is_b1_on_b2(body, body_from_name(TARGET)):
+            add_fixed_constraint(body, body_from_name(TARGET))
+    set_joint_positions(robot, jointNums, newJointPoses)
+    dT = .03
+    newJointPoses = get_joint_positions(robot, jointNums)
+    p = newJointPoses[0]
+    newJointPoses = list(newJointPoses)
+
+    while newJointPoses[0] < p + math.pi:
+        newJointPoses[0] += dT
+        set_joint_positions_torque(robot, jointNums, newJointPoses)
+        newJointPoses = list(get_joint_positions(robot, jointNums))
+        # wait_for_duration(0.001)
+        gripper_pose = get_link_pose(robot, gripper_link)
+        # newJointPoses = list(get_joint_positions(robot, jointNums))
+    gripper_pose = ((gripper_pose[0][0], gripper_pose[0][1],
+                    gripper_pose[0][2]), gripper_pose[1])
+    # newJointPoses = None
+    # while newJointPoses == None:
+    #     newJointPoses = bi_panda_inverse_kinematics(robot, problem.holding_arm, gripper_link, gripper_pose)
+    # set_joint_positions(robot, jointNums, newJointPoses)
+    print("new joints found")
+    wait_for_duration(0.5)
+    for body in problem.movable:
+        if is_b1_on_b2(body, body_from_name(TARGET)):
+            remove_fixed_constraint(body, body_from_name(TARGET), -1)
+    detach = Detach(problem.robot, problem.holding_arm, body_from_name(TARGET))
+    remove_fixed_constraint(body_from_name(TARGET), robot, gripper_link)
+    print("detatched!")
+
+    while newJointPoses[0] > p:
+        newJointPoses[0] -= dT
+        set_joint_positions_torque(robot, jointNums, newJointPoses)
+        newJointPoses = list(get_joint_positions(robot, jointNums))
+        # wait_for_duration(0.001)
+        gripper_pose = get_link_pose(robot, gripper_link)
+
+def check_eq_conf(q1, q2, eps=[1e-2]):
+    if len(q1) != len(q2):
+        raise "Bad conf passed to check eq"
+    for i in range(len(q1)):
+        if abs(q2[i] - q1[i]) > eps[i]:
+            return False
+    return True
+
+
+num_steps = 3
+def create_graph(start_conf, end_conf, step_size = [], root = None):
+    if check_eq_conf(start_conf, end_conf):
+        return root
+    if len(step_size) == 0:
+        for i in range(len(start_conf)):
+            step_size.append((end_conf[i] - start_conf[i])/num_steps)
+    if root == None:
+        root = Node(start_conf)
+    for i in range(len(start_conf)):
+        if check_eq_conf([start_conf[i]], [end_conf[i]]):
+            continue
+        child_conf = tuple([(start_conf[j] + step_size[j]) if i == j else start_conf[j] for j in range(len(start_conf))])
+        child_node = Node(child_conf, root)
+        child_node.children = create_graph(child_conf, end_conf, step_size, child_node)
+    return root
+
+
+class Node:
+    def __init__(self, conf, parent = None):
+        self.conf = conf
+        self.parent = parent
+        self.children = []
+        self.score = 0
+    def add_child(conf):
+        self.children.append(conf)
+
+class PriorityQueue:
+    def __init__(self, target_conf, robot, joint_nums, arm):
+        self.queue = []
+        self.target = euler_from_quat(target_conf)
+        self.robot = robot
+        self.joint_nums = joint_nums
+        self.gripper_link = get_gripper_link(robot, arm)
+    def enqueue(self, node):
+        hold = get_joint_positions(self.robot, self.joint_nums)
+        set_joint_positions(self.robot, self.joint_nums, node.conf)
+        ori = get_link_pose(self.robot, self.gripper_link)[1]
+        set_joint_positions(self.robot, self.joint_nums, hold)
+        ori = euler_from_quat(ori)
+        dist = math.sqrt((ori[0] - self.target[0])**2 + (ori[1] - self.target[1])**2)
+        node.score = 1/dist if dist > 0 else 0
+        for i in range(len(self.queue)):
+            if node.score > self.queue[i].score:
+                self.queue.insert(i, node)
                 return
-            attempts += 1
-            newTargetPose[0][1] -= stepSize
-            newGripperPose[0][1] -= stepSize
-            for i in range(len(newObjectPoses)):
-                newObjectPoses[i][0][1] -= stepSize
-            newJointAngles = bi_panda_inverse_kinematics(robot, holding_arm , gripper_link, newGripperPose)
-            set_joint_positions(robot, jointNums, newJointAngles)
-            if test_torque_limits(arm):
-                resolutions = 0.05**np.ones(len(arm_joints))
-                path = plan_joint_motion(robot, arm_joints, newJointAngles, attachments=attachments.values(),
-                                              obstacles=[], self_collisions=SELF_COLLISIONS,
-                                              resolutions=resolutions,
-                                              restarts=2, iterations=25, smooth=25)
-                mt = create_trajectory(robot, arm_joints, path)
-                cmd = Commands(State(attachments=attachments), savers=[BodySaver(robot)], commands=[mt])
-                set_pose(body_from_name(TARGET), originalTargetPose)
-                set_joint_positions(robot, jointNums, originalPoses)
-                for i in range(len(movabe)):
-                    set_pose(movable[i], originalObjPoses[i])
-                yield (cmd,)
-    return gen
+        self.queue.append(node)
+    def dequeue(self):
+        return self.queue.pop(0)
+
+    def peek(self):
+        return self.queue[0].score
+
+
+def find_waypoints_stable_gripper(start_conf, end_conf, gripper_ori, joint_nums, robot, arm):
+    # generate a graph such that each node is a position with one
+    # joint moved one step closer to the goal pose by some stepsize sub angle of total (ie theta/25)
+    root = create_graph(start_conf, end_conf)
+    # use 1/diff in gripper ori as heuristic
+    q = PriorityQueue(gripper_ori, robot, joint_nums, arm)
+    q.enqueue(root)
+    while len(q.queue) > 0:
+        node = q.dequeue()
+        if check_eq_conf(node.conf, end_conf):
+            path = []
+            temp = node
+            while temp.parent is not None:
+                path.insert(0, temp.conf)
+                temp = temp.parent
+            return path
+            path.insert(end_conf)
+        for child in node.children:
+            q.enqueue(child)
+    return None
+
+    # use A* search to find optimal path moving one joint at at time until goal is reached
+    # based on heuristic
+
+
+def greedy_find_waypoints_stable_gripper(start_conf, end_conf, target_ori, joint_nums, robot, arm, steps):
+    path = []
+    gripper_link = get_gripper_link(robot, arm)
+    step_size = [(start_conf[i] - end_conf[i])/steps for i in range(len(start_conf))]
+    print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&",check_eq_conf(start_conf, end_conf))
+    while not check_eq_conf(start_conf, end_conf, step_size) and len(path) < steps:
+        print(len(path))
+        for step in range(num_steps):
+            scores = []
+            confs = []
+            for i in range(len(start_conf)):
+                if check_eq_conf([start_conf[i]], [end_conf[i]], [.01]):
+                    continue
+                new_conf = start_conf
+                new_conf = tuple([start_conf[j] + (step_size[j]) if j == i else start_conf[j] for j in range(len(step_size))])
+                confs.append(new_conf)
+                hold = get_joint_positions(robot, joint_nums)
+                set_joint_positions(robot, joint_nums, new_conf)
+                gripperOri = get_link_pose(robot, gripper_link)[1]
+                score = math.sqrt((gripperOri[0] - target_ori[0])**2 + (gripperOri[1] - target_ori[1])**2)
+                scores.append(score)
+            index = np.argmax(scores)
+            path.append(confs[index])
+            start_conf = confs[index]
+    print("(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((",path)
+    return path

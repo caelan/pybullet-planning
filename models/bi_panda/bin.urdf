@@ -1,5 +1,5 @@
-<robot name="bin">
-  <link name="bin_body">
+<robot name="tray">
+  <link name="body">
     <collision>
       <origin xyz="0 0 -.085" />
       <geometry>
