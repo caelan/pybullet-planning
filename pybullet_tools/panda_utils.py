@@ -483,9 +483,9 @@ def are_forces_balanced(b1, p1, b2, robot, link, bodies):
         # basePose[1] = (basePose[1] + gripperPose[1])/2
         valid = True
         valid &= abs(basePose[0] - comR[0]) < EPS
-        valid &= abs(basePose[1] - comR[1]) < EPS
+        valid &= abs((basePose[1]+.02) - comR[1]) < EPS
         if valid:
-            print(abs(basePose[0] - comR[0]), abs(basePose[1] - comR[1]))
+            print(abs(basePose[0] - comR[0]), abs((basePose[1]+0.02) - comR[1]))
         return valid
     return True
 

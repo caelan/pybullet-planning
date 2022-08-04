@@ -113,8 +113,9 @@ class Conf(object):
                     if is_b1_on_b2(body, body_from_name(TARGET)):
                         print(get_name(body))
                         add_fixed_constraint(body, body_from_name(TARGET))
-            wait_for_duration(0.5)
+            wait_for_duration(.7)
             set_joint_positions_torque(self.body, self.joints, self.values)
+            wait_for_duration(.5)
             return
         #     return
         set_joint_positions_torque(self.body, self.joints, self.values)
@@ -716,7 +717,7 @@ def get_sample_stable_holding_conf_gen_v2(problem, custom_limits={}, max_attempt
                     path = plan_joint_motion(robot, jointNums, newJointAngles, attachments=attachments.values(),
                                               obstacles=[], self_collisions=SELF_COLLISIONS,
                                               custom_limits=custom_limits, resolutions=resolutions,
-                                              restarts=4, iterations=200, smooth=None)
+                                              restarts=4, iterations=25, smooth=25)
                     if path is None:
                         print("Failed to find reconfig path")
                         set_joint_positions(robot, jointNums, reset)
@@ -1191,7 +1192,7 @@ def hack_table_place(problem, state):
     above = table_pose[0][2] + 0.01
     diff = abs(gripper_pose[0][2] - above)
     gripper_pose = ((gripper_pose[0][0], gripper_pose[0][1]+.03,
-                    gripper_pose[0][2] + 0.07), gripper_pose[1])
+                    gripper_pose[0][2] + 0.12), gripper_pose[1])
     newJointPoses = None
     while newJointPoses is None or not torque_test(problem.holding_arm):
         newJointPoses = bi_panda_inverse_kinematics(robot, problem.holding_arm, gripper_link, gripper_pose)
@@ -1224,6 +1225,7 @@ def hack_table_place(problem, state):
         if is_b1_on_b2(body, body_from_name(TARGET)):
             remove_fixed_constraint(body, body_from_name(TARGET), -1)
     detach = Detach(problem.robot, problem.holding_arm, body_from_name(TARGET))
+    set_point(problem.post_goal, (0,2.0,0))
     remove_fixed_constraint(body_from_name(TARGET), robot, gripper_link)
     print("detatched!")
 
