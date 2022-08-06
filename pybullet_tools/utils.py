@@ -1650,9 +1650,10 @@ def body_from_name(name):
 
 def is_b1_on_b2(b1, b2):
     AABB = get_aabb(b2)
-    AABB2 = get_aabb(b1)
-    isOn = AABB2[1][0] <= AABB[1][0] and AABB2[0][0] >= AABB[0][0]
-    isOn &= AABB2[1][1] <= AABB[1][1] and AABB2[0][1] >= AABB[0][1]
+    pose = get_pose(b1)
+    isOn = pose[0][0] <= AABB[1][0] and pose[0][0] >= AABB[0][0]
+    isOn &= pose[0][1] <= AABB[1][1] and pose[0][1] >= AABB[0][1]
+    isOn &= pose[0][2] >= AABB[0][2]
     return isOn
 
 def is_pose_on_r(pose, r):
