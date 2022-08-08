@@ -48,11 +48,14 @@ def sample_tool_ik(robot, arm, tool_pose, nearby_conf=USE_CURRENT, max_attempts=
     generator = get_ik_generator(robot, arm, link_from_name(robot, PANDA_TOOL_FRAMES[arm]), ik_pose, **kwargs)
     arm_joints = get_arm_joints(robot, arm)
     current_conf = get_joint_positions(robot, arm_joints)
+    lower_limits, upper_limits = get_custom_limits(robot, arm_joints, custom_limits)
     for _ in range(max_attempts):
         try:
             solutions = next(generator)
             # TODO: sort by distance from the current solution when attempting?
             if solutions:
+                if not all_between(lower_limits, upper_limits, solutions):
+                    continue
                 # distances = [get_joint_distances(current_conf, new_config) for new_config in solutions]
                 return solutions
         except StopIteration:

@@ -1649,17 +1649,19 @@ def body_from_name(name):
     raise ValueError(name)
 
 def is_b1_on_b2(b1, b2):
-    AABB = get_aabb(b2)
+    AABB = get_aabb(b2, -1)
     pose = get_pose(b1)
-    isOn = pose[0][0] <= AABB[1][0] and pose[0][0] >= AABB[0][0]
-    isOn &= pose[0][1] <= AABB[1][1] and pose[0][1] >= AABB[0][1]
-    isOn &= pose[0][2] >= AABB[0][2]
+    isOn = pose[0][0] < AABB[1][0] and pose[0][0] > AABB[0][0]
+    isOn = isOn and pose[0][1] < AABB[1][1] and pose[0][1] > AABB[0][1]
+    isOn = isOn and pose[0][2] > AABB[0][2]
+
     return isOn
 
 def is_pose_on_r(pose, r):
     AABB = get_aabb(r)
     isOn = pose[0][0] <= AABB[1][0] and pose[0][0] >= AABB[0][0]
-    isOn &= pose[0][1] <= AABB[1][1] and pose[0][1] >= AABB[0][1]
+    isOn = isOn and pose[0][1] <= AABB[1][1] and pose[0][1] >= AABB[0][1]
+    isOn = isOn and pose[0][2] >= AABB[0][2]
     return isOn
 
 def remove_body(body):
@@ -1909,10 +1911,9 @@ def set_joint_position_torque(body, joint, value):
 def set_joint_positions_torque(body, joints, values, velocities=None):
     max_forces = [get_max_force(body, joint) for joint in joints]
     # max_forces = [1]*len(joints)
-    # velocities = [0.25]*len(joints)
     if velocities is not None:
-        p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, forces = max_forces, targetPositions=values, targetVelocities=velocities, velocityGains=velocities)
-    p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, targetPositions=values, forces=max_forces)
+        p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, forces = max_forces, targetPositions=values)
+    p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, targetPositions=values, forces = max_forces)
 
 def set_joint_states(body, joints, positions, velocities):
     assert len(joints) == len(positions) == len(velocities)
@@ -3553,9 +3554,7 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
         for body1, body2 in product(moving_bodies, obstacles):
             if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
                     and pairwise_collision(body1, body2, **kwargs):
-                if (body1[0] == 4 and body2 == 2) or (body1[0] == 2 and body2 == 4):
-                    continue
-                if verbose: print(body1, body2)
+                if verbose: print(get_name(body1.body), get_name(body2))
                 return True
         return False
     return collision_fn
@@ -4268,6 +4267,10 @@ def is_pose_close(pose, target_pose, pos_tolerance=1e-3, ori_tolerance=1e-3*np.p
         # TODO: account for quaternion redundancy
         return False
     return True
+
+def are_joints_close(joints, target_joints, tolerance=1e-3):
+    return np.allclose(joints, target_joints, atol=tolerance, rtol=0)
+
 
 def inverse_kinematics(robot, link, target_pose, max_iterations=200, max_time=INF, custom_limits={}, **kwargs):
     start_time = time.time()

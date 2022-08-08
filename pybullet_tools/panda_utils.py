@@ -106,7 +106,9 @@ EXTENDED_LEFT_ARM = [0, PI/2, 0.0, 0, 0, PI, -PI/2-PI/4]
 TOP_HOLDING_LEFT_ARM = [0, PI/8, 0.0, -PI/3, 0, PI/2, -PI/2-.01]
 TOP_HOLDING_LEFT_ARM_CENTERED = [PI/2, PI/4, PI, -5*PI/8, 0, 1.1, PI/3-.1]
 SIDE_HOLDING_LEFT_ARM = [0, PI/8, PI, -PI/3, PI, 0.9*PI/2 - PI/2, 3*PI/4]
-PLATE_GRASP_LEFT_ARM = [-PI/2, PI/2, 0.0, 0, 0, PI, -PI/2-.8]
+# PLATE_GRASP_LEFT_ARM = [-PI/2, PI/2, PI/2, 0, -PI/2, PI, -PI/2-.8] #conf1 (full extention)
+PLATE_GRASP_LEFT_ARM = (2.738075540455348, -1.0511912675226134, 1.661103190049066, -1.7925175734541483, 2.9376307693720434, 2.560233704556581, 1.9969144035623807) #conf2 (y + .15)
+
 REST_LEFT_ARM = [0, 2.13539289, 1.29629967, 3.74999698, -0.15000005, 10000., -0.10000004, 10000.]
 WIDE_LEFT_ARM = [1.5806603449288885, -0.14239066980481405, 1.4484623937179126, -1.4851759349218694, 1.3911839347271555,
                  -1.6531320011389408, -2.978586584568441]
@@ -466,7 +468,6 @@ COMR = []
 totalMass = -1
 def are_forces_balanced(b1, p1, b2, robot, link, bodies):
     names = [get_body_name(body) for body in get_bodies() ]
-    print(names)
     if TARGET in names and b2 == body_from_name(TARGET) and TARGET == 'tray':
         gripperPose = get_link_pose(robot, link)[0]
         if len(COMR) == 0:
@@ -483,7 +484,7 @@ def are_forces_balanced(b1, p1, b2, robot, link, bodies):
         # basePose[1] = (basePose[1] + gripperPose[1])/2
         valid = True
         valid &= abs(basePose[0] - comR[0]) < EPS
-        valid &= abs((basePose[1]+.02) - comR[1]) < EPS
+        valid &= abs((basePose[1]+.06) - comR[1]) < EPS
         if valid:
             print(abs(basePose[0] - comR[0]), abs((basePose[1]+0.02) - comR[1]))
         return valid
