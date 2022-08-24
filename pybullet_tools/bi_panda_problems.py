@@ -7,6 +7,7 @@ from .utils import create_box, set_base_values, set_point, set_pose, get_pose, \
     get_bodies, z_rotation, load_model, load_pybullet, HideOutput, create_body, \
     get_box_geometry, get_cylinder_geometry, create_shape_array, unit_pose, Pose, BI_PANDA_URDF, \
     Point, LockRenderer, FLOOR_URDF, TABLE_URDF, add_data_path, TAN, set_color, BASE_LINK, remove_body, BI_PANDA_PLATE_URDF
+import pybullet as p
 
 LIGHT_GREY = (0.7, 0.7, 0.7, 1.)
 
@@ -102,6 +103,7 @@ def create_table(width=0.5, length=1.2, height=0.5, thickness=0.03, radius=0.015
 
     collision_id, visual_id = create_shape_array(geoms, poses, colors)
     body = create_body(collision_id, visual_id, **kwargs)
+    p.changeDynamics(body,-1, mass=10, lateralFriction=1.5)
 
     # TODO: unable to use several colors
     #for idx, color in enumerate(geoms):

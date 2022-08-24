@@ -35,7 +35,7 @@
     </collision>
   </link>
   <joint name="l_panda_joint0" type="fixed">
-    <origin rpy="0 0 0" xyz="0 .9 0.05"/>
+    <origin rpy="0 0 0" xyz="0 .8 0.05"/>
     <parent link="bi_panda_base"/>
     <child link="l_panda_link0"/>
   </joint>
@@ -277,7 +277,7 @@
    <joint name="l_panda_grasptarget_hand" type="fixed">
     <parent link="l_panda_hand"/>
     <child link="l_panda_grasptarget"/>
-    <origin rpy="0 0 0" xyz="0 0 0.19"/>
+    <origin rpy="0 0 0" xyz="0 0 0.335"/>
   </joint>
 <!-- ############### right arm ############## -->
   <link name="r_panda_link0">
@@ -331,7 +331,7 @@
     <parent link="r_panda_link0"/>
     <child link="r_panda_link1"/>
     <axis xyz="0 0 1"/>
-    <limit effort="87" lower="-2.9671" upper="2.9671" velocity="2.1750"/>
+    <limit effort="87" lower="-2.4671" upper="2.9671" velocity="2.1750"/>
   </joint>
   <link name="r_panda_link2">
   	<inertial>

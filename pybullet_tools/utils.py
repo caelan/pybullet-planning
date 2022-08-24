@@ -702,6 +702,9 @@ class ConfSaver(Saver):
         if joints is None:
             joints = get_movable_joints(self.body)
         self.joints = joints
+        if get_name(body) == "bi_panda":
+            print("here!")
+            self.joints = get_arm_joints(body, "right")
         if positions is None:
             positions = get_joint_positions(self.body, self.joints)
         self.positions = positions
@@ -717,8 +720,9 @@ class ConfSaver(Saver):
     def restore(self):
         #set_configuration(self.body, self.conf)
         #set_joint_positions(self.body, self.joints, self.positions)
-        set_joint_states(self.body, self.joints, self.positions, self.velocities)
+        # set_joint_states(self.body, self.joints, self.positions, self.velocities)
         #set_joint_velocities(self.body, self.joints, self.velocities)
+        pass
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.body)
@@ -737,6 +741,8 @@ class BodySaver(Saver):
             saver.apply_mapping(mapping)
 
     def restore(self):
+        if self.body == body_from_name(TARGET):
+            return
         for saver in self.savers:
             saver.restore()
 
@@ -1603,9 +1609,8 @@ def quat_angle_between(quat0, quat1):
 def all_between(lower_limits, values, upper_limits):
     assert len(lower_limits) == len(values)
     assert len(values) == len(upper_limits)
-    return True
-    # return np.less_equal(lower_limits, values).all() and \
-    #        np.less_equal(values, upper_limits).all()
+    return np.less_equal(lower_limits, values).all() and \
+           np.less_equal(values, upper_limits).all()
 
 def convex_combination(x, y, w=0.5):
     return (1-w)*np.array(x) + w*np.array(y)
@@ -1910,9 +1915,9 @@ def set_joint_position_torque(body, joint, value):
 
 def set_joint_positions_torque(body, joints, values, velocities=None):
     max_forces = [get_max_force(body, joint) for joint in joints]
-    # max_forces = [1]*len(joints)
-    if velocities is not None:
-        p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, forces = max_forces, targetPositions=values)
+    # velocities = [.01]*len(joints)
+    # if velocities is not None:
+    #     p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, forces = max_forces, targetPositions=values)
     p.setJointMotorControlArray(body, joints, p.POSITION_CONTROL, targetPositions=values, forces = max_forces)
 
 def set_joint_states(body, joints, positions, velocities):
@@ -3519,15 +3524,18 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
     moving_links = frozenset(get_moving_links(body, joints))
     attached_bodies = [attachment.child for attachment in attachments]
     moving_bodies = [CollisionPair(body, moving_links)] + list(map(parse_body, attached_bodies))
-    #moving_bodies = list(flatten(flatten_links(*pair) for pair in moving_bodies)) # Introduces overhead
-    #moving_bodies = [body] + [attachment.child for attachment in attachments]
+    # moving_bodies = list(flatten(flatten_links(*pair) for pair in moving_bodies)) # Introduces overhead
+    # moving_bodies = [body] + [attachment.child for attachment in attachments]
     lower_limits, upper_limits = get_custom_limits(body, joints, custom_limits)
     get_obstacle_aabb = cached_fn(get_buffered_aabb, cache=cache, max_distance=max_distance/2., **kwargs)
     # TODO: sort bodies by bounding box size
 
     def collision_fn(q, verbose=True):
         if not all_between(lower_limits, q, upper_limits):
-            #print('Joint limits violated')
+            print(q)
+            print("upper: ", upper_limits)
+            print("lower: ", lower_limits)
+            print('Joint limits violated')
             if verbose: print(lower_limits, q, upper_limits)
             return True
         set_joint_positions(body, joints, q)
@@ -3541,21 +3549,21 @@ def get_collision_fn(body, joints, obstacles, attachments, self_collisions, disa
             # TODO: self-collisions between body and attached_bodies (except for the link adjacent to the robot)
             if (not use_aabb or aabb_overlap(get_moving_aabb(body), get_moving_aabb(body))) and \
                     pairwise_link_collision(body, link1, body, link2): #, **kwargs):
-                # print("COLLISIOn: ",get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
+                print("COLLISIOn: ",get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
                 if verbose: print(body, link1, body, link2)
                 return True
-        #step_simulation()
+        # step_simulation()
         # for body1 in moving_bodies:
         #     for body2, _ in get_bodies_in_region(get_moving_aabb(body1)):
         #         if (body2 in obstacles) and pairwise_collision(body1, body2, **kwargs):
         #             #print(get_body_name(body1), get_body_name(body2))
         #             if verbose: print(body1, body2)
         #             return True
-        for body1, body2 in product(moving_bodies, obstacles):
-            if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
-                    and pairwise_collision(body1, body2, **kwargs):
-                if verbose: print(get_name(body1.body), get_name(body2))
-                return True
+        # for body1, body2 in product(moving_bodies, obstacles):
+        #     if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
+        #             and pairwise_collision(body1, body2, **kwargs):
+        #         if verbose: print(get_name(body1.body), get_name(body2))
+        #         return True
         return False
     return collision_fn
 
@@ -4446,51 +4454,24 @@ def plan_cartesian_motion(robot, first_joint, target_link, waypoint_poses,
                 print("times up")
                 remove_body(sub_robot)
                 return None
-            if ik_fn is None:
-                sub_kinematic_conf = inverse_kinematics_helper(sub_robot, sub_target_link, target_pose, null_space=null_space)
-                set_joint_positions(sub_robot, sub_joints, sub_kinematic_conf)
-                if is_pose_close(get_link_pose(sub_robot, sub_target_link), target_pose, **kwargs):
-                    print("###################")
-                    set_joint_positions(robot, selected_joints, sub_kinematic_conf)
-                    kinematic_conf = get_configuration(robot)
-                    if not all_between(lower_limits, kinematic_conf, upper_limits):
-                        print("limits violated")
-                    #     movable_joints = get_movable_joints(robot)
-                    #     print([(get_joint_name(robot, j), l, v, u) for j, l, v, u in
-                    #           zip(movable_joints, lower_limits, kinematic_conf, upper_limits) if not (l <= v <= u)])
-                    #     print("Limits violated")
-                    #     # wait_if_gui()
-                        remove_body(sub_robot)
-                        return None
-                    print("IK iterations:", iteration)
-                    solutions.append(kinematic_conf)
-                    break
-            else:
-                sub_kinematic_conf = ik_fn(robot, arm, target_link, target_pose, max_attempts=25, max_time=3.5)
-                if sub_kinematic_conf is None:
-                    print("no conf found")
+            sub_kinematic_conf = inverse_kinematics_helper(sub_robot, sub_target_link, target_pose, null_space=null_space)
+            set_joint_positions(sub_robot, sub_joints, sub_kinematic_conf)
+            if is_pose_close(get_link_pose(sub_robot, sub_target_link), target_pose, **kwargs):
+                print("###################")
+                set_joint_positions(robot, selected_joints, sub_kinematic_conf)
+                kinematic_conf = get_configuration(robot)
+                if not all_between(lower_limits, kinematic_conf, upper_limits):
+                    print("limits violated")
+                #     movable_joints = get_movable_joints(robot)
+                #     print([(get_joint_name(robot, j), l, v, u) for j, l, v, u in
+                #           zip(movable_joints, lower_limits, kinematic_conf, upper_limits) if not (l <= v <= u)])
+                #     print("Limits violated")
+                #     # wait_if_gui()
                     remove_body(sub_robot)
                     return None
-                set_joint_positions(robot, joints, sub_kinematic_conf)
-                if is_pose_close(get_link_pose(robot, target_link), target_pose):
-                    print("###################")
-                    set_joint_positions(robot, joints, sub_kinematic_conf)
-                    kinematic_conf = get_configuration(robot)
-                    if not all_between(lower_limits, kinematic_conf, upper_limits):
-                        print("limits violated")
-                    #     movable_joints = get_movable_joints(robot)
-                    #     print([(get_joint_name(robot, j), l, v, u) for j, l, v, u in
-                    #           zip(movable_joints, lower_limits, kinematic_conf, upper_limits) if not (l <= v <= u)])
-                    #     print("Limits violated")
-                    #     # wait_if_gui()
-                        remove_body(sub_robot)
-                        return None
-                    print("IK iterations:", iteration)
-                    solutions.append(sub_kinematic_conf)
-                    print("SOLUTIONS: ", solutions)
-                    break
-                else:
-                    print("pose is not close")
+                print("IK iterations:", iteration)
+                solutions.append(kinematic_conf)
+                break
         else:
             print("else area")
             remove_body(sub_robot)

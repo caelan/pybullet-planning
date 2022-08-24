@@ -1,18 +1,18 @@
 <robot name="tray">
   <link name="body">
     <collision>
-      <origin xyz="0 0 -.085" />
+      <origin xyz="0 0 -0.0425" />
       <geometry>
         <box size="0.21 0.35 0.01" />
       </geometry>
     </collision>
     <inertial>
-      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <origin rpy="0 0 -0.0425" xyz="0 0 0"/>
        <mass value="0.1"/>
        <inertia ixx="0.000166666667" ixy="0" ixz="0" iyy="0.000166666667" iyz="0" izz="0.000166666667"/>
     </inertial>
     <visual>
-      <origin xyz="0 0 -.085" />
+      <origin xyz="0 0 -0.0425" />
       <material name="c">
         <color rgba="0.6 0.6 0.6 1.0" />
       </material>
@@ -23,7 +23,7 @@
     <collision>
       <origin xyz="0.125 0 0" />
       <geometry>
-        <box size="0.01 0.35 0.17" />
+        <box size="0.01 0.35 0.085" />
       </geometry>
     </collision>
     <visual>
@@ -32,13 +32,13 @@
         <color rgba="0.6 0.6 0.6 1.0" />
       </material>
       <geometry>
-        <box size="0.01 0.35 0.17" />
+        <box size="0.01 0.35 0.085" />
       </geometry>
     </visual>
     <collision>
       <origin xyz="-0.125 0 0" />
       <geometry>
-        <box size="0.01 0.35 0.17" />
+        <box size="0.01 0.35 0.085" />
       </geometry>
     </collision>
     <visual>
@@ -47,13 +47,13 @@
         <color rgba="0.6 0.6 0.6 1.0" />
       </material>
       <geometry>
-        <box size="0.01 0.35 0.17" />
+        <box size="0.01 0.35 0.085" />
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 0.175 0" />
       <geometry>
-        <box size="0.25 0.01 0.17" />
+        <box size="0.25 0.01 0.085" />
       </geometry>
     </collision>
     <visual>
@@ -62,13 +62,13 @@
         <color rgba="0.6 0.6 0.6 1.0" />
       </material>
       <geometry>
-        <box size="0.25 0.01 0.17" />
+        <box size="0.25 0.01 0.085" />
       </geometry>
     </visual>
     <collision>
       <origin xyz="0 -0.175 0" />
       <geometry>
-        <box size="0.25 0.01 0.17" />
+        <box size="0.25 0.01 0.085" />
       </geometry>
     </collision>
     <visual>
@@ -77,7 +77,7 @@
         <color rgba="0.6 0.6 0.6 1.0" />
       </material>
       <geometry>
-        <box size="0.25 0.01 0.17" />
+        <box size="0.25 0.01 0.085" />
       </geometry>
     </visual>
   </link>

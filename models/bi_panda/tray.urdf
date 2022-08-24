@@ -3,7 +3,7 @@
     <collision>
       <origin xyz="0 0 -.01" />
       <geometry>
-        <box size="0.21 0.35 0.01" />
+        <box size="0.25 0.35 0.01" />
       </geometry>
     </collision>
     <inertial>
