@@ -702,9 +702,6 @@ class ConfSaver(Saver):
         if joints is None:
             joints = get_movable_joints(self.body)
         self.joints = joints
-        if get_name(body) == "bi_panda":
-            print("here!")
-            self.joints = get_arm_joints(body, "right")
         if positions is None:
             positions = get_joint_positions(self.body, self.joints)
         self.positions = positions
@@ -718,8 +715,8 @@ class ConfSaver(Saver):
         self.body = mapping.get(self.body, self.body)
 
     def restore(self):
-        #set_configuration(self.body, self.conf)
-        #set_joint_positions(self.body, self.joints, self.positions)
+        # set_configuration(self.body, self.conf)
+        set_joint_positions(self.body, self.joints, self.positions)
         # set_joint_states(self.body, self.joints, self.positions, self.velocities)
         #set_joint_velocities(self.body, self.joints, self.velocities)
         pass
@@ -741,8 +738,8 @@ class BodySaver(Saver):
             saver.apply_mapping(mapping)
 
     def restore(self):
-        if self.body == body_from_name(TARGET):
-            return
+        # if self.body == body_from_name(TARGET):
+        #     return
         for saver in self.savers:
             saver.restore()
 
