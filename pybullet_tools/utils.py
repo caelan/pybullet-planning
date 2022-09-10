@@ -1970,7 +1970,7 @@ def dump_link(body, link):
     joint = parent_joint_from_link(link)
     joint_name = JOINT_TYPES[get_joint_type(body, joint)] if is_fixed(body, joint) else get_joint_name(body, joint)
     num_visual = len(get_visual_data(body, link)) # TODO: try/catch
-    print('Link id: {} | Name: {} | Joint: {} | Parent: {} | Mass: {} | Collision: {} | Visual: {}'.format(
+    print('Link id: {} | Name: {} | Joint: {} | Parent: {} | Mass: {:.3f} | Collision: {} | Visual: {}'.format(
         link, get_link_name(body, link), joint_name,
         get_link_name(body, get_link_parent(body, link)), get_mass(body, link),
         len(get_collision_data(body, link)), num_visual))
@@ -1989,7 +1989,7 @@ def dump_body(body, fixed=False, links=True):
         return
     base_link = NULL_ID
     num_visual = len(get_visual_data(body, base_link)) # TODO: try/catch
-    print('Link id: {} | Name: {} | Mass: {} | Collision: {} | Visual: {}'.format(
+    print('Link id: {} | Name: {} | Mass: {:.3f} | Collision: {} | Visual: {}'.format(
         base_link, get_base_name(body), get_mass(body),
         len(get_collision_data(body, base_link)), num_visual))
     for link in get_links(body):
@@ -3276,6 +3276,19 @@ def aabb_overlap(aabb1, aabb2):
     # return np.less_equal(lower1, upper2).all() and \
     #        np.less_equal(lower2, upper1).all()
 
+def aabb_difference(aabb1, aabb2):
+    # TODO: penetration
+    lower1, upper1 = aabb1
+    lower2, upper2 = aabb2
+    difference1 = get_difference(upper1, lower2)
+    difference1 = np.maximum(np.zeros(len(difference1)), difference1)
+    difference2 = get_difference(lower1, upper2)
+    difference2 = np.minimum(difference2, np.zeros(len(difference2)))
+    return difference1 + difference2
+
+def aabb_distance(aabb1, aabb2, **kwargs):
+    return get_length(aabb_difference(aabb1, aabb2), **kwargs)
+
 def aabb_empty(aabb):
     lower, upper = aabb
     return np.less(upper, lower).any()
@@ -3425,6 +3438,12 @@ def buffer_aabb(aabb, buffer):
     center = get_aabb_center(aabb)
     return aabb_from_extent_center(new_extent, center)
 
+def translate_aabb(aabb, translation):
+    extent = get_aabb_extent(aabb)
+    center = get_aabb_center(aabb)
+    new_center = np.array(center) + np.array(translation)
+    return aabb_from_extent_center(extent, new_center)
+
 #####################################
 
 OOBB = namedtuple('OOBB', ['aabb', 'pose'])
@@ -3460,10 +3479,12 @@ def get_oobb_vertices(oobb):
 def aabb_from_oobb(oobb):
     return aabb_from_points(get_oobb_vertices(oobb))
 
-def recenter_aabb(aabb):
+def oobb_from_aabb(aabb):
     extent = get_aabb_extent(aabb)
     new_aabb = AABB(-extent/2., +extent/2.)
     return OOBB(new_aabb, Pose(point=get_aabb_center(aabb)))
+
+recenter_aabb = oobb_from_aabb
 
 def recenter_oobb(oobb):
     aabb, pose = oobb
@@ -3536,12 +3557,13 @@ def vertices_from_body(body, base_pose=None, **kwargs):
     # In global frame at the current
     if base_pose is None:
        base_pose = get_pose(body)
-    vertices = []
+    vertices_world = []
     for link in get_all_links(body):
         relative_pose = get_relative_pose(body, link, link2=BASE_LINK)
         link_pose = multiply(base_pose, relative_pose)
-        vertices.extend(tform_points(link_pose, vertices_from_link(body, link=link, **kwargs)))
-    return vertices
+        vertices_link = vertices_from_link(body, link=link, **kwargs)
+        vertices_world.extend(tform_points(link_pose, vertices_link))
+    return vertices_world
 
 OBJ_MESH_CACHE = {}
 
@@ -5489,7 +5511,10 @@ def tform_point(affine, point):
     return point_from_pose(multiply(affine, Pose(point=point)))
 
 def tform_points(affine, points):
-    return [tform_point(affine, p) for p in points]
+    #return [tform_point(affine, p) for p in points]
+    tform = tform_from_pose(affine)
+    points_homogenous = np.vstack([np.vstack(points).T, np.ones(len(points))])
+    return tform.dot(points_homogenous)[:3,:].T
 
 apply_affine = tform_points
 
