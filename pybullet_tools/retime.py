@@ -24,6 +24,9 @@ def decompose_into_paths(joints, path):
     for q1, q2 in get_pairs(path):
         # Zero velocities aren't enforced otherwise
         indices, = np.nonzero(get_difference(q1, q2))
+        # if 2 consecutive states exist (no nonzero elements exist) skiip.
+        if not len(indices):
+            continue
         current_joints = tuple(joints[j] for j in indices)
         if not joint_sequence or (current_joints != joint_sequence[-1]):
             if current_path:
