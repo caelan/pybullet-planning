@@ -1214,11 +1214,15 @@ def add_data_path(data_path=None):
 
 GRAVITY = 9.8
 
+def set_gravity(gravity):
+    x, y, z = gravity
+    p.setGravity(x, y, z, physicsClientId=CLIENT)
+
 def enable_gravity():
-    p.setGravity(0, 0, -GRAVITY, physicsClientId=CLIENT)
+    set_gravity(gravity=[0, 0, -GRAVITY])
 
 def disable_gravity():
-    p.setGravity(0, 0, 0, physicsClientId=CLIENT)
+    set_gravity(gravity=np.zeros(3))
 
 def step_simulation():
     p.stepSimulation(physicsClientId=CLIENT)
@@ -1665,6 +1669,8 @@ def unit_quat():
     return quat_from_euler([0, 0, 0]) # [X,Y,Z,W]
 
 def quat_from_axis_angle(axis, angle): # axis-angle
+    # p.getQuaternionFromAxisAngle
+    # p.getAxisAngleFromQuaternion
     #return get_unit_vector(np.append(vec, [angle]))
     return quaternion_about_axis(angle, axis)
     #return np.append(math.sin(angle/2) * get_unit_vector(axis), [math.cos(angle / 2)])
@@ -1802,7 +1808,9 @@ def pose_from_base_values(base_values, default_pose=unit_pose()):
     x, y, yaw = base_values
     _, _, z = point_from_pose(default_pose)
     roll, pitch, _ = euler_from_quat(quat_from_pose(default_pose))
-    return (x, y, z), quat_from_euler([roll, pitch, yaw])
+    point = (x, y, z)
+    quat = quat_from_euler([roll, pitch, yaw])
+    return point, quat
 
 def quat_combination(quat1, quat2, fraction=0.5):
     #return p.getQuaternionSlerp(quat1, quat2, interpolationFraction=fraction)
@@ -1819,7 +1827,10 @@ def quat_angle_between(quat0, quat1):
     # q1 = unit_vector(quat1[:4])
     # d = clip(np.dot(q0, q1), min_value=-1., max_value=+1.)
     # angle = math.acos(d)
-    
+
+    # TODO: some numeric imprecision
+    # p.getAxisDifferenceQuaternion
+    # p.calculateVelocityQuaternion
     # TODO: angle_between
     delta = p.getDifferenceQuaternion(quat0, quat1)
     return quat_angle(delta)
@@ -2189,7 +2200,9 @@ def get_max_limits(body, joints):
     return [get_max_limit(body, joint) for joint in joints]
 
 def get_joint_intervals(body, joints):
-    return get_min_limits(body, joints), get_max_limits(body, joints)
+    return AABB(get_min_limits(body, joints), get_max_limits(body, joints))
+
+get_joint_aabb = get_joint_intervals
 
 def get_max_velocity(body, joint):
     # Note that the maximum velocity is not used in actual motor control commands at the moment.
@@ -3296,7 +3309,7 @@ def aabb_empty(aabb):
 def is_aabb_degenerate(aabb):
     return get_aabb_volume(aabb) <= 0.
 
-def aabb_intersection(*aabbs):
+def aabb_intersection(*aabbs): # TODO: list like aabb_union?
     # https://github.mit.edu/caelan/lis-openrave/blob/master/manipulation/bodies/bounding_volumes.py
     lower = np.max([lower for lower, _ in aabbs], axis=0)
     upper = np.min([upper for _, upper in aabbs], axis=0)
@@ -4074,6 +4087,7 @@ def get_collision_fn(body, joints, obstacles=[], attachments=[], self_collisions
         for body1, body2 in product(moving_bodies, obstacles):
             if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
                     and pairwise_collision(body1, body2, **kwargs):
+                # TODO: Collision(body=/world/robot, links=frozenset({0, 1, 2, 3, 4, 5, 6, 8, 9, 10}))
                 #print(get_body_name(body1), get_body_name(body2))
                 if verbose:
                     print(body1, body2)
@@ -4870,9 +4884,12 @@ def control_joints(body, joints, positions=None, velocities=None, position_gain=
                                        targetVelocities=velocities,
                                        physicsClientId=CLIENT, **kwargs)
 
-def control_joints_hold(body, joints, positions=None, **kwargs):
+def control_joints_hold(body, joints=None, positions=None, **kwargs):
+    # TODO: might need to undo
+    if joints is None:
+        joints = get_movable_joints(body)
     configuration = modify_configuration(body, joints, positions)
-    return control_joints(body, get_movable_joints(body), configuration, **kwargs)
+    return control_joints(body, joints, configuration, **kwargs)
 
 def joint_controller(body, joints, target, tolerance=1e-3, timeout=INF, **kwargs):
     assert(len(joints) == len(target))
