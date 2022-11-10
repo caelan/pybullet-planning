@@ -5334,6 +5334,9 @@ def read_counter(debug):
 def read_button(debug):
     return read_counter(debug) % 2 == 1
 
+def remove_parameters():
+    return p.removeAllUserParameters(physicsClientId=CLIENT)
+
 def add_text(text, position=unit_point(), color=BLACK, lifetime=None, parent=NULL_ID, parent_link=BASE_LINK):
     return p.addUserDebugText(str(text), textPosition=position, textColorRGB=remove_alpha(color), # textSize=1,
                               lifeTime=get_lifetime(lifetime), parentObjectUniqueId=parent, parentLinkIndex=parent_link,
