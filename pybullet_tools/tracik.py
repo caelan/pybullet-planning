@@ -4,7 +4,7 @@ import os.path
 import numpy as np
 from tracikpy import TracIKSolver
 
-from pybullet_tools.utils import Pose, multiply, invert, tform_from_pose, get_model_info, BASE_LINK, \
+from pybullet_planning.pybullet_tools.utils import Pose, multiply, invert, tform_from_pose, get_model_info, BASE_LINK, \
     get_link_name, link_from_name, get_joint_name, joint_from_name, parent_link_from_joint, joints_from_names, \
     links_from_names, get_link_pose, draw_pose, set_joint_positions, get_joint_positions, get_joint_limits, \
     CIRCULAR_LIMITS, get_custom_limits

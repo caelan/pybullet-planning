@@ -4315,7 +4315,7 @@ def shortcut_circular(body, joints, path, extend_fn, collision_fn, **kwargs):
     if path is None:
         return path
     # TODO: apply generically whenever only one moving joint
-    #from pybullet_tools.retime import decompose_into_paths
+    #from pybullet_planning.pybullet_tools.retime import decompose_into_paths
     difference_fn = get_difference_fn(body, joints)
     waypoints = waypoints_from_path(path, difference_fn=difference_fn, **kwargs)
     # print(decompose_into_paths(joints, waypoints))

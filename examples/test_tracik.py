@@ -5,10 +5,10 @@ from __future__ import print_function
 import argparse
 import numpy as np
 
-from pybullet_tools.pr2_utils import PR2_URDF, DRAKE_PR2_URDF, \
+from pybullet_planning.pybullet_tools.pr2_utils import PR2_URDF, DRAKE_PR2_URDF, \
     SIDE_HOLDING_LEFT_ARM, PR2_GROUPS, open_arm, REST_LEFT_ARM, rightarm_from_leftarm, PR2_TOOL_FRAMES, LEFT_ARM
-from pybullet_tools.tracik import IKSolver
-from pybullet_tools.utils import set_joint_positions, add_data_path, connect, dump_body, load_model, joints_from_names, \
+from pybullet_planning.pybullet_tools.tracik import IKSolver
+from pybullet_planning.pybullet_tools.utils import set_joint_positions, add_data_path, connect, dump_body, load_model, joints_from_names, \
     disconnect, HideOutput, load_pybullet, base_aligned_z, Point, set_point, get_aabb, \
     FLOOR_URDF, wait_unlocked, multiply, Pose, Point
 
