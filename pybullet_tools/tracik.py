@@ -7,7 +7,7 @@ from tracikpy import TracIKSolver
 from pybullet_planning.pybullet_tools.utils import Pose, multiply, invert, tform_from_pose, get_model_info, BASE_LINK, \
     get_link_name, link_from_name, get_joint_name, joint_from_name, parent_link_from_joint, joints_from_names, \
     links_from_names, get_link_pose, draw_pose, set_joint_positions, get_joint_positions, get_joint_limits, \
-    CIRCULAR_LIMITS, get_custom_limits
+    CIRCULAR_LIMITS, get_custom_limits, irange
 
 
 class IKSolver(object):
@@ -114,6 +114,13 @@ class IKSolver(object):
         set_joint_positions(self.body, self.joints, conf)
     def sample_conf(self):
         return self.random_generator.uniform(*self.joint_limits)
+    def set_joint_limits(self, lower, upper):
+        self.ik_solver.joint_limits = (lower, upper)
+    def set_nearby_limits(self, conf, bound):
+        lower = np.array(conf) - bound
+        upper = np.array(conf) + bound
+        self.set_joint_limits(lower, upper)
+        return lower, upper
 
     def solve(self, tool_pose, seed_conf=None, pos_tolerance=1e-5, ori_tolerance=math.radians(5e-2)):
         pose = self.base_from_world(tool_pose)
@@ -133,6 +140,14 @@ class IKSolver(object):
         return self.solve(tool_pose, seed_conf=self.reference_conf, **kwargs)
     def solve_warm(self, tool_pose, **kwargs):
         return self.solve(tool_pose, seed_conf=self.last_solution, **kwargs)
+    def solve_restart(self, tool_pose, seed_conf=None, max_attempts=3, **kwargs):
+        for i in irange(max_attempts):
+            if (i != 0) or (seed_conf is None):
+                seed_conf = self.sample_conf()
+            conf = self.solve(tool_pose, seed_conf=seed_conf, **kwargs)
+            if conf is not None:
+                return conf
+        return None
     def generate(self, tool_pose, include_failures=False, **kwargs):
         #start_time = time.time()
         while True:
