@@ -696,7 +696,7 @@ class VideoSaver(Saver):
     def restore(self):
         if self.log_id is not None:
             p.stopStateLogging(self.log_id)
-            print('Saved', self.path)
+            print('Saved: {}'.format(self.path)) # TODO: verbose
 
 class Profiler(Saver):
     fields = ['tottime', 'cumtime', None]
@@ -2260,6 +2260,8 @@ def get_custom_limits(body, joints, custom_limits={}, circular_limits=UNBOUNDED_
             joint_limits.append(circular_limits)
         else:
             joint_limits.append(get_joint_limits(body, joint))
+    if not joint_limits:
+        return [], []
     return zip(*joint_limits)
 
 #####################################
