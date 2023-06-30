@@ -1898,7 +1898,10 @@ def remove_body(body):
     return p.removeBody(body, physicsClientId=CLIENT)
 
 def get_pose(body):
-    return p.getBasePositionAndOrientation(body, physicsClientId=CLIENT)
+    pose = p.getBasePositionAndOrientation(body, physicsClientId=CLIENT)
+    inertial_pose = get_joint_inertial_pose(body, BASE_LINK)
+    pose = multiply(pose, invert(inertial_pose))
+    return pose
     #return np.concatenate([point, quat])
 
 def get_point(body):
@@ -1914,6 +1917,8 @@ def get_base_values(body):
     return base_values_from_pose(get_pose(body))
 
 def set_pose(body, pose):
+    inertial_pose = get_joint_inertial_pose(body, BASE_LINK)
+    pose = multiply(pose, inertial_pose)
     (point, quat) = pose
     p.resetBasePositionAndOrientation(body, point, quat, physicsClientId=CLIENT)
 
@@ -3208,6 +3213,7 @@ def get_data_normal(data):
     return DEFAULT_NORMAL
 
 def get_data_geometry(data):
+    # TODO: return as a dict
     geometry_type = get_data_type(data)
     if geometry_type == p.GEOM_SPHERE:
         parameters = [get_data_radius(data)]
