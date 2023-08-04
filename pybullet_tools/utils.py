@@ -3849,7 +3849,7 @@ def halton_generator(d, seed=None):
         [weights] = sequencer.get(1)
         yield np.array(weights)
 
-def unit_generator(d, use_halton=False):
+def unit_generator(d, use_halton=False): # normalized_generator
     if use_halton:
         try:
             import ghalton
@@ -3874,6 +3874,16 @@ def get_sample_fn(body, joints, custom_limits={}, **kwargs):
 
 def get_halton_sample_fn(body, joints, **kwargs):
     return get_sample_fn(body, joints, use_halton=True, **kwargs)
+
+def get_norm_sample_fn(body, joints, mean, scale=0.1, **kwargs):
+    lower, upper = get_custom_limits(body, joints, circular_limits=CIRCULAR_LIMITS, **kwargs)
+    assert len(mean) == len(lower) == len(upper)
+    std = scale * get_difference(lower, upper)
+    def fn():
+        sample = [sample_norm(m, s, lower=l, upper=u)
+                  for m, s, l, u in zip(mean, std, lower, upper)]
+        return tuple(sample)
+    return fn
 
 def get_difference_fn(body, joints):
     circular_joints = [is_circular(body, joint) for joint in joints]
@@ -3946,7 +3956,7 @@ def get_default_resolutions(body, joints, resolutions=None):
         return resolutions
     return np.array([get_default_resolution(body, joint) for joint in joints])
 
-def get_extend_fn(body, joints, resolutions=None, norm=2):
+def get_extend_fn(body, joints, resolutions=None, norm=2): # TODO: change to INF?
     # norm = 1, 2, INF
     resolutions = get_default_resolutions(body, joints, resolutions)
     difference_fn = get_difference_fn(body, joints)

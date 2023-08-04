@@ -2,6 +2,7 @@ import math
 import os
 import random
 import re
+import time
 from collections import namedtuple
 from itertools import combinations
 
@@ -17,7 +18,7 @@ from .utils import multiply, get_link_pose, set_joint_position, set_joint_positi
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
     get_extend_fn, get_moving_links, link_pairs_collision, get_link_subtree, \
     clone_body, get_all_links, pairwise_collision, tform_point, get_camera_matrix, ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, \
-    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color, wait_if_gui
+    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color, wait_if_gui, get_sample_fn, elapsed_time, wait_unlocked, get_unit_vector
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -621,16 +622,30 @@ def is_optical(link_name):
     return 'optical' in link_name
 
 def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME, head_joints=None,
-                       max_iterations=100, step_size=0.5, tolerance=np.pi*1e-2, verbose=False):
+                       camera_axis=None, seed_conf=None, randomize=False,
+                       max_iterations=100, step_size=0.5, tolerance=np.pi*1e-2, debug=False, verbose=False):
     # https://github.com/PR2/pr2_controllers/blob/kinetic-devel/pr2_head_action/src/pr2_point_frame.cpp
+    # TODO: rename variables
+    start_time = time.time()
     head_link = link_from_name(pr2, head_name)
-    camera_axis = np.array([0, 0, 1]) if is_optical(head_name) else np.array([1, 0, 0])
+    if camera_axis is None:
+        camera_axis = [0, 0, 1] if is_optical(head_name) else [1, 0, 0]
+    assert len(camera_axis) == 3
+    camera_axis = get_unit_vector(camera_axis)
     if head_joints is None:
         head_joints = joints_from_names(pr2, PR2_GROUPS['head'])
     # TODO: could also set the target orientation for inverse kinematics
-    head_conf = np.zeros(len(head_joints))
+    # TODO: library for computing task-space features
+    if seed_conf is None:
+        if randomize:
+            head_conf = get_sample_fn(pr2, head_joints)()
+        else:
+            head_conf = np.zeros(len(head_joints))
+    else:
+        head_conf = seed_conf
     with LockRenderer(lock=True):
         with ConfSaver(pr2):
+            # TODO: proximity constraint
             for iteration in range(max_iterations):
                 set_joint_positions(pr2, head_joints, head_conf)
                 world_from_head = get_link_pose(pr2, head_link)
@@ -638,7 +653,7 @@ def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME, head_joints=None,
                 error_angle = angle_between(camera_axis, point_head)
                 if abs(error_angle) <= tolerance:
                     break
-                normal_head = np.cross(camera_axis, point_head)
+                normal_head = np.cross(camera_axis, point_head) # TODO: normalize?
                 normal_world = tform_point((unit_point(), quat_from_pose(world_from_head)), normal_head)
                 correction_quat = quat_from_axis_angle(normal_world, step_size*error_angle)
                 correction_euler = euler_from_quat(correction_quat)
@@ -646,13 +661,13 @@ def inverse_visibility(pr2, point, head_name=HEAD_LINK_NAME, head_joints=None,
                 correction_conf = np.array([np.dot(angular[mj], correction_euler)
                                             for mj in movable_from_joints(pr2, head_joints)])
                 if verbose:
-                    print('Iteration: {} | Error: {:.3f} | Correction: {}'.format(
-                        iteration, error_angle, correction_conf))
-                head_conf += correction_conf
-                #if debug:
-                #wait_if_gui()
+                    print('Iteration: {}/{} | Error: {:.3f} | Correction: {} | Elapsed: {:.3f}'.format(
+                        iteration, max_iterations, error_angle, np.round(correction_conf, 3), elapsed_time(start_time)))
                 if np.all(correction_conf == 0):
                     return None
+                head_conf += correction_conf
+                if debug:
+                    wait_unlocked()
             else:
                 return None
     if violates_limits(pr2, head_joints, head_conf):
