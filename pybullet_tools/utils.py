@@ -345,7 +345,7 @@ def named_tuple(name, fields, defaults=None):
         NT.__new__.__defaults__ = defaults
     return NT
 
-class OrderedSet(collections.OrderedDict, collections.MutableSet):
+class OrderedSet(collections.OrderedDict, collections.abc.MutableSet):
     # TODO: https://stackoverflow.com/questions/1653970/does-python-have-an-ordered-set
     def __init__(self, seq=()): # known special case of set.__init__
         #super(OrderedSet, self).__init__()
@@ -3054,8 +3054,9 @@ def clone_world(client=None, exclude=[]):
 
 VHACD_DIR = 'vhacd/'
 
-def create_vhacd(input_path, output_path=None, output_dir=VHACD_DIR, cache=True, verbose=False, **kwargs):
+def create_vhacd(input_path, output_path=None, output_dir=VHACD_DIR, log_path=None, relative=False, cache=True, verbose=False, **kwargs):
     # https://github.com/bulletphysics/bullet3/blob/afa4fb54505fd071103b8e2e8793c38fd40f6fb6/examples/pybullet/examples/vhacd.py
+    # TODO: check convex hull
     input_path = os.path.abspath(input_path)
     if output_path is None:
         #output_path = join_paths(TEMP_DIR, 'vhacd_{}.obj'.format(next(VHACD_CNT)))
@@ -3068,7 +3069,10 @@ def create_vhacd(input_path, output_path=None, output_dir=VHACD_DIR, cache=True,
         import zlib
         ensure_dir(output_dir)
         filename, _ = os.path.splitext(os.path.basename(input_path))
-        unique = os.path.abspath(input_path)
+        if relative:
+            unique = os.path.basename(input_path)
+        else:
+            unique = os.path.abspath(input_path)
         #unique = read(input_path) # TODO: not written deterministically in the same order
         identity = zlib.adler32(unique.encode('utf-8')) # TODO: kwargs
         filename = '{}_vhacd_{}.obj'.format(filename, identity)
@@ -3077,28 +3081,28 @@ def create_vhacd(input_path, output_path=None, output_dir=VHACD_DIR, cache=True,
             return output_path
 
     start_time = time.time()
-    print('Starting V-HACD of {}'.format(input_path))
-    log_path = join_paths(output_dir, 'vhacd_log.txt')
-    # TODO: use kwargs to update the default args
-    vhacd_kwargs = {
-        'concavity': 0.0025,  # Maximum allowed concavity (default=0.0025, range=0.0-1.0)
-        'alpha': 0.04,  # Controls the bias toward clipping along symmetry planes (default=0.05, range=0.0-1.0)
-        'beta': 0.05,  # Controls the bias toward clipping along revolution axes (default=0.05, range=0.0-1.0)
-        'gamma': 0.00125,  # Controls the maximum allowed concavity during the merge stage (default=0.00125, range=0.0-1.0)
-        'minVolumePerCH': 0.0001,  # Controls the adaptive sampling of the generated convex-hulls (default=0.0001, range=0.0-0.01)
-        'resolution': 100000,  # Maximum number of voxels generated during the voxelization stage (default=100,000, range=10,000-16,000,000)
-        'maxNumVerticesPerCH': 64,  # Controls the maximum number of triangles per convex-hull (default=64, range=4-1024)
-        'depth': 20,  # Maximum number of clipping stages. During each split stage, parts with a concavity higher than the user defined threshold are clipped according the best clipping plane (default=20, range=1-32)
-        'planeDownsampling': 4,  # Controls the granularity of the search for the \"best\" clipping plane (default=4, range=1-16)
-        'convexhullDownsampling': 4,  # Controls the precision of the convex-hull generation process during the clipping plane selection stage (default=4, range=1-16)
-        'pca': 0,  # Enable/disable normalizing the mesh before applying the convex decomposition (default=0, range={0,1})
-        'mode': 0,  # 0: voxel-based approximate convex decomposition, 1: tetrahedron-based approximate convex decomposition (default=0,range={0,1})
-        'convexhullApproximation': 1,  # Enable/disable approximation when computing convex-hulls (default=1, range={0,1})
-    }
+    print('Starting V-HACD: {}'.format(input_path))
+    if log_path is None:
+        log_path = join_paths(output_dir, 'vhacd_log.txt')
+    vhacd_kwargs = dict(
+        concavity=0.0025,  # Maximum allowed concavity (default=0.0025, range=0.0-1.0)
+        alpha=0.05,  # Controls the bias toward clipping along symmetry planes (default=0.05, range=0.0-1.0)
+        beta=0.05,  # Controls the bias toward clipping along revolution axes (default=0.05, range=0.0-1.0)
+        gamma=0.00125,  # Controls the maximum allowed concavity during the merge stage (default=0.00125, range=0.0-1.0)
+        minVolumePerCH=0.0001,  # Controls the adaptive sampling of the generated convex-hulls (default=0.0001, range=0.0-0.01)
+        resolution=100000,  # Maximum number of voxels generated during the voxelization stage (default=100,000, range=10,000-16,000,000)
+        maxNumVerticesPerCH=64,  # Controls the maximum number of triangles per convex-hull (default=64, range=4-1024)
+        depth=20,  # Maximum number of clipping stages. During each split stage, parts with a concavity higher than the user defined threshold are clipped according the best clipping plane (default=20, range=1-32)
+        planeDownsampling=4,  # Controls the granularity of the search for the \"best\" clipping plane (default=4, range=1-16)
+        convexhullDownsampling=4,  # Controls the precision of the convex-hull generation process during the clipping plane selection stage (default=4, range=1-16)
+        pca=0,  # Enable/disable normalizing the mesh before applying the convex decomposition (default=0, range={0,1})
+        mode=0,  # 0: voxel-based approximate convex decomposition, 1: tetrahedron-based approximate convex decomposition (default=0,range={0,1})
+        convexhullApproximation=1,  # Enable/disable approximation when computing convex-hulls (default=1, range={0,1})
+    )
     vhacd_kwargs.update(kwargs)
     with HideOutput(enable=not verbose):
         p.vhacd(input_path, output_path, log_path, **vhacd_kwargs)
-    print('Finished V-HACD: {} ({:.3f} sec)'.format(output_path, elapsed_time(start_time)))
+    print('Finished V-HACD: {} | Elapsed: {:.3f} sec | Log: {}'.format(output_path, elapsed_time(start_time), log_path))
 
     return output_path
     #return create_obj(output_path, **kwargs)
