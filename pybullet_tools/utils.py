@@ -1,6 +1,5 @@
 from __future__ import print_function
 
-import collections
 import colorsys
 import inspect
 import json
@@ -19,7 +18,11 @@ import shutil
 import cProfile
 import pstats
 
-from collections import defaultdict, deque, namedtuple
+from collections import defaultdict, deque, namedtuple, OrderedDict
+try:
+    from collections import MutableSet
+except ImportError:
+    from collections.abc import MutableSet
 from itertools import product, combinations, count, cycle, islice
 from multiprocessing import TimeoutError
 from contextlib import contextmanager
@@ -345,7 +348,7 @@ def named_tuple(name, fields, defaults=None):
         NT.__new__.__defaults__ = defaults
     return NT
 
-class OrderedSet(collections.OrderedDict, collections.MutableSet):
+class OrderedSet(OrderedDict, MutableSet):
     # TODO: https://stackoverflow.com/questions/1653970/does-python-have-an-ordered-set
     def __init__(self, seq=()): # known special case of set.__init__
         #super(OrderedSet, self).__init__()
