@@ -71,6 +71,7 @@ DRAKE_PATH = 'models/drake/'
 MODEL_DIRECTORY = join_paths(get_parent_dir(__file__), os.pardir, 'models/')
 ROOMBA_URDF = join_paths(MODEL_DIRECTORY, 'turtlebot/roomba.urdf')
 TURTLEBOT_URDF = join_paths(MODEL_DIRECTORY, 'turtlebot/turtlebot_holonomic.urdf')
+TIAGO_URDF = join_paths(MODEL_DIRECTORY,'tiago/tiagolite.urdf')
 DRAKE_IIWA_URDF = join_paths(MODEL_DIRECTORY, 'drake/iiwa_description/urdf/iiwa14_polytope_collision.urdf')
 WSG_50_URDF = join_paths(MODEL_DIRECTORY, 'drake/wsg_50_description/urdf/wsg_50_mesh_visual.urdf') # wsg_50 | wsg_50_mesh_visual | wsg_50_mesh_collision
 #SCHUNK_URDF = join_paths(MODEL_DIRECTORY, 'drake/wsg_50_description/sdf/schunk_wsg_50.sdf')
