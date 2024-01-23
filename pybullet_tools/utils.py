@@ -696,7 +696,7 @@ class VideoSaver(Saver):
     def restore(self):
         if self.log_id is not None:
             p.stopStateLogging(self.log_id)
-            print('Saved: {}'.format(self.path)) # TODO: verbose
+            print('Saved: {}'.format(os.path.abspath(self.path))) # TODO: verbose
 
 class Profiler(Saver):
     fields = ['tottime', 'cumtime', None]
@@ -2578,14 +2578,18 @@ def get_plane_geometry(normal):
         'planeNormal': normal,
     }
 
-def get_mesh_geometry(path, scale=1.):
-    return {
+def get_mesh_geometry(path, scale=1., concave=False):
+    geometry = {
         'shapeType': p.GEOM_MESH,
         'fileName': path,
         'meshScale': scale*np.ones(3),
     }
+    if concave:
+        # This should not be used with dynamic / moving objects, only for static (mass = 0) terrain.
+        geometry['flags'] = p.GEOM_FORCE_CONCAVE_TRIMESH
+    return geometry
 
-def get_faces_geometry(mesh, vertex_textures=None, vertex_normals=None, scale=1.):
+def get_faces_geometry(mesh, vertex_textures=None, vertex_normals=None, scale=1., concave=False):
     # TODO: p.createCollisionShape(p.GEOM_MESH, vertices=[], indices=[])
     # https://github.com/bulletphysics/bullet3/blob/ddc47f932888a6ea3b4e11bd5ce73e8deba0c9a1/examples/pybullet/examples/createMesh.py
     vertices, faces = mesh
@@ -2605,6 +2609,9 @@ def get_faces_geometry(mesh, vertex_textures=None, vertex_normals=None, scale=1.
         geometry['uvs'] = vertex_textures
     if vertex_normals is not None:
         geometry['normals'] = vertex_normals
+    if concave:
+        # This should not be used with dynamic / moving objects, only for static (mass = 0) terrain.
+        geometry['flags'] = p.GEOM_FORCE_CONCAVE_TRIMESH
     return geometry
 
 NULL_ID = -1
@@ -2617,7 +2624,6 @@ def create_collision_shape(geometry, pose=unit_pose()):
         'collisionFramePosition': point,
         'collisionFrameOrientation': quat,
         'physicsClientId': CLIENT,
-        #'flags': p.GEOM_FORCE_CONCAVE_TRIMESH,
     }
     collision_args.update(geometry)
     if 'length' in collision_args:
@@ -2665,12 +2671,14 @@ def plural(word):
 
 Shape = named_tuple('Shape', *unzip([('geom', None), ('pose', Pose()), ('color', None)]))
 
-def create_shape_array(geoms, poses, colors=None):
+def create_shape_array(geoms, poses=None, colors=None):
     # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/pybullet.c
     # createCollisionShape: height
     # createVisualShape: length
     # createCollisionShapeArray: lengths
     # createVisualShapeArray: lengths
+    if poses is None:
+        poses = [unit_pose() for _ in geoms]
     mega_geom = defaultdict(list)
     for geom in geoms:
         extended_geom = get_default_geometry()
@@ -2826,8 +2834,9 @@ def create_plane(normal=[0, 0, 1], mass=STATIC_MASS, color=BLACK, **kwargs):
     set_color(body, color=color) # must perform after set_texture
     return body
 
-def create_obj(path, scale=1., mass=STATIC_MASS, color=GREY, **kwargs):
-    collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale), color=color, **kwargs)
+def create_obj(path, scale=1., concave=False, mass=STATIC_MASS, color=GREY, **kwargs):
+    collision_id, visual_id = create_shape(get_mesh_geometry(path, scale=scale, concave=concave),
+                                           color=color, **kwargs)
     body = create_body(collision_id, visual_id, mass=mass)
     fixed_base = (mass == STATIC_MASS)
     INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, path, fixed_base, scale) # TODO: store geometry info instead?
@@ -2837,19 +2846,25 @@ Mesh = namedtuple('Mesh', ['vertices', 'faces'])
 mesh_count = count()
 TEMP_DIR = 'temp/'
 
+def write_obj(mesh, under=True):
+    ensure_dir(TEMP_DIR)
+    filename = 'mesh{}.obj'.format(next(mesh_count))
+    path = os.path.abspath(os.path.join(TEMP_DIR, filename))
+    write(path, obj_file_from_mesh(mesh, under=under))
+    return path
+
 def create_mesh(mesh, under=True, **kwargs):
     # http://people.sc.fsu.edu/~jburkardt/data/obj/obj.html
     # TODO: read OFF / WRL / OBJ files
     # TODO: maintain dict to file
-    ensure_dir(TEMP_DIR)
-    path = os.path.join(TEMP_DIR, 'mesh{}.obj'.format(next(mesh_count)))
-    write(path, obj_file_from_mesh(mesh, under=under))
+    path = write_obj(mesh, under=under)
     return create_obj(path, **kwargs)
     #safe_remove(path) # TODO: removing might delete mesh?
 
-def create_faces(mesh, scale=1., mass=STATIC_MASS, collision=True, color=GREY, **kwargs):
+def create_faces(mesh, scale=1., concave=False, mass=STATIC_MASS, collision=True, color=GREY, **kwargs):
     # TODO: rename to create_mesh
-    collision_id, visual_id = create_shape(get_faces_geometry(mesh, scale=scale, **kwargs), collision=collision, color=color)
+    collision_id, visual_id = create_shape(get_faces_geometry(mesh, scale=scale, concave=concave, **kwargs),
+                                           collision=collision, color=color)
     body = create_body(collision_id, visual_id, mass=mass)
     # fixed_base = (mass == STATIC_MASS)
     # INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, None, fixed_base, scale)
@@ -2921,7 +2936,7 @@ def collision_shape_from_data(data, body, link, client=None, decompose=False, **
                                   fileName=filename,
                                   meshScale=get_data_scale(data),
                                   planeNormal=get_data_normal(data),
-                                  flags=p.GEOM_FORCE_CONCAVE_TRIMESH,
+                                  flags=p.GEOM_FORCE_CONCAVE_TRIMESH, # TODO: ???
                                   collisionFramePosition=point,
                                   collisionFrameOrientation=quat,
                                   physicsClientId=client)
@@ -3111,7 +3126,7 @@ def create_vhacd(input_path, output_path=None, output_dir=VHACD_DIR, log_path=No
 
 def get_mesh_data(obj, link=BASE_LINK, shape_index=0, visual=True):
     flags = 0 if visual else p.MESH_DATA_SIMULATION_MESH
-    #collisionShapeIndex = shape_index
+    # TODO: collisionShapeIndex = shape_index
     # https://github.com/bulletphysics/bullet3/blob/5ae9a15ecac7bc7e71f1ec1b544a55135d7d7e32/examples/pybullet/examples/deformable_anchor.py#L38
     return Mesh(*p.getMeshData(obj, linkIndex=link, flags=flags, physicsClientId=CLIENT))
 

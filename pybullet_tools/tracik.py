@@ -12,7 +12,8 @@ from pybullet_planning.pybullet_tools.utils import Pose, multiply, invert, tform
 
 class IKSolver(object):
     def __init__(self, body, tool_link, first_joint=None, tool_offset=Pose(), custom_limits={},
-                 seed=None, max_time=5e-3, error=1e-5): #, **kwargs):
+                 seed=None, speed=True, max_time=5e-3, error=1e-5): #, **kwargs):
+        # TODO: unify with my other tracikpy wrappers
         self.tool_link = link_from_name(body, tool_link)
         if first_joint is None:
             self.base_link = BASE_LINK
@@ -31,9 +32,9 @@ class IKSolver(object):
             base_link=get_link_name(self.body, self.base_link),
             tip_link=get_link_name(self.body, self.tool_link),
             timeout=max_time, epsilon=error,
-            solve_type='Speed', # Speed | Distance | Manipulation1 | Manipulation2
+            solve_type='Speed' if speed else 'Distance', # Manipulation1 | Manipulation2
         )
-        self.ik_solver.joint_limits = list(get_custom_limits(
+        self.joint_limits = list(get_custom_limits(
             self.body, self.joints, custom_limits=custom_limits, circular_limits=CIRCULAR_LIMITS))
 
         self.tool_offset = tool_offset # None
@@ -61,9 +62,9 @@ class IKSolver(object):
     @property
     def joints(self):
         return joints_from_names(self.body, self.joint_names)
-    @property
-    def joint_limits(self):
-        return self.ik_solver.joint_limits
+    # @property
+    # def joint_limits(self):
+    #     return self.ik_solver.joint_limits
     @property
     def lower_limits(self):
         lower, _ = self.joint_limits
@@ -114,7 +115,11 @@ class IKSolver(object):
         set_joint_positions(self.body, self.joints, conf)
     def sample_conf(self):
         return self.random_generator.uniform(*self.joint_limits)
+    def reset_limits(self):
+        self.set_joint_limits(self.lower_limits, self.upper_limits)
     def set_joint_limits(self, lower, upper):
+        lower = np.maximum(lower, self.lower_limits)
+        upper = np.minimum(upper, self.upper_limits)
         self.ik_solver.joint_limits = (lower, upper)
     def set_nearby_limits(self, conf, bound):
         lower = np.array(conf) - bound
