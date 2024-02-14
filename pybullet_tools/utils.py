@@ -1534,7 +1534,7 @@ def compute_camera_pose(camera_point, target_point=np.zeros(3)):
     return pose_from_tform(view_matrix)
 
 def get_image(camera_pos=None, target_pos=None, width=640, height=480, vertical_fov=60.0, near=0.02, far=5.0,
-              tiny=False, segment=False, **kwargs):
+              tiny=False, segment=False, **kwargs): # vertical_fov=90 seems to be the default
     up_vector = [0, 0, 1] # up vector of the camera, in Cartesian world coordinates
     camera_flags = {}
     view_matrix = None
@@ -1546,7 +1546,7 @@ def get_image(camera_pos=None, target_pos=None, width=640, height=480, vertical_
         view_matrix = p.computeViewMatrix(cameraEyePosition=camera_pos, cameraTargetPosition=target_pos,
                                           cameraUpVector=up_vector, physicsClientId=CLIENT)
         camera_flags['viewMatrix'] = view_matrix
-    projection_matrix = get_projection_matrix(width, height, vertical_fov, near, far)
+    projection_matrix = get_projection_matrix(width, height, math.radians(vertical_fov), near, far)
 
     # assert compiled_with_numpy() # copying pixels from C/C++ to Python can be really slow for large images, unless you compile PyBullet using NumPy
     flags = get_image_flags(segment=segment, **kwargs)
@@ -1585,14 +1585,15 @@ def get_image(camera_pos=None, target_pos=None, width=640, height=480, vertical_
     
     return CameraImage(rgb, depth, segmented, view_pose, camera_matrix)
 
-def get_image_at_pose(camera_pose, camera_matrix, far=5.0, **kwargs):
+def get_image_at_pose(camera_pose, camera_matrix=None, far=5.0, **kwargs):
     # far is the maximum depth value
-    width, height = map(int, dimensions_from_camera_matrix(camera_matrix))
-    _, vertical_fov = get_field_of_view(camera_matrix)
+    if camera_matrix is not None:
+        width, height = map(int, dimensions_from_camera_matrix(camera_matrix))
+        _, vertical_fov = get_field_of_view(camera_matrix)
+        kwargs.update(dict(width=width, height=height, vertical_fov=vertical_fov))
     camera_point = point_from_pose(camera_pose)
     target_point = tform_point(camera_pose, np.array([0, 0, far]))
-    return get_image(camera_point, target_point, width=width, height=height,
-                     vertical_fov=vertical_fov, far=far, **kwargs)
+    return get_image(camera_point, target_point, far=far, **kwargs)
 
 def set_default_camera(yaw=160, pitch=-35, distance=2.5):
     # TODO: deprecate
@@ -3296,7 +3297,7 @@ AABB = namedtuple('AABB', ['lower', 'upper'])
 def aabb_from_points(points):
     return AABB(np.min(points, axis=0), np.max(points, axis=0))
 
-def aabb_union(aabbs):
+def aabb_union(aabbs): # TODO: *args
     aabbs = list(aabbs)
     if not aabbs:
         return None
@@ -4104,7 +4105,7 @@ def get_collision_fn(body, joints, obstacles=[], attachments=[], self_collisions
             # Self-collisions should not have the max_distance parameter
             # TODO: self-collisions between body and attached_bodies (except for the link adjacent to the robot)
             if (not use_aabb or aabb_overlap(get_moving_aabb(body), get_moving_aabb(body))) and \
-                    pairwise_link_collision(body, link1, body, link2): #, **kwargs):
+                    pairwise_link_collision(body, link1, body, link2, max_distance=0.): #, **kwargs):
                 #print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
                 if verbose:
                     print(body, link1, body, link2)
@@ -4123,9 +4124,9 @@ def get_collision_fn(body, joints, obstacles=[], attachments=[], self_collisions
         #             return True
         # return False
 
-        for body1, body2 in product(moving_bodies, obstacles):
+        for body1, body2 in product(moving_bodies, obstacles): # TODO: remove robot
             if (not use_aabb or aabb_overlap(get_moving_aabb(body1), get_obstacle_aabb(body2))) \
-                    and pairwise_collision(body1, body2, **kwargs):
+                    and pairwise_collision(body1, body2, max_distance=max_distance, **kwargs):
                 # TODO: Collision(body=/world/robot, links=frozenset({0, 1, 2, 3, 4, 5, 6, 8, 9, 10}))
                 #print(get_body_name(body1), get_body_name(body2))
                 if verbose:
@@ -5657,9 +5658,12 @@ def sample_edge_pose(polygon, world_from_surface, mesh):
 # Convex Hulls
 
 def convex_hull(points):
-    from scipy.spatial import ConvexHull
+    import scipy
     # TODO: cKDTree is faster, but KDTree can do all pairs closest
-    hull = ConvexHull(list(points), incremental=False)
+    try:
+        hull = scipy.spatial.ConvexHull(list(points), incremental=False)
+    except scipy.spatial.qhull.QhullError:
+        return None
     new_indices = {i: ni for ni, i in enumerate(hull.vertices)}
     vertices = hull.points[hull.vertices, :]
     faces = np.vectorize(lambda i: new_indices[i])(hull.simplices)

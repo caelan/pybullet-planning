@@ -1,5 +1,6 @@
 import math
 import os.path
+import time
 
 import numpy as np
 from tracikpy import TracIKSolver
@@ -7,18 +8,21 @@ from tracikpy import TracIKSolver
 from pybullet_planning.pybullet_tools.utils import Pose, multiply, invert, tform_from_pose, get_model_info, BASE_LINK, \
     get_link_name, link_from_name, get_joint_name, joint_from_name, parent_link_from_joint, joints_from_names, \
     links_from_names, get_link_pose, draw_pose, set_joint_positions, get_joint_positions, get_joint_limits, \
-    CIRCULAR_LIMITS, get_custom_limits, irange
+    CIRCULAR_LIMITS, get_custom_limits, irange, INF, elapsed_time
 
 
 class IKSolver(object):
     def __init__(self, body, tool_link, first_joint=None, tool_offset=Pose(), custom_limits={},
                  seed=None, speed=True, max_time=5e-3, error=1e-5): #, **kwargs):
         # TODO: unify with my other tracikpy wrappers
-        self.tool_link = link_from_name(body, tool_link)
+        if isinstance(tool_link, str):
+            tool_link = link_from_name(body, tool_link)
+        self.tool_link = tool_link
         if first_joint is None:
             self.base_link = BASE_LINK
         else:
-            first_joint = joint_from_name(body, first_joint)
+            if isinstance(first_joint, str):
+                first_joint = joint_from_name(body, first_joint)
             self.base_link = parent_link_from_joint(body, first_joint)
         # joints = get_joint_ancestors(body, self.tool_link)[1:] # get_link_ancestors
         # movable_joints = prune_fixed_joints(body, joints)
@@ -36,6 +40,7 @@ class IKSolver(object):
         )
         self.joint_limits = list(get_custom_limits(
             self.body, self.joints, custom_limits=custom_limits, circular_limits=CIRCULAR_LIMITS))
+        self.reset_limits()
 
         self.tool_offset = tool_offset # None
         self.random_generator = np.random.RandomState(seed)
@@ -81,6 +86,7 @@ class IKSolver(object):
         return conf
     @property
     def reference_conf(self):
+        # TODO: customize this conf
         return np.average(self.joint_limits, axis=0)
 
     def get_link_name(self, link):
@@ -145,8 +151,11 @@ class IKSolver(object):
         return self.solve(tool_pose, seed_conf=self.reference_conf, **kwargs)
     def solve_warm(self, tool_pose, **kwargs):
         return self.solve(tool_pose, seed_conf=self.last_solution, **kwargs)
-    def solve_restart(self, tool_pose, seed_conf=None, max_attempts=3, **kwargs):
+    def solve_restart(self, tool_pose, seed_conf=None, max_attempts=3, max_time=INF, **kwargs):
+        start_time = time.time()
         for i in irange(max_attempts):
+            if elapsed_time(start_time) >= max_time:
+                break
             if (i != 0) or (seed_conf is None):
                 seed_conf = self.sample_conf()
             conf = self.solve(tool_pose, seed_conf=seed_conf, **kwargs)
