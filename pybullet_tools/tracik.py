@@ -120,6 +120,7 @@ class IKSolver(object):
         assert conf is not None
         set_joint_positions(self.body, self.joints, conf)
     def sample_conf(self):
+        # TODO: truncated Gaussian
         return self.random_generator.uniform(*self.joint_limits)
     def reset_limits(self):
         self.set_joint_limits(self.lower_limits, self.upper_limits)
@@ -128,6 +129,7 @@ class IKSolver(object):
         upper = np.minimum(upper, self.upper_limits)
         self.ik_solver.joint_limits = (lower, upper)
     def set_nearby_limits(self, conf, bound):
+        # TODO: circular joints
         lower = np.array(conf) - bound
         upper = np.array(conf) + bound
         self.set_joint_limits(lower, upper)
@@ -151,17 +153,24 @@ class IKSolver(object):
         return self.solve(tool_pose, seed_conf=self.reference_conf, **kwargs)
     def solve_warm(self, tool_pose, **kwargs):
         return self.solve(tool_pose, seed_conf=self.last_solution, **kwargs)
-    def solve_restart(self, tool_pose, seed_conf=None, max_attempts=3, max_time=INF, **kwargs):
+    def solve_multiple(self, tool_pose, seed_conf=None, max_attempts=3, max_time=INF, max_solutions=1, **kwargs):
         start_time = time.time()
+        solutions = []
         for i in irange(max_attempts):
-            if elapsed_time(start_time) >= max_time:
+            if (elapsed_time(start_time) >= max_time) or (len(solutions) >= max_solutions):
                 break
             if (i != 0) or (seed_conf is None):
+                # TODO: modify a subset of the degrees of freedom
                 seed_conf = self.sample_conf()
             conf = self.solve(tool_pose, seed_conf=seed_conf, **kwargs)
             if conf is not None:
-                return conf
-        return None
+                solutions.append(conf)
+        return solutions
+    def solve_restart(self, tool_pose, **kwargs):
+        solutions = self.solve_multiple(tool_pose, max_solutions=1, **kwargs)
+        if not solutions:
+            return None
+        return solutions[0]
     def generate(self, tool_pose, include_failures=False, **kwargs):
         #start_time = time.time()
         while True:
