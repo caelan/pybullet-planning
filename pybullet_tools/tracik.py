@@ -146,6 +146,7 @@ class IKSolver(object):
     def set_nearby_limits(self, conf, bound=None):
         if bound is None:
             bound = self.default_bound
+        bound = np.minimum(bound, self.default_bound)
         lower = np.array(conf) - bound
         upper = np.array(conf) + bound
         self.set_joint_limits(lower, upper)
@@ -185,9 +186,11 @@ class IKSolver(object):
     def solve_warm(self, tool_pose, **kwargs):
         return self.solve(tool_pose, seed_conf=self.last_solution, **kwargs)
     def solve_multiple(self, tool_pose, seed_conf=None, max_attempts=3, max_failures=INF,
-                       max_time=INF, max_solutions=1, bound_discount=None, **kwargs):
+                       max_time=INF, max_solutions=1, bound_discount=None, weights=None, verbose=False, **kwargs):
         # TODO: warm start from prior solution
         start_time = time.time()
+        if weights is None:
+            weights = np.ones(self.dofs)
         if seed_conf is None:
             bound_discount = None
         nearby_conf = seed_conf
@@ -198,7 +201,7 @@ class IKSolver(object):
             if (elapsed_time(start_time) > max_time) or (len(solutions) > max_solutions):
                 break
             if bound_discount is not None:
-                bound = np.minimum(bound_discount * best_distance * np.ones(self.dofs), self.default_bound) # TODO: discount parameter
+                bound = bound_discount * best_distance * np.reciprocal(weights)
                 self.set_nearby_limits(nearby_conf, bound=bound)
             if (attempt != 0) or (seed_conf is None):
                 # TODO: modify a subset of the degrees of freedom
@@ -214,10 +217,16 @@ class IKSolver(object):
             distance = INF
             if bound_discount is not None:
                 difference = self.difference_fn(conf, nearby_conf)
-                distance = np.linalg.norm(difference, ord=INF)
+                # distance = np.linalg.norm(difference, ord=INF)
+                distances = np.multiply(weights, np.absolute(difference))
+                index = np.argmax(distances)
+                distance = distances[index]
+                # if distance < best_distance:
                 best_distance = min(distance, best_distance)
-                print(f'Iteration: {attempt}/{max_attempts} | Current: {distance:.3f} | Best: {best_distance:.3f} | '
-                      f'Elapsed: {elapsed_time(start_time):.3f}')
+                if verbose:
+                    print(f'Iteration: {attempt}/{max_attempts} | Index: {index} | '
+                          f'Current: {distance:.3f} | Best: {best_distance:.3f} | '
+                          f'Elapsed: {elapsed_time(start_time):.3f}')
             solutions.append((conf, distance))
         self.reset_limits()
         solutions.sort(key=lambda p: p[1], reverse=False)
