@@ -859,10 +859,10 @@ def load_pybullet(filename, fixed_base=False, scale=1., **kwargs):
             body = p.loadBullet(filename, physicsClientId=CLIENT)
         elif filename.endswith('.obj'):
             # TODO: fixed_base => mass = 0?
-            body = create_obj(filename, scale=scale, **kwargs)
+            body = create_obj(filename, scale=scale, **kwargs) # TODO: concave?
         else:
             raise ValueError(filename)
-    INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, filename, fixed_base, scale)
+    INFO_FROM_BODY[CLIENT, body] = ModelInfo(None, filename, fixed_base, scale) # TODO: **kwargs
     return body
 
 def set_caching(cache=False):
@@ -3660,6 +3660,7 @@ def set_collision_pair_mask(body1, body2, link1=BASE_LINK, link2=BASE_LINK, enab
     return p.setCollisionFilterPair(body1, link1, body2, link2, enableCollision=enable)
 
 def get_buffered_aabb(body, link=None, max_distance=MAX_DISTANCE, **kwargs):
+    # TODO: handle empty AABBs
     body, links = parse_body(body, link=link)
     return buffer_aabb(aabb_union(get_aabbs(body, links=links, **kwargs)), buffer=max_distance)
 
@@ -3920,13 +3921,13 @@ def get_default_weights(body, joints, weights=None):
     # TODO: use the energy resulting from the mass matrix here?
     return 1*np.ones(len(joints)) # TODO: use velocities here
 
-def get_distance_fn(body, joints, weights=None, norm=2):
+def get_distance_fn(body, joints, weights=None, norm=2): # 1 | 2 | INF
     weights = get_default_weights(body, joints, weights)
     difference_fn = get_difference_fn(body, joints)
     def fn(q1, q2):
         diff = np.array(difference_fn(q2, q1))
-        if norm == 2:
-            return np.sqrt(np.dot(weights, diff * diff))
+        # if norm == 2:
+        #     return np.sqrt(np.dot(weights, diff * diff))
         return np.linalg.norm(np.multiply(weights, diff), ord=norm)
     return fn
 
@@ -4135,10 +4136,9 @@ def get_collision_fn(body, joints, obstacles=[], attachments=[], self_collisions
         return False
     return collision_fn
 
-def interpolate_joint_waypoints(body, joints, waypoints, resolutions=None,
-                                collision_fn=lambda *args, **kwargs: False, **kwargs):
+def interpolate_joint_waypoints(body, joints, waypoints, collision_fn=lambda *args, **kwargs: False, **kwargs):
     # TODO: unify with refine_path
-    extend_fn = get_extend_fn(body, joints, resolutions=resolutions, **kwargs)
+    extend_fn = get_extend_fn(body, joints, **kwargs)
     path = waypoints[:1]
     for waypoint in waypoints[1:]:
         assert len(joints) == len(waypoint)
@@ -4150,20 +4150,20 @@ def interpolate_joint_waypoints(body, joints, waypoints, resolutions=None,
 
 def plan_waypoints_joint_motion(body, joints, waypoints, start_conf=None, obstacles=[], attachments=[],
                                 self_collisions=True, disabled_collisions=set(),
-                                resolutions=None, custom_limits={}, max_distance=MAX_DISTANCE,
+                                resolutions=None, norm=2, custom_limits={}, max_distance=MAX_DISTANCE,
                                 use_aabb=False, cache=True):
     if start_conf is None:
         start_conf = get_joint_positions(body, joints)
     assert len(start_conf) == len(joints)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, max_distance=max_distance,
-                                    use_aabb=use_aabb, cache=cache)
+                                    use_aabb=use_aabb, cache=cache) # TODO: kwargs
     waypoints = [start_conf] + list(waypoints)
     for i, waypoint in enumerate(waypoints):
         if collision_fn(waypoint):
             #print('Warning: waypoint configuration {}/{} is in collision'.format(i+1, len(waypoints)))
             return None
-    return interpolate_joint_waypoints(body, joints, waypoints, resolutions=resolutions, collision_fn=collision_fn)
+    return interpolate_joint_waypoints(body, joints, waypoints, resolutions=resolutions, norm=norm, collision_fn=collision_fn)
 
 def plan_direct_joint_motion(body, joints, end_conf, **kwargs):
     return plan_waypoints_joint_motion(body, joints, [end_conf], **kwargs)
@@ -4180,15 +4180,15 @@ def check_initial_end(start_conf, end_conf, collision_fn, verbose=True):
 
 def plan_joint_motion(body, joints, end_conf, obstacles=[], attachments=[],
                       self_collisions=True, disabled_collisions=set(),
-                      weights=None, resolutions=None, max_distance=MAX_DISTANCE,
+                      weights=None, resolutions=None, norm=2, max_distance=MAX_DISTANCE,
                       use_aabb=False, cache=True, custom_limits={}, algorithm=None, **kwargs):
 
     assert len(joints) == len(end_conf)
     if (weights is None) and (resolutions is not None):
         weights = np.reciprocal(resolutions)
     sample_fn = get_sample_fn(body, joints, custom_limits=custom_limits)
-    distance_fn = get_distance_fn(body, joints, weights=weights)
-    extend_fn = get_extend_fn(body, joints, resolutions=resolutions)
+    distance_fn = get_distance_fn(body, joints, weights=weights, norm=norm)
+    extend_fn = get_extend_fn(body, joints, resolutions=resolutions, norm=norm)
     collision_fn = get_collision_fn(body, joints, obstacles, attachments, self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, max_distance=max_distance,
                                     use_aabb=use_aabb, cache=cache)
@@ -4460,7 +4460,7 @@ def retime_path(robot, joints, path, **kwargs):
 
 def shortcut_path(robot, joints, path, obstacles=[], attachments=[],
                   self_collisions=True, disabled_collisions=set(),
-                  resolutions=None, max_distance=MAX_DISTANCE,
+                  resolutions=None, norm=2, max_distance=MAX_DISTANCE,
                   use_aabb=False, cache=True, custom_limits={},
                   holonomic=False, reversible=False,
                   cost_fn=None, weights=None, **kwargs):
@@ -4469,12 +4469,10 @@ def shortcut_path(robot, joints, path, obstacles=[], attachments=[],
     from motion_planners.smoothing import smooth_path as shortcut
     # TODO: function that toggles these
     if holonomic:
-        distance_fn = get_distance_fn(robot, joints, weights=weights)
+        distance_fn = get_distance_fn(robot, joints, weights=weights, norm=norm)
+        extend_fn = get_extend_fn(robot, joints, resolutions=resolutions, norm=norm)
     else:
         distance_fn = get_nonholonomic_distance_fn(robot, joints, weights=weights, reversible=reversible)
-    if holonomic:
-        extend_fn = get_extend_fn(robot, joints, resolutions=resolutions)
-    else:
         extend_fn = get_nonholonomic_extend_fn(robot, joints, resolutions=resolutions, reversible=reversible)
     collision_fn = get_collision_fn(robot, joints, obstacles, attachments, self_collisions, disabled_collisions,
                                     custom_limits=custom_limits, use_aabb=use_aabb, cache=cache, max_distance=max_distance)
