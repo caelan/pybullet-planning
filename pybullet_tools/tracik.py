@@ -22,6 +22,29 @@ class LimitsSaver(Saver):
     def restore(self):
         self.ik_solver.set_joint_limits(*self.joint_limits)
 
+def throttle_generator(generator, soft_failures=False, max_attempts=INF, max_failures=INF, max_cum_time=INF, max_total_time=INF):
+    # from srl_stream.utils import throttle_generator
+    start_time = time.time()
+    total_time = 0.
+    attempts = failures = 0
+    while (attempts < max_attempts) and (elapsed_time(start_time) < max_cum_time) and (total_time < max_total_time):
+        if failures > max_failures:
+            if not soft_failures:
+                break
+            failures = 0
+        local_time = time.time()
+        try:
+            output = next(generator)
+        except StopIteration:
+            break
+        total_time += elapsed_time(local_time) # TODO: max_failure_time
+        attempts += 1
+        if output is None:
+            failures += 1
+        else:
+            failures = 0
+            yield output
+
 class IKSolver(object): # TODO: rename?
     def __init__(self, body, tool_link, first_joint=None, tool_offset=Pose(), custom_limits={},
                  seed=None, speed=True, max_time=5e-3, error=1e-5): #, **kwargs):
@@ -102,13 +125,14 @@ class IKSolver(object): # TODO: rename?
         return upper
     @property
     def last_solution(self):
-        if not self.solutions:
-            return None
-        pose, conf = self.solutions[-1]
-        return conf
-    @property
-    def reference_conf(self): # TODO: set_reference_conf
-        return np.average(self.joint_limits, axis=0)
+        for _, conf in reversed(self.solutions):
+            if conf is not None:
+                return conf
+        return None
+        # if not self.solutions:
+        #     return None
+        # pose, conf = self.solutions[-1]
+        # return conf
 
     def get_link_name(self, link):
         if isinstance(link, str):
@@ -143,6 +167,8 @@ class IKSolver(object): # TODO: rename?
     def set_conf(self, conf):
         assert conf is not None
         set_joint_positions(self.body, self.joints, conf)
+    def get_center_conf(self): # TODO: set_reference_conf
+        return np.average(self.joint_limits, axis=0)
     def sample_conf(self):
         # TODO: truncated Gaussian
         return self.random_generator.uniform(*self.joint_limits)
@@ -155,7 +181,7 @@ class IKSolver(object): # TODO: rename?
         lower = np.maximum(lower, lower_limits)
         upper = np.minimum(upper, upper_limits)
         self.ik_solver.joint_limits = (lower, upper)
-    def set_nearby_limits(self, conf, bound=None):
+    def set_nearby_limits(self, conf, bound=None): # set_target_limits
         if bound is None:
             bound = self.default_bound
         bound = np.minimum(bound, self.default_bound)
@@ -172,12 +198,18 @@ class IKSolver(object): # TODO: rename?
         difference = self.difference_fn(target_conf, reference_conf)
         return reference_conf + difference
 
-    def solve(self, tool_pose, seed_conf=None, pos_tolerance=1e-5, ori_tolerance=math.radians(5e-2)):
+    def solve(self, tool_pose, seed_conf=False, pos_tolerance=1e-5, ori_tolerance=math.radians(5e-2)):
         # TODO: convert from another frame into tool frame?
         pose = self.base_from_world(tool_pose)
         tform = tform_from_pose(pose)
-        #if seed_conf is None: # TODO: will use np.random.default_rng()
-        #    seed_conf = self.reference_conf
+        if seed_conf is True:
+            seed_conf = self.get_conf()
+        elif seed_conf is None:
+            # seed_conf = self.get_center_conf()
+            seed_conf = self.sample_conf()
+        elif seed_conf is False:
+            # Uses np.random.default_rng()
+            seed_conf = None
         # if seed_conf is not None:
         #     self.set_nearby_limits(seed_conf)
         bx, by, bz = pos_tolerance * np.ones(3)
@@ -190,46 +222,59 @@ class IKSolver(object): # TODO: rename?
         self.solutions.append((pose, conf))
         # self.reset_limits()
         return conf
-    def solve_current(self, tool_pose, **kwargs): # solve_closest
-        return self.solve(tool_pose, seed_conf=self.get_conf(), **kwargs)
+    def solve_current(self, tool_pose, **kwargs):
+        return self.solve(tool_pose, seed_conf=True, **kwargs)
     def solve_randomized(self, tool_pose, **kwargs):
-        return self.solve(tool_pose, seed_conf=self.sample_conf(), **kwargs)
-    def solve_reference(self, tool_pose, **kwargs):
-        return self.solve(tool_pose, seed_conf=self.reference_conf, **kwargs)
+        return self.solve(tool_pose, seed_conf=None, **kwargs)
+    def solve_center(self, tool_pose, **kwargs):
+        return self.solve(tool_pose, seed_conf=self.get_center_conf(), **kwargs)
     def solve_warm(self, tool_pose, **kwargs):
         return self.solve(tool_pose, seed_conf=self.last_solution, **kwargs)
-    def solve_multiple(self, tool_pose, seed_conf=None, max_attempts=3, max_failures=INF,
+    def generate(self, tool_pose, seed_confs=None, joint_limits=None, **kwargs): # include_failures=True
+        seed_generator = itertools.repeat(None)
+        if seed_confs is not None:
+            seed_generator = itertools.chain(seed_confs, seed_generator)
+        #start_time = time.time()
+        for seed_conf in seed_generator:
+            #print(elapsed_time(start_time))
+            with self.saver():
+                if joint_limits is not None:
+                    self.set_joint_limits(*joint_limits)
+                yield self.solve(tool_pose, seed_conf=seed_conf, **kwargs)
+
+    def solve_multiple(self, tool_pose, target_conf=None, max_attempts=3, max_failures=INF,
                        max_time=INF, max_solutions=1, bound_discount=None, weights=None, verbose=False, **kwargs):
         # TODO: warm start from prior solution
         start_time = time.time()
+        saver = self.saver()
+        # self.reset_limits()
         if weights is None:
             weights = np.ones(self.dofs)
-        if seed_conf is None:
+        if target_conf is None:
             bound_discount = None
-        nearby_conf = seed_conf
-        best_distance = INF
+        seed_conf = target_conf
+        best_distance = INF # TODO: max_distance
         failures = 0
         solutions = []
+        # TODO: self.generate
         for attempt in irange(max_attempts):
-            if (elapsed_time(start_time) > max_time) or (len(solutions) > max_solutions):
+            if (elapsed_time(start_time) > max_time) or (len(solutions) > max_solutions) or (failures > max_failures):
                 break
             if bound_discount is not None:
                 bound = bound_discount * best_distance * np.reciprocal(weights)
-                self.set_nearby_limits(nearby_conf, bound=bound)
+                self.set_nearby_limits(target_conf, bound=bound)
             if (attempt != 0) or (seed_conf is None):
                 # TODO: modify a subset of the degrees of freedom
                 seed_conf = self.sample_conf()
             conf = self.solve(tool_pose, seed_conf=seed_conf, **kwargs)
-
             if conf is None:
                 failures += 1
-                if failures > max_failures:
-                    break
                 continue
+
             failures = 0
             distance = INF
             if bound_discount is not None:
-                difference = self.difference_fn(conf, nearby_conf)
+                difference = self.difference_fn(conf, target_conf)
                 # distance = np.linalg.norm(difference, ord=INF)
                 distances = np.multiply(weights, np.absolute(difference))
                 index = np.argmax(distances)
@@ -241,8 +286,8 @@ class IKSolver(object): # TODO: rename?
                           f'Current: {distance:.3f} | Best: {best_distance:.3f} | '
                           f'Elapsed: {elapsed_time(start_time):.3f}')
             solutions.append((conf, distance))
-        self.reset_limits()
         solutions.sort(key=lambda p: p[1], reverse=False)
+        saver.restore()
         return [conf for conf, _ in solutions]
     def solve_restart(self, tool_pose, **kwargs):
         solutions = self.solve_multiple(tool_pose, max_solutions=1, **kwargs)
@@ -254,18 +299,6 @@ class IKSolver(object): # TODO: rename?
         # TODO: shrink all (L-inf) vs one coordinate
         return self.solve_restart(tool_pose, seed_conf=seed_conf, max_attempts=max_attempts, max_time=max_time,
                                   max_solutions=INF, max_failures=max_failures, bound_discount=bound_discount, **kwargs)
-    def generate(self, tool_pose, seed_conf=None, joint_limits=None, include_failures=True, **kwargs):
-        #start_time = time.time()
-        for i in itertools.count():
-            #print(elapsed_time(start_time))
-            with self.saver():
-                if joint_limits is not None:
-                    self.set_joint_limits(*joint_limits)
-                if (i != 0) or (seed_conf is None):
-                    seed_conf = self.sample_conf()
-                solution_conf = self.solve(tool_pose, seed_conf=seed_conf, **kwargs)
-            if include_failures or (solution_conf is not None):
-                yield solution_conf
     def __str__(self):
         return '{}(body={}, tool={}, base={}, joints={})'.format(
             self.__class__.__name__, self.robot, self.tool_name, self.base_name, list(self.joint_names))
