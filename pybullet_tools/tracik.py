@@ -1,3 +1,4 @@
+import itertools
 import math
 import os.path
 import time
@@ -9,13 +10,23 @@ from pybullet_planning.pybullet_tools.utils import Pose, multiply, invert, tform
     get_link_name, link_from_name, get_joint_name, joint_from_name, parent_link_from_joint, joints_from_names, \
     links_from_names, get_link_pose, draw_pose, set_joint_positions, get_joint_positions, get_joint_limits, \
     CIRCULAR_LIMITS, UNBOUNDED_LIMITS, get_custom_limits, irange, INF, PI, elapsed_time, is_circular, get_distance, \
-    all_between, get_difference_fn
+    all_between, get_difference_fn, Saver
 
 
-class IKSolver(object):
+class LimitsSaver(Saver):
+    def __init__(self, ik_solver): # joint_limits=None
+        self.ik_solver = ik_solver
+        self.joint_limits = ik_solver.joint_limits
+        # if joint_limits is not None:
+        #     self.ik_solver.set_joint_limits(*joint_limits)
+    def restore(self):
+        self.ik_solver.set_joint_limits(*self.joint_limits)
+
+class IKSolver(object): # TODO: rename?
     def __init__(self, body, tool_link, first_joint=None, tool_offset=Pose(), custom_limits={},
                  seed=None, speed=True, max_time=5e-3, error=1e-5): #, **kwargs):
         # TODO: unify with my other tracikpy wrappers
+        self.body = body
         if isinstance(tool_link, str):
             tool_link = link_from_name(body, tool_link)
         self.tool_link = tool_link
@@ -30,7 +41,6 @@ class IKSolver(object):
         # print([get_joint_name(body, joint) for joint in movable_joints])
 
         # TODO: Distance doesn't make sense when circular limits
-        self.body = body
         urdf_info = get_model_info(body)
         self.urdf_path = os.path.abspath(urdf_info.path) # self.ik_solver._urdf_string
         self.ik_solver = TracIKSolver(
@@ -40,6 +50,7 @@ class IKSolver(object):
             timeout=max_time, epsilon=error,
             solve_type='Speed' if speed else 'Distance', # Manipulation1 | Manipulation2
         )
+        assert self.ik_solver.joint_names
 
         self.circular_limits = list(get_custom_limits(
             self.body, self.joints, custom_limits=custom_limits, circular_limits=CIRCULAR_LIMITS))
@@ -96,8 +107,7 @@ class IKSolver(object):
         pose, conf = self.solutions[-1]
         return conf
     @property
-    def reference_conf(self):
-        # TODO: customize this conf
+    def reference_conf(self): # TODO: set_reference_conf
         return np.average(self.joint_limits, axis=0)
 
     def get_link_name(self, link):
@@ -126,6 +136,8 @@ class IKSolver(object):
             pose = self.get_tool_pose()
         self.handles.extend(draw_pose(pose, **kwargs))
 
+    def saver(self):
+        return LimitsSaver(self)
     def get_conf(self):
         return get_joint_positions(self.body, self.joints)
     def set_conf(self, conf):
@@ -137,7 +149,7 @@ class IKSolver(object):
     def reset_limits(self):
         # TODO: limits saver
         self.set_joint_limits(*self.circular_limits)
-    def set_joint_limits(self, lower, upper):
+    def set_joint_limits(self, lower, upper): # TODO: pass a pair?
         # TODO: uses -3.40282347e+38 if not set
         lower_limits, upper_limits = self.unbounded_limits
         lower = np.maximum(lower, lower_limits)
@@ -161,6 +173,7 @@ class IKSolver(object):
         return reference_conf + difference
 
     def solve(self, tool_pose, seed_conf=None, pos_tolerance=1e-5, ori_tolerance=math.radians(5e-2)):
+        # TODO: convert from another frame into tool frame?
         pose = self.base_from_world(tool_pose)
         tform = tform_from_pose(pose)
         #if seed_conf is None: # TODO: will use np.random.default_rng()
@@ -238,16 +251,19 @@ class IKSolver(object):
         return solutions[0]
     def solve_distance(self, tool_pose, seed_conf, max_attempts=INF, max_time=0.1,
                        max_failures=0, bound_discount=0.95, **kwargs):
-        # TODO: use the ratio of weights to adjust the distance
         # TODO: shrink all (L-inf) vs one coordinate
         return self.solve_restart(tool_pose, seed_conf=seed_conf, max_attempts=max_attempts, max_time=max_time,
                                   max_solutions=INF, max_failures=max_failures, bound_discount=bound_discount, **kwargs)
-    def generate(self, tool_pose, include_failures=False, **kwargs):
+    def generate(self, tool_pose, seed_conf=None, joint_limits=None, include_failures=True, **kwargs):
         #start_time = time.time()
-        while True:
+        for i in itertools.count():
             #print(elapsed_time(start_time))
-            seed_conf = self.sample_conf()
-            solution_conf = self.solve(tool_pose, seed_conf=seed_conf, **kwargs)
+            with self.saver():
+                if joint_limits is not None:
+                    self.set_joint_limits(*joint_limits)
+                if (i != 0) or (seed_conf is None):
+                    seed_conf = self.sample_conf()
+                solution_conf = self.solve(tool_pose, seed_conf=seed_conf, **kwargs)
             if include_failures or (solution_conf is not None):
                 yield solution_conf
     def __str__(self):
