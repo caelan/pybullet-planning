@@ -243,49 +243,43 @@ class IKSolver(object): # TODO: rename?
                 yield self.solve(tool_pose, seed_conf=seed_conf, **kwargs)
 
     def solve_multiple(self, tool_pose, target_conf=None, max_attempts=3, max_failures=INF,
-                       max_time=INF, max_solutions=1, bound_discount=None, weights=None, verbose=False, **kwargs):
+                       max_time=INF, max_solutions=1, max_distance=INF,
+                       bound_discount=None, weights=None, verbose=False, **kwargs):
         # TODO: warm start from prior solution
         start_time = time.time()
         saver = self.saver()
-        # self.reset_limits()
         if weights is None:
             weights = np.ones(self.dofs)
-        if target_conf is None:
-            bound_discount = None
-        seed_conf = target_conf
-        best_distance = INF # TODO: max_distance
+        best_distance = max_distance
         failures = 0
         solutions = []
         # TODO: self.generate
         for attempt in irange(max_attempts):
             if (elapsed_time(start_time) > max_time) or (len(solutions) > max_solutions) or (failures > max_failures):
                 break
-            if bound_discount is not None:
+            if (bound_discount is not None) and (target_conf is not None):
+                # TODO: modify a subset of the degrees of freedom
                 bound = bound_discount * best_distance * np.reciprocal(weights)
                 self.set_nearby_limits(target_conf, bound=bound)
-            if (attempt != 0) or (seed_conf is None):
-                # TODO: modify a subset of the degrees of freedom
-                seed_conf = self.sample_conf()
-            conf = self.solve(tool_pose, seed_conf=seed_conf, **kwargs)
+            conf = self.solve(tool_pose, seed_conf=target_conf if (attempt == 0) else None, **kwargs)
             if conf is None:
                 failures += 1
                 continue
-
             failures = 0
-            distance = INF
-            if bound_discount is not None:
+
+            distance = None
+            if target_conf is not None:
                 difference = self.difference_fn(conf, target_conf)
-                # distance = np.linalg.norm(difference, ord=INF)
                 distances = np.multiply(weights, np.absolute(difference))
                 index = np.argmax(distances)
                 distance = distances[index]
-                # if distance < best_distance:
                 best_distance = min(distance, best_distance)
-                if verbose:
+                if verbose: # and (distance < best_distance):
                     print(f'Iteration: {attempt}/{max_attempts} | Index: {index} | '
                           f'Current: {distance:.3f} | Best: {best_distance:.3f} | '
                           f'Elapsed: {elapsed_time(start_time):.3f}')
             solutions.append((conf, distance))
+
         solutions.sort(key=lambda p: p[1], reverse=False)
         saver.restore()
         return [conf for conf, _ in solutions]
@@ -295,7 +289,7 @@ class IKSolver(object): # TODO: rename?
             return None
         return solutions[0]
     def solve_distance(self, tool_pose, seed_conf, max_attempts=INF, max_time=0.1,
-                       max_failures=0, bound_discount=0.95, **kwargs):
+                       max_failures=2, bound_discount=0.95, **kwargs):
         # TODO: shrink all (L-inf) vs one coordinate
         return self.solve_restart(tool_pose, seed_conf=seed_conf, max_attempts=max_attempts, max_time=max_time,
                                   max_solutions=INF, max_failures=max_failures, bound_discount=bound_discount, **kwargs)
