@@ -10,7 +10,7 @@ from pybullet_planning.pybullet_tools.utils import Pose, multiply, invert, tform
     get_link_name, link_from_name, get_joint_name, joint_from_name, parent_link_from_joint, joints_from_names, \
     links_from_names, get_link_pose, draw_pose, set_joint_positions, get_joint_positions, get_joint_limits, \
     CIRCULAR_LIMITS, UNBOUNDED_LIMITS, get_custom_limits, irange, INF, PI, elapsed_time, is_circular, get_distance, \
-    all_between, get_difference_fn, Saver
+    all_between, get_difference_fn, Saver, pose_from_tform
 
 
 class LimitsSaver(Saver):
@@ -85,7 +85,7 @@ class IKSolver(object): # TODO: rename?
         self.reset_limits()
 
         self.tool_offset = tool_offset # None
-        self.random_generator = np.random.RandomState(seed)
+        self.random_generator = np.random.RandomState(seed) # TODO: Halton sequence
         self.solutions = []
         self.handles = []
     @property
@@ -147,7 +147,6 @@ class IKSolver(object): # TODO: rename?
     def get_base_pose(self):
         return self.get_link_pose(self.base_link)
     def get_tool_pose(self):
-        # TODO: self.ik_solver.fk()
         return self.get_link_pose(self.tool_link)
     def world_from_base(self, pose):
         base_pose = self.get_base_pose()
@@ -197,6 +196,9 @@ class IKSolver(object): # TODO: rename?
         # from pybullet_planning.pybullet_tools.utils import adjust_path
         difference = self.difference_fn(target_conf, reference_conf)
         return reference_conf + difference
+    def solve_fk(self, conf):
+        pose = self.ik_solver.fk(conf)
+        return self.world_from_base(pose_from_tform(pose))
 
     def solve(self, tool_pose, seed_conf=False, pos_tolerance=1e-5, ori_tolerance=math.radians(5e-2)):
         # TODO: convert from another frame into tool frame?
@@ -246,6 +248,7 @@ class IKSolver(object): # TODO: rename?
                        max_time=INF, max_solutions=1, max_distance=INF,
                        bound_discount=None, weights=None, verbose=False, **kwargs):
         # TODO: warm start from prior solution
+        # TODO: custom collision filter
         start_time = time.time()
         saver = self.saver()
         if weights is None:
@@ -255,7 +258,8 @@ class IKSolver(object): # TODO: rename?
         solutions = []
         # TODO: self.generate
         for attempt in irange(max_attempts):
-            if (elapsed_time(start_time) > max_time) or (len(solutions) > max_solutions) or (failures > max_failures):
+            if (elapsed_time(start_time) > max_time) or (len(solutions) > max_solutions) or \
+                    (failures > max_failures) or (best_distance == 0):
                 break
             if (bound_discount is not None) and (target_conf is not None):
                 # TODO: modify a subset of the degrees of freedom
@@ -275,8 +279,9 @@ class IKSolver(object): # TODO: rename?
                 distance = distances[index]
                 best_distance = min(distance, best_distance)
                 if verbose: # and (distance < best_distance):
-                    print(f'Iteration: {attempt}/{max_attempts} | Index: {index} | '
+                    print(f'TRAC-IK) Attempt: {attempt}/{max_attempts} | Index: {index} | '
                           f'Current: {distance:.3f} | Best: {best_distance:.3f} | '
+                          f'Solutions: {len(solutions)} | Failures: {failures} | '
                           f'Elapsed: {elapsed_time(start_time):.3f}')
             solutions.append((conf, distance))
 
@@ -288,11 +293,20 @@ class IKSolver(object): # TODO: rename?
         if not solutions:
             return None
         return solutions[0]
-    def solve_distance(self, tool_pose, seed_conf, max_attempts=INF, max_time=0.1,
-                       max_failures=2, bound_discount=0.95, **kwargs):
+    def solve_distance(self, tool_pose, target_conf, max_attempts=INF, max_time=0.1,
+                       max_failures=2, bound_discount=0.95, **kwargs): # TODO: optimize
         # TODO: shrink all (L-inf) vs one coordinate
-        return self.solve_restart(tool_pose, seed_conf=seed_conf, max_attempts=max_attempts, max_time=max_time,
-                                  max_solutions=INF, max_failures=max_failures, bound_discount=bound_discount, **kwargs)
+        solutions = self.solve_multiple(tool_pose, target_conf=target_conf, max_attempts=max_attempts, max_time=max_time,
+                                        max_solutions=INF, max_failures=max_failures, bound_discount=bound_discount, **kwargs)
+        # return solutions
+        if not solutions:
+            return None
+        return solutions[0]
+    def dump(self):
+        print('Body: {} | Base: {} | Tip: {}'.format(self.body, self.base_name, self.tool_name))
+        print('Links:', self.link_names)
+        print('Joints:', self.joint_names)
+        print('Limits:', list(zip(*self.joint_limits)))
     def __str__(self):
         return '{}(body={}, tool={}, base={}, joints={})'.format(
             self.__class__.__name__, self.robot, self.tool_name, self.base_name, list(self.joint_names))
