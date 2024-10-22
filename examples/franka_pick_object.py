@@ -1,4 +1,4 @@
-"""Grasp path planning library for NFL: normal field learning"""
+"""Code to load the scene, grasp a object based on mesh. Need candidate grasps to be pre-calculated"""
 #!/usr/bin/env python3
 
 from __future__ import print_function
@@ -9,12 +9,15 @@ from pybullet_tools.utils import WorldSaver, enable_gravity, connect, dump_world
     draw_global_system, Pose, Point, set_default_camera, BLOCK_URDF, load_model, wait_if_gui, \
     disconnect, DRAKE_IIWA_URDF, update_state, disable_real_time, HideOutput, load_pybullet, \
     get_movable_joints, set_joint_positions, create_box, RGBA, get_point, get_euler, refine_path, \
-    inverse_kinematics, end_effector_from_body, get_pose, link_from_name, get_link_pose, invert
+    inverse_kinematics, end_effector_from_body, get_pose, link_from_name, get_link_pose, invert, set_camera_pose
 
 from pybullet_tools.ikfast.franka_panda.ik import FRANKA_URDF, PANDA_INFO
 
 import pybullet as p
 import numpy as np
+import argparse
+import os
+from glob import glob
 
 from scipy.spatial.transform import Rotation as R
 
@@ -48,8 +51,9 @@ def plan(robot, block, fixed, teleport):
                           path3.body_paths)
     return None
 
-def plan_nft(robot, target_points, target_mesh, scene_mesh, floor, teleport, smoothing=False, algorithm=None):
-    grasp_gen = get_grasp_gen(robot, 'perpendicular')
+def plan_nft(robot, target_points, target_width, target_mesh, scene_mesh, floor, teleport, smoothing=False, algorithm=None):
+    # robot gripper width
+    grasp_gen = get_grasp_gen(robot, 'top')
     grasping_fn = get_grasping_fn(robot, fixed=scene_mesh + [floor], teleport=teleport, num_attempts=10)
     free_motion_fn = get_free_motion_gen(robot, fixed=scene_mesh + [floor], teleport=teleport, smoothing=smoothing, algorithm=algorithm)
     holding_motion_fn = get_holding_motion_gen(robot, fixed=scene_mesh + [floor], teleport=teleport, algorithm=algorithm)
@@ -62,9 +66,18 @@ def plan_nft(robot, target_points, target_mesh, scene_mesh, floor, teleport, smo
 
     saved_world = WorldSaver()
 
-    for target_pose, target_point in zip(target_poses, target_points):
+    for i, (target_pose, target_point) in enumerate(zip(target_poses, target_points)):
+        # # robot gripper width
+        # # pad target_width
+        # # pad by 1cm
+        width = target_width[i] + 0.01
+        # clip to valid value
+        width = np.clip(width, a_min=0.005, a_max=0.04)
+        conf = (0, -np.pi / 4.0, 0, -3.0 * np.pi / 4.0, 0, np.pi / 2, np.pi / 4, width, width)
+        joints = get_movable_joints(robot)
+        set_joint_positions(robot, joints, conf)
         for grasp, in grasp_gen(target_point):
-            saved_world.restore()
+            # saved_world.restore()
 
             q_grasp = inverse_kinematics(robot, grasp.link,
                 end_effector_from_body(target_pose.pose, grasp.grasp_pose))
@@ -141,18 +154,30 @@ def vector_to_euler(direction):
 
     return np.array([yaw, pitch, roll]).tolist()
 
-def main(display='execute'): # control | execute | step
-    # grasp_points = np.load('models/grasp_points.npy')
-    grasp_data = np.load('models/grasp_data.npz')
-    x1_arr = grasp_data['x1']
-    x2_arr = grasp_data['x2']
-    target_cluster_arr = grasp_data['target_cluster']
-    total_cluster_cnt = grasp_data['total_cluster_cnt']
+def vector_to_roll(direction):
+    """Function to change directional vector to roll"""
+    yaw = 0.0
+    pitch = 0.0
+    roll = np.arctan2(direction[1], -direction[0])  # There is no unique solution for roll
+
+    return np.array([yaw, pitch, roll]).tolist()
+
+
+def main(path, cluster_cnt, panda_ip, send_to_panda, display='execute'): # control | execute | step
+    # read the inputs
+    # the grasp data - [x1, y1, z1, x2, y2, z2]
+    grasp_data = np.loadtxt(os.path.join(path, "mesh_{:02d}.txt".format(cluster_cnt)))
+    grasp_data = grasp_data[:50]
+    x1_arr = grasp_data[:, :3]
+    x2_arr = grasp_data[:, 3:]
+    all_urdf_names = sorted(glob(os.path.join(path, "mesh_*.urdf")))
     center_arr = ((x1_arr + x2_arr) / 2).tolist()
     direction_arr = x1_arr - x2_arr
     direction_arr = direction_arr / np.linalg.norm(direction_arr)
+    target_width = np.linalg.norm(x1_arr - x2_arr, axis=1)
 
-    grasp_targets = []
+    grasp_targets1 = []
+    grasp_targets2 = []
     perp_targets = []
 
     connect(use_gui=True)
@@ -163,68 +188,65 @@ def main(display='execute'): # control | execute | step
         # robot = load_pybullet(FRANKA_URDF, fixed_base=True)
         robot = load_pybullet(FRANKA_URDF.replace('panda_arm_hand', 'panda_arm_hand_cam'), fixed_base=True)
         floor = load_model('models/short_floor.urdf')
+        set_pose(floor, Pose(Point(x=0.5, z=-0.01)))
+
         scene_mesh = []
-        for i in range(total_cluster_cnt):
-            mesh = p.loadURDF('models/scene_mesh_{}.urdf'.format(i))
-            # if i == target_cluster:
-            #     target_mesh = mesh
-            # else:
-            #     scene_mesh.append(mesh)
+        for fname in all_urdf_names:
+            mesh = p.loadURDF(fname)
             scene_mesh.append(mesh)
 
         for _ in range(len(x1_arr)):
-            grasp_target = create_box(w=0.01, l=0.01, h=0.01, color=RGBA(0, 1, 0, 0)) # Creates a red box obstacle
-            perp_target = create_box(w=0.01, l=0.01, h=0.01, color=RGBA(1, 0, 0, 0)) # Creates a red box obstacle
-            grasp_targets.append(grasp_target)
+            # grasp_target1 = create_box(w=0.01, l=0.01, h=0.01, color=RGBA(0, 1, 0, 1)) # Creates a red box obstacle
+            # grasp_target2 = create_box(w=0.01, l=0.01, h=0.01, color=RGBA(0, 1, 0, 1)) # Creates a red box obstacle
+            perp_target = create_box(w=0.01, l=0.01, h=0.01, color=RGBA(1, 0, 0, 1)) # Creates a red box obstacle
             perp_targets.append(perp_target)
 
         # set_point(obstacle, [0.5, 0.5, 0.1 / 2.]) # Sets the [x,y,z] position of the obstacle
         # print('Position:', get_point(obstacle))
         # set_euler(obstacle, [0, 0, np.pi / 4]) #  Sets the [roll,pitch,yaw] orientation of the obstacle
         # print('Orientation:', get_euler(obstacle))
-    set_pose(floor, Pose(Point(x=1.2, z=0.025)))
     # set_pose(grasp_target, Pose(Point(x=0.39, y=0.03, z=0.15), [np.pi / 2, np.pi / 2, np.pi / 2]))
 
-    for grasp_target, perp_target, center, direction in zip(grasp_targets, perp_targets, center_arr, direction_arr):
-        set_pose(grasp_target, Pose(Point(x=center[0], y=center[1], z=center[2]), vector_to_euler(direction)))
+    for i, (perp_target, center, direction) in enumerate(zip(perp_targets, center_arr, direction_arr)):
+        set_pose(perp_target, Pose(Point(x=center[0], y=center[1], z=center[2]), vector_to_roll(direction)))
 
-        input_r = R.from_euler('xyz', get_euler(grasp_target), degrees=True).as_matrix()
-        input_dir = input_r[:,2]
 
-        ortho_dir = get_orthogonal_vector(input_dir)
-        ortho_euler = vector_to_euler(ortho_dir)
-
-        set_pose(perp_target, Pose(get_point(grasp_target), ortho_euler))
-
-    joints = get_movable_joints(robot)
-
-    set_default_camera(distance=2)
-    dump_world()
-
+    set_camera_pose(camera_point=[0.8, -0.2, 0.8])
     saved_world = WorldSaver()
+    # dump_world()
     conf = (0, -np.pi / 4.0, 0, -3.0 * np.pi / 4.0, 0, np.pi / 2, np.pi / 4, 0.04, 0.04)
+    # move robot to start position
+    joints = get_movable_joints(robot)
     set_joint_positions(robot, joints, conf)
+
 
     # command = plan(robot, object, fixed=[], teleport=False)
     # in_motion_cmd, leaving_cmd, out_motion_cmd = plan_nft(robot, target=perp_target, scene_mesh=scene_mesh, floor=floor, teleport=False, smoothing=False, algorithm='direct')
     in_motion_cmd, out_motion_cmd = plan_nft(robot,
                                              target_points=perp_targets,
+                                             target_width=target_width,
                                              target_mesh=None,
                                              scene_mesh=scene_mesh,
                                              floor=floor,
                                              teleport=False,
                                              smoothing=False,
                                              algorithm='direct')
-    command = Command(in_motion_cmd.body_paths +
-                    #   leaving_cmd.body_paths +
-                      out_motion_cmd.body_paths)
+    command = Command(in_motion_cmd.body_paths)
     in_motion_path = [pos for path in in_motion_cmd.body_paths for pos in path.path]
     in_motion_path = np.array(in_motion_path)
     # out_motion_path = np.array([pos for path in leaving_cmd.body_paths + out_motion_cmd.body_paths for pos in path.path])
     out_motion_path = [pos for path in out_motion_cmd.body_paths for pos in path.path]
     out_motion_path = np.array(out_motion_path)
-    np.savetxt('/home/panda/libfranka/examples/trajectories/in_motion.txt', in_motion_path)
-    np.savetxt('/home/panda/libfranka/examples/trajectories/out_motion.txt', out_motion_path)
+    np.savetxt(os.path.join(path, "in_motion_{}.txt".format(cluster_cnt)), in_motion_path)
+    np.savetxt(os.path.join(path, "out_motion_{}.txt".format(cluster_cnt)), out_motion_path)
+
+    # let's send to panda if required
+    if send_to_panda:
+        panda_path = "panda@{}:/home/panda/Downloads/grasp_trajs".format(panda_ip)
+        cmd = "scp -P 7910 {} {}".format(os.path.join(path, "in_motion_{}.txt".format(cluster_cnt)), panda_path)
+        os.system(cmd)
+        cmd = "scp -P 7910 {} {}".format(os.path.join(path, "out_motion_{}.txt".format(cluster_cnt)), panda_path)
+        os.system(cmd)
     if (command is None) or (display is None):
         print('Unable to find a plan!')
         return
@@ -247,4 +269,10 @@ def main(display='execute'): # control | execute | step
     disconnect()
 
 if __name__ == '__main__':
-    main('execute')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("path", help='path to cluster dir')
+    parser.add_argument("--cluster_idx", type=int, default=0)
+    parser.add_argument("--panda_ip", type=str, default='147.46.132.81')
+    parser.add_argument("--send_to_panda", action='store_true')
+    args = parser.parse_args()
+    main(args.path, args.cluster_idx, args.panda_ip, args.send_to_panda, 'execute')

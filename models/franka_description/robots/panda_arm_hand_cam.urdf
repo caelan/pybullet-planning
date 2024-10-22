@@ -375,7 +375,7 @@
 		<parent link="panda_link8"/>
 		<child link="base_link"/>
 		<dynamics damping="1.0" friction="0.0001"/>
-		<origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.09000"/>
+		<origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.05000"/>
 		<axis xyz="0.00000 0.00000 1.00000"/>
 	</joint>
 </robot>

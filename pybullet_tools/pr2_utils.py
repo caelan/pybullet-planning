@@ -342,19 +342,35 @@ def get_side_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(
 
 def get_top_cylinder_grasps(body, tool_pose=TOOL_POSE, body_pose=unit_pose(),
                             max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+    # get the top grasp
+    # grasping code for instance cluster field
     # Apply transformations right to left on object pose
     center, (diameter, height) = approximate_as_cylinder(body, body_pose=body_pose)
     reflect_z = Pose(euler=[0, math.pi, 0])
-    translate_z = Pose(point=[0, 0, height / 2 - grasp_length])
     translate_center = Pose(point=point_from_pose(body_pose)-center)
     if max_width < diameter:
         return
-    while True:
-        theta = random.uniform(0, 2*np.pi)
-        theta = 0
-        rotate_z = Pose(euler=[0, 0, theta])
-        yield multiply(tool_pose, translate_z, rotate_z,
-                       reflect_z, translate_center, body_pose)
+    
+    # try initial grasp height, if fail go up until it works!
+    for perturb in np.linspace(-0.03, 0.03, 5):
+        # fixted transforms to get the grasp we want
+        translate_z = Pose(point=[0, 0, perturb])
+        rotate_y = Pose(euler=[0, math.pi, 0])
+        for i_ter in range(100):
+            x_noise = random.uniform(-0.01, 0.01)
+            y_noise = random.uniform(-0.01, 0.01)
+            theta_noise = random.uniform(-0.1, 0.1) # plus minus 5.7 degrees in radians
+            noise_x = Pose(euler=[x_noise, y_noise, 0])
+            noise_theta = Pose(euler=[0, 0, theta_noise])
+            # no noise version
+            # yield multiply(tool_pose, translate_z, rotate_y, body_pose)
+            yield multiply(tool_pose, translate_z, noise_x, rotate_y, noise_theta, body_pose)
+    # while True:
+    #     theta = random.uniform(0, 2*np.pi)
+    #     theta = 0
+    #     rotate_z = Pose(euler=[0, 0, theta])
+    #     yield multiply(tool_pose, translate_z, rotate_z,
+    #                    reflect_z, translate_center, body_pose)
 
 def get_perpendicular_grasps(body, grasp_length=GRASP_LENGTH):
     # Apply transformations right to left on object pose
@@ -367,7 +383,8 @@ def get_perpendicular_grasps(body, grasp_length=GRASP_LENGTH):
 
     reflect_z = Pose(euler=[0, math.pi, 0])
     rot_z = Pose(euler=[0, 0, math.pi / 2])
-    translate_z = Pose(point=[0, 0, height / 2 - grasp_length + 0.08])
+    # translate_z = Pose(point=[0, 0, height / 2 - grasp_length + 0.08])
+    translate_z = Pose(point=[0, 0, height / 2 - grasp_length])
     translate_center = Pose(point=point_from_pose(body_pose)-center)
     # i = 0
     # while True:

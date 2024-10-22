@@ -16,11 +16,12 @@ from std_msgs.msg import Float64MultiArray
 # TODO: deprecate
 
 GRASP_INFO = {
-    # 'top': GraspInfo(lambda body: get_top_grasps(body, under=10, tool_pose=Pose(), max_width=INF,  grasp_length=0),
+    #'top': GraspInfo(lambda body: get_top_grasps(body, under=10, tool_pose=Pose(), max_width=INF,  grasp_length=0),
+                     # approach_pose=Pose(0.2*Point(z=1))),
     # 'top': GraspInfo(lambda body: get_top_cylinder_grasps(body, tool_pose=Pose(), grasp_length=0),
     #                  approach_pose=Pose(0.2*Point(z=1))),
-    'top': GraspInfo(lambda body: get_top_cylinder_grasps(body, tool_pose=Pose(), grasp_length=0),
-                     approach_pose=Pose(0.0*Point(z=1))),
+    'top': GraspInfo(lambda body: get_top_cylinder_grasps(body, tool_pose=Pose(), grasp_length=-0.02),
+                     approach_pose=Pose(-0.1*Point(z=1))),
     'perpendicular': GraspInfo(lambda body: get_perpendicular_grasps(body, grasp_length=-0.02),
                      approach_pose=Pose(0.1*Point(z=1))),
 }
