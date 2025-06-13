@@ -345,7 +345,7 @@ def named_tuple(name, fields, defaults=None):
         NT.__new__.__defaults__ = defaults
     return NT
 
-class OrderedSet(collections.OrderedDict, collections.MutableSet):
+class OrderedSet(collections.OrderedDict, collections.abc.MutableSet):
     # TODO: https://stackoverflow.com/questions/1653970/does-python-have-an-ordered-set
     def __init__(self, seq=()): # known special case of set.__init__
         #super(OrderedSet, self).__init__()

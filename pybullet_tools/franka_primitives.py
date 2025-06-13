@@ -2,7 +2,7 @@ import time
 
 from itertools import count
 
-from .pr2_utils import get_top_grasps, get_top_cylinder_grasps, get_perpendicular_grasps
+from .pr2_utils import get_top_grasps, get_top_cylinder_grasps, get_perpendicular_grasps, get_top_nudges
 from .utils import get_pose, set_pose, get_movable_joints, \
     set_joint_positions, add_fixed_constraint, enable_real_time, disable_real_time, joint_controller, \
     enable_gravity, get_refine_fn, wait_for_duration, link_from_name, get_body_name, sample_placement, \
@@ -22,6 +22,9 @@ GRASP_INFO = {
     #                  approach_pose=Pose(0.2*Point(z=1))),
     'top': GraspInfo(lambda body: get_top_cylinder_grasps(body, tool_pose=Pose(), grasp_length=-0.02),
                      approach_pose=Pose(-0.1*Point(z=1))),
+    'nudge': GraspInfo(lambda body: get_top_nudges(body, tool_pose=Pose(), grasp_length=-0.02),
+                     approach_pose=Pose(-0.1*Point(z=1))),
+ 
     'perpendicular': GraspInfo(lambda body: get_perpendicular_grasps(body, grasp_length=-0.02),
                      approach_pose=Pose(0.1*Point(z=1))),
 }
