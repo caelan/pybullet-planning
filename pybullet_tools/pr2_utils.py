@@ -823,7 +823,9 @@ def visible_base_generator(robot, target_point, base_range=(1., 1.), theta_range
         base_from_target = unit_from_theta(np.random.uniform(0., 2 * np.pi))
         look_distance = np.random.uniform(*base_range)
         base_xy = target_point[:2] - look_distance * base_from_target
-        base_theta = np.math.atan2(base_from_target[1], base_from_target[0]) + np.random.uniform(*theta_range)
+        # base_theta = np.math.atan2(base_from_target[1], base_from_target[0]) + np.random.uniform(*theta_range)
+        # numpy 2
+        base_theta = np.arctan2(base_from_target[1], base_from_target[0]) + np.random.uniform(*theta_range)
         base_q = np.append(base_xy, wrap_angle(base_theta))
         yield base_q
 
