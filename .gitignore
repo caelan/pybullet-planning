@@ -12,3 +12,5 @@ temp
 **/*.swp
 **/*.~un
 build/
+data
+LOGS
