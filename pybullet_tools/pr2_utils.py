@@ -4,6 +4,7 @@ import random
 import re
 from collections import namedtuple
 from itertools import combinations
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -17,7 +18,7 @@ from .utils import multiply, get_link_pose, set_joint_position, set_joint_positi
     movable_from_joints, quat_from_axis_angle, LockRenderer, Euler, get_links, get_link_name, \
     get_extend_fn, get_moving_links, link_pairs_collision, get_link_subtree, \
     clone_body, get_all_links, pairwise_collision, tform_point, get_camera_matrix, ray_from_pixel, pixel_from_ray, dimensions_from_camera_matrix, \
-    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color, wait_if_gui
+    wrap_angle, TRANSPARENT, PI, OOBB, pixel_from_point, set_all_color, wait_if_gui, POSE
 
 # TODO: restrict number of pr2 rotations to prevent from wrapping too many times
 
@@ -291,7 +292,7 @@ MAX_GRASP_WIDTH = np.inf
 SIDE_HEIGHT_OFFSET = 0.03 # z distance from top of object
 
 def get_top_grasps(body, under=False, tool_pose=TOOL_POSE, body_pose=unit_pose(),
-                   max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH):
+                   max_width=MAX_GRASP_WIDTH, grasp_length=GRASP_LENGTH) -> List[POSE]:
     # TODO: rename the box grasps
     center, (w, l, h) = approximate_as_prism(body, body_pose=body_pose)
     reflect_z = Pose(euler=[0, math.pi, 0])
@@ -757,7 +758,9 @@ def get_base_extend_fn(robot):
 
 #####################################
 
-def close_until_collision(robot, gripper_joints, bodies=[], open_conf=None, closed_conf=None, num_steps=25, **kwargs):
+def close_until_collision(
+    robot, gripper_joints, bodies=[], open_conf: List[float] = None, closed_conf: List[float] = None, num_steps=25, **kwargs
+) -> Optional[Tuple[float, ...]]:
     if not gripper_joints:
         return None
     if open_conf is None:
@@ -766,7 +769,7 @@ def close_until_collision(robot, gripper_joints, bodies=[], open_conf=None, clos
         closed_conf = [get_min_limit(robot, joint) for joint in gripper_joints]
     resolutions = np.abs(np.array(open_conf) - np.array(closed_conf)) / num_steps
     extend_fn = get_extend_fn(robot, gripper_joints, resolutions=resolutions)
-    close_path = [open_conf] + list(extend_fn(open_conf, closed_conf))
+    close_path: List[Tuple[float, ...]] = [open_conf] + list(extend_fn(open_conf, closed_conf))
     collision_links = frozenset(get_moving_links(robot, gripper_joints))
 
     for i, conf in enumerate(close_path):
@@ -778,7 +781,7 @@ def close_until_collision(robot, gripper_joints, bodies=[], open_conf=None, clos
     return close_path[-1]
     #return None # False
 
-def compute_grasp_width(robot, arm, body, grasp_pose, **kwargs):
+def compute_grasp_width(robot, arm, body, grasp_pose, **kwargs) -> Optional[Tuple[float, ...]]:
     tool_link = get_gripper_link(robot, arm)
     tool_pose = get_link_pose(robot, tool_link)
     body_pose = multiply(tool_pose, grasp_pose)

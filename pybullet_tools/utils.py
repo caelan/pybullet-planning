@@ -26,9 +26,14 @@ except ImportError:
 from itertools import product, combinations, count, cycle, islice
 from multiprocessing import TimeoutError
 from contextlib import contextmanager
+from typing import List, Tuple
 
 from pybullet_utils.transformations import quaternion_from_matrix, unit_vector, euler_from_quaternion, quaternion_slerp, \
     random_quaternion, quaternion_about_axis
+
+VEC3 = Tuple[float, float, float]
+QUATERNION = Tuple[float, float, float, float]
+POSE = Tuple[VEC3, QUATERNION]
 
 def join_paths(*paths):
     return os.path.abspath(os.path.join(*paths))
@@ -118,8 +123,9 @@ SEPARATOR = '\n' + 50*'-' + '\n'
 
 inf_generator = count # count | lambda: iter(int, 1)
 
-List = lambda *args: list(args)
-Tuple = lambda *args: tuple(args)
+# Disable these lines because they prevent developers from using type hints
+# List = lambda *args: list(args)
+# Tuple = lambda *args: tuple(args)
 
 def empty_sequence():
     return iter([])
@@ -1619,7 +1625,7 @@ def Point(x=0., y=0., z=0.):
 def Euler(roll=0., pitch=0., yaw=0.):
     return np.array([roll, pitch, yaw])
 
-def Pose(point=None, euler=None):
+def Pose(point=None, euler=None) -> POSE:
     point = Point() if point is None else point
     euler = Euler() if euler is None else euler
     return point, quat_from_euler(euler)
@@ -1627,18 +1633,18 @@ def Pose(point=None, euler=None):
 def Pose2d(x=0., y=0., yaw=0.):
     return np.array([x, y, yaw])
 
-def invert(pose):
+def invert(pose: POSE) -> POSE:
     point, quat = pose
     return p.invertTransform(point, quat)
 
-def multiply(*poses):
-    pose = poses[0]
+def multiply(*poses) -> POSE:
+    pose: POSE = poses[0]
     for next_pose in poses[1:]:
         pose = p.multiplyTransforms(pose[0], pose[1], *next_pose)
     return pose
 
-def invert_quat(quat):
-    pose = (unit_point(), quat)
+def invert_quat(quat: QUATERNION) -> QUATERNION:
+    pose: POSE = (unit_point(), quat)
     return quat_from_pose(invert(pose))
 
 def multiply_quats(*quats):
@@ -2162,17 +2168,17 @@ def get_joint_limits(body, joint):
 
 get_joint_interval = get_joint_limits # TODO: get box limits?
 
-def get_min_limit(body, joint):
+def get_min_limit(body, joint) -> float:
     # TODO: rename to min_position
     return get_joint_limits(body, joint)[0]
 
-def get_min_limits(body, joints):
+def get_min_limits(body, joints) -> List[float]:
     return [get_min_limit(body, joint) for joint in joints]
 
-def get_max_limit(body, joint):
+def get_max_limit(body, joint) -> float:
     return get_joint_limits(body, joint)[1]
 
-def get_max_limits(body, joints):
+def get_max_limits(body, joints) -> List[float]:
     return [get_max_limit(body, joint) for joint in joints]
 
 def get_joint_intervals(body, joints):
@@ -4626,7 +4632,7 @@ def end_effector_from_body(body_pose, grasp_pose):
 def approach_from_grasp(approach_pose, end_effector_pose):
     return multiply(approach_pose, end_effector_pose)
 
-def get_grasp_pose(constraint):
+def get_grasp_pose(constraint) -> POSE:
     """
     Grasps are parent_from_child
     """

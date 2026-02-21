@@ -5,6 +5,7 @@ import pybullet as p
 import random
 import time
 from itertools import islice, count
+from typing import Tuple, Optional, Union
 
 import numpy as np
 
@@ -193,15 +194,23 @@ def create_trajectory(robot, joints, path):
 ##################################################
 
 class GripperCommand(Command):
-    def __init__(self, robot, arm, position, teleport=False):
+    def __init__(self, robot, arm, position: Union[float, Tuple[float, ...]], teleport=False):
         self.robot = robot
         self.arm = arm
-        self.position = position
+        self.position: Union[float, Tuple[float, ...]] = position
         self.teleport = teleport
     def apply(self, state, **kwargs):
         joints = get_gripper_joints(self.robot, self.arm)
         start_conf = get_joint_positions(self.robot, joints)
-        end_conf = [self.position] * len(joints)
+
+        # NOTE: position can be a single float (applied to all joints) or an array-like object of floats (one per joint)
+        if isinstance(self.position, float):
+            end_conf = [self.position] * len(joints)
+        elif isinstance(self.position, (list, tuple, np.ndarray)) and len(self.position) == len(joints):
+            end_conf = self.position
+        else:
+            raise ValueError(f'Invalid gripper position: {self.position}')
+
         if self.teleport:
             path = [start_conf, end_conf]
         else:
@@ -328,7 +337,7 @@ def get_grasp_gen(problem, collisions=False, randomize=True):
                           for g in get_side_grasps(body, grasp_length=GRASP_LENGTH))
         filtered_grasps = []
         for grasp in grasps:
-            grasp_width = compute_grasp_width(problem.robot, arm, body, grasp.value) if collisions else 0.0
+            grasp_width: Optional[Union[float, Tuple[float, ...]]] = compute_grasp_width(problem.robot, arm, body, grasp.value) if collisions else 0.0
             if grasp_width is not None:
                 grasp.grasp_width = grasp_width
                 filtered_grasps.append(grasp)
